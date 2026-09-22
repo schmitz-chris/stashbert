@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Stand | 22.09.2026 |
+| Stand | 22.09.2026, Revision 2 (Rahmenbedingungen eingearbeitet, siehe [Änderungshistorie](#änderungshistorie)) |
 | Status | Entwurf zur Entscheidung, Planungsphase, noch kein Anwendungscode |
 | Geltungsbereich | MVP (M1) und die direkt anschließenden Ausbaustufen M2 bis M4 |
 
@@ -40,12 +40,13 @@
 - [22. POC-Liste](#22-poc-liste)
 - [23. Offene Fragen](#23-offene-fragen)
 - [Anhang: Quellen](#anhang-quellen)
+- [Änderungshistorie](#änderungshistorie)
 
 ---
 
 ## 0. Kurzfassung
 
-Stashbert ist ein einzelner Container: eine kleine TypeScript-API (Node.js + Hono) mit SQLite, die eine statische Svelte-PWA ausliefert. Gescannt wird im Browser mit einem WebAssembly-Decoder (zxing-wasm), weil Safari auf iOS die native BarcodeDetector-API auch in Version 27 nicht ausliefert. Alle Scanner, also iPhone und später der ESP32, benutzen denselben Endpunkt `POST /api/v1/scan`. Der Server erledigt Produktsuche, Open-Food-Facts-Lookup, Bestandsänderung und Protokoll. Nach außen meldet Stashbert Ereignisse als generische Webhooks. Home Assistant reagiert darauf und überträgt die Einkaufsliste über seine vorhandene Bring!-Integration. Stashbert selbst kennt weder Home Assistant noch Bring!.
+Stashbert ist ein einzelner Container: eine kleine TypeScript-API (Node.js + Hono) mit SQLite, die eine statische Svelte-PWA ausliefert. Gescannt wird im Browser mit einem WebAssembly-Decoder (zxing-wasm), weil Safari auf iOS die native BarcodeDetector-API auch in Version 27 nicht ausliefert. Alle Scanner, also iPhone und später der ESP32, benutzen denselben Endpunkt `POST /api/v1/scan`. Der Server erledigt Produktsuche, Open-Food-Facts-Lookup, Bestandsänderung und Protokoll. Nach außen veröffentlicht Stashbert Ereignisse und Zustände per MQTT über den vorhandenen Broker, auf Wunsch mit Home-Assistant-Discovery. Home Assistant reagiert darauf und überträgt die Einkaufsliste über seine vorhandene Bring!-Integration. Stashbert selbst kennt weder Home Assistant noch Bring!. Betrieben wird Stashbert als Docker Compose in einem LXC-Container auf dem Proxmox-Server, erreichbar nur im Heimnetz unter `stashbert.home.schmitz-hellwig.de` mit einem Let's-Encrypt-Zertifikat, das Caddy über deSEC (DNS-01) bezieht.
 
 ### Entscheidungen auf einen Blick
 
@@ -57,41 +58,48 @@ Stashbert ist ein einzelner Container: eine kleine TypeScript-API (Node.js + Hon
 | Sprache(n) | TypeScript für Frontend, Backend und geteilte Schemas; YAML für ESPHome/HA | Go im Backend, TypeScript im Frontend |
 | Datenbank | SQLite (WAL) über `node:sqlite`, reines SQL, eigene kleine Migrationen | PostgreSQL 18 |
 | API | REST/JSON unter `/api/v1`, OpenAPI 3.1 aus Zod-Schemas, Fehler nach RFC 9457 | MQTT für Geräte |
-| Ereignisse | Transaktionale Outbox in SQLite, generische Webhooks | HA-Events über die HA-REST-API |
-| HA-Anbindung | Webhook-Trigger + REST-Sensor, später optional MQTT-Discovery | eigene HA-Integration (HACS) |
+| Ereignisse | Transaktionale Outbox in SQLite, Zustellung per MQTT (QoS 1); generische Webhooks als optionale zweite Senke | nur Webhooks |
+| HA-Anbindung | MQTT-Device-Discovery (Sensoren, Ereignis-Entität) + MQTT-Trigger in Automationen | Webhook-Trigger + REST-Sensor; eigene HA-Integration (HACS) |
 | Einkaufsliste | Variante C: Stashbert berechnet, HA überträgt per `todo.*` nach Bring! | Variante A: direkte Bring!-Anbindung |
 | Hardware-Scanner | ESPHome, `http_request` auf denselben Scan-Endpunkt | ESPHome über HA-Native-API |
-| Deployment | 1 Container, Docker Compose, 1 Volume `/data`, TLS über vorhandenen Reverse Proxy | Postgres + Backend + Frontend + nginx (StoreStash) |
+| Deployment | Docker Compose (Stashbert + Caddy) in einem Debian-LXC auf Proxmox, 1 Volume `/data` | Postgres + Backend + Frontend + nginx (StoreStash) |
+| HTTPS | Caddy mit deSEC-Modul, Wildcard-Zertifikat `*.home.schmitz-hellwig.de` per DNS-01, nur im LAN erreichbar | Traefik (deSEC eingebaut), Tailscale `serve` |
+| Eigene iOS-App | vorerst keine; Kurzbefehl „Stashbert entnehmen" als Ergänzung; falls POC-1/POC-2 scheitern: kleine Swift-Hülle (WKWebView + Bridge), siehe [7.9](#79-option-eigene-ios-app) | Capacitor, native Swift-App |
 
 ### Architekturdiagramm
 
 ```
 ┌───────────────────────────┐          ┌───────────────────────────┐
-│ iPhone: PWA (Svelte)      │          │ ESP32-Scanner (M3)        │
+│ iPhone 15 / 16 Pro: PWA   │          │ ESP32-Scanner (M3)        │
 │ Kamera + zxing-wasm       │          │ ESPHome, UART-Scan-Engine │
 │ zentraler Scan-Button     │          │ Tasten ADD / CONSUME      │
 └─────────────┬─────────────┘          └─────────────┬─────────────┘
               │ HTTPS, Session-Cookie                │ HTTP(S), Bearer-Token
               ▼                                      ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ Reverse Proxy (vorhanden), TLS-Terminierung                      │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ Stashbert: 1 Container (Node.js + Hono, TypeScript)              │
-│                                                                  │
-│  REST API /api/v1 + OpenAPI      statische SPA + Service Worker  │
-│  Domäne: Scan, Bestand, Einkauf  Lookup-Kette mit Cache          │
-│  Outbox -> Webhook-Zustellung    Bild-Download im Hintergrund    │
-│                                                                  │
-│  /data: stashbert.db (SQLite) · images/ · backups/               │
-└───────────────┬──────────────────────────────────┬───────────────┘
-                │ HTTPS, nur Produkt-Lookup        │ Webhooks (Push)
-                ▼                                  ▼
+┌── Debian-LXC auf Proxmox, Docker Compose ────────────────────────┐
+│┌────────────────────────────────────────────────────────────────┐│
+││ Caddy: TLS für stashbert.home.schmitz-hellwig.de (deSEC DNS-01)││
+│└───────────────────────────────┬────────────────────────────────┘│
+│                                ▼                                 │
+│┌────────────────────────────────────────────────────────────────┐│
+││ Stashbert: 1 Container (Node.js + Hono, TypeScript)            ││
+││                                                                ││
+││  REST API /api/v1 + OpenAPI      statische SPA + Service Worker││
+││  Domäne: Scan, Bestand, Einkauf  Lookup-Kette mit Cache        ││
+││  Outbox -> MQTT (Webhooks opt.)  Bild-Download im Hintergrund  ││
+││                                                                ││
+││  /data: stashbert.db (SQLite) · images/ · backups/             ││
+│└──────────────┬─────────────────────────────────┬───────────────┘│
+└───────────────┼─────────────────────────────────┼────────────────┘
+                │ HTTPS, nur Produkt-Lookup       │ MQTT, QoS 1
+                ▼                                 ▼
 ┌───────────────────────────┐          ┌───────────────────────────┐
-│ Open Food Facts API v3.6  │          │ Home Assistant            │
-│ (+ Schwester-Datenbanken) │          │ Webhook-Trigger           │
-└───────────────────────────┘          │ REST-Sensor liest Summary │
+│ Open Food Facts API v3.6  │          │ MQTT-Broker (vorhanden)   │
+│ (+ Schwester-Datenbanken) │          └─────────────┬─────────────┘
+└───────────────────────────┘                        ▼
+                                       ┌───────────────────────────┐
+                                       │ Home Assistant            │
+                                       │ MQTT-Discovery + Trigger  │
                                        └─────────────┬─────────────┘
                                                      │ todo.add_item /
                                                      │ update_item / remove_item
@@ -110,7 +118,7 @@ sequenceDiagram
     participant S as Stashbert API
     participant DB as SQLite
     participant O as Open Food Facts
-    participant H as Home Assistant
+    participant H as MQTT-Broker und HA
     C->>S: POST /api/v1/scan {barcode, action}
     S->>DB: Barcode nachschlagen
     alt Barcode bekannt
@@ -122,7 +130,7 @@ sequenceDiagram
         S--)O: Bild später im Hintergrund laden
     end
     S-->>C: 200 {product, stock, target, shopping_quantity, feedback}
-    S--)H: Webhook aus der Outbox (asynchron)
+    S--)H: MQTT-Ereignis aus der Outbox (asynchron)
 ```
 
 ---
@@ -197,17 +205,23 @@ Folge: Performance ist kein Architekturtreiber. Die Architektur wird von Einfach
 
 Damit verhält sich Stashbert ohne Zusatzaufwand genau wie im Beispiel aus der Aufgabenstellung. Wer weniger Rauschen will, setzt pro Produkt einen Mindestbestand.
 
-### 1.6 Annahmen
+**Entscheidung (bestätigt):** Neu angelegte Produkte bekommen den Sollbestand `0`, werden also nur gezählt und nicht nachgekauft. Nach dem ersten Scan bietet die Karte „Neu" eine Schnellauswahl für den Sollbestand an (siehe 19.1). Ein Tap reicht, um ein Produkt in die Einkaufslogik aufzunehmen.
 
-| ID | Annahme |
-|---|---|
-| A1 | Es gibt bereits einen Reverse Proxy (Traefik, Caddy o. ä.) und eine eigene Domain, oder alternativ Tailscale. |
-| A2 | Genutzt wird ein iPhone mit aktuellem iOS (27). Das genaue Modell ist wichtig für POC-1 (Nahfokus bei Pro-Modellen). |
-| A3 | Gescannt wird überwiegend zu Hause im WLAN. |
-| A4 | Es wird in ganzen Einheiten gezählt (Stück, Dose, Packung). Keine Gewichte, keine angebrochenen Packungen. |
-| A5 | Alle Personen im Haushalt haben dieselben Rechte. |
-| A6 | Home Assistant läuft, die Bring!-Integration ist eingerichtet oder wird es. |
-| A7 | Der Docker-Host ist Linux (amd64 oder arm64). |
+### 1.6 Rahmenbedingungen und Annahmen
+
+| ID | Rahmenbedingung | Status |
+|---|---|---|
+| A1 | Proxmox-Server im Heimnetz, Dienste laufen als LXC. Stashbert läuft als Docker Compose in einem eigenen LXC, damit es portabel bleibt. Noch kein zentraler Reverse Proxy. | bestätigt |
+| A1a | Domain `schmitz-hellwig.de`, DNS gehostet bei deSEC (`ns1.desec.io`, `ns2.desec.org`, per DNS-Abfrage am 22.09.2026 geprüft). | bestätigt |
+| A1b | Zugriff zunächst nur im eigenen Netz, kein Fernzugriff. | bestätigt |
+| A2 | iPhone 15 und iPhone 16 Pro mit aktuellem iOS (27). Beim 16 Pro ist die Nahfokus-Frage aus POC-1 relevant. | bestätigt |
+| A3 | Gescannt wird überwiegend zu Hause im WLAN. | Annahme |
+| A4 | Es wird in ganzen Einheiten gezählt (Stück, Dose, Packung). Keine Gewichte, keine angebrochenen Packungen. | Annahme |
+| A5 | Alle Personen im Haushalt haben dieselben Rechte. | Annahme |
+| A6 | Home Assistant läuft, die Bring!-Integration ist eingerichtet oder wird es. | Annahme |
+| A7 | Der Docker-Host (LXC) ist Linux auf amd64. | Annahme |
+| A8 | Ein MQTT-Broker läuft bereits im Heimnetz. | bestätigt |
+| A9 | Lizenz für eine spätere Veröffentlichung ist noch offen. | offen, siehe 23 |
 
 ---
 
@@ -588,6 +602,7 @@ Weil nur Standard-SQL ohne ORM-Magie benutzt wird, bleibt ein späterer Umzug au
 | Tailscale `serve` | HTTPS auf `<gerät>.<tailnet>.ts.net`, nur im Tailnet erreichbar. Das iPhone muss mit Tailscale verbunden sein ([tailscale.com](https://tailscale.com/kb/1312/serve)). |
 | Eigene CA (mkcert, Caddy `tls internal`) | Das Root-Zertifikat muss am iPhone als Profil installiert und manuell voll vertraut werden (Einstellungen > Allgemein > Info > Zertifikatsvertrauenseinstellungen) ([Apple](https://support.apple.com/en-us/102390)). Leaf-Zertifikat höchstens 825 Tage gültig, mit SAN und serverAuth ([Apple](https://support.apple.com/en-us/103769)). Ob Service Worker und Home-Screen-Install damit einwandfrei laufen, ist nicht offiziell dokumentiert. |
 | Zertifikatslaufzeiten | Öffentliche Zertifikate: höchstens 200 Tage seit 15.03.2026, 100 Tage ab 2027, 47 Tage ab 2029 ([CA/B Forum SC-081v3](https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/)). Let's Encrypt geht auf 45 Tage ([LE](https://letsencrypt.org/2025/12/02/from-90-to-45)). Automatische Erneuerung ist Pflicht. |
+| deSEC (DNS von `schmitz-hellwig.de`) | Die ACME-Bibliothek lego (in Traefik) hat einen eingebauten deSEC-Provider ([lego](https://github.com/go-acme/lego/tree/master/providers/dns/desec)). Für Caddy gibt es das Modul [caddy-dns/desec](https://github.com/caddy-dns/desec) (aktiv, letzter Push 08/2026). deSEC-Tokens lassen sich per „Token Policies" auf einzelne RRsets beschränken, etwa nur TXT-Einträge unter `_acme-challenge` ([deSEC-Doku](https://desec.readthedocs.io/en/latest/auth/tokens.html)). |
 
 ### 7.7 Entscheidungen
 
@@ -599,7 +614,7 @@ Weil nur Standard-SQL ohne ORM-Magie benutzt wird, bleibt ein späterer Umzug au
 2. **Ein Stream bleibt über alle Scans hinweg offen.** Kein Stop nach einem Treffer, kein zweiter `getUserMedia`-Aufruf bei laufendem Stream.
 3. Beim Verlassen der Ansicht und bei `visibilitychange → hidden` werden die Tracks gestoppt. Laut Bug 280394 vermeidet das die erneute Abfrage nach der Bildschirmsperre.
 4. Dekodiert wird ein horizontaler Streifen in der Bildmitte (Region of Interest), mit 10 bis 15 Versuchen pro Sekunde und höchstens einem gleichzeitigen Decode.
-5. Die Kamerawahl beginnt mit `facingMode: environment`. Auf Pro-Modellen wird eine gespeicherte `deviceId` oder `zoom` bevorzugt, wenn POC-1 das nahelegt. Die Wahl ist in einem Einstellungsdialog änderbar.
+5. Die Kamerawahl beginnt mit `facingMode: environment`. Auf Pro-Modellen wird eine gespeicherte `deviceId` oder `zoom` bevorzugt, wenn POC-1 das nahelegt. Die Wahl ist in einem Einstellungsdialog änderbar und wird pro Gerät gespeichert, weil iPhone 15 und iPhone 16 Pro sich hier voraussichtlich unterschiedlich verhalten.
 6. **Licht-Taste** erscheint nur, wenn `getCapabilities().torch` existiert.
 7. **Wake Lock** ist aktiv, solange der Scanner offen ist.
 
@@ -621,7 +636,13 @@ Weil nur Standard-SQL ohne ORM-Magie benutzt wird, bleibt ein späterer Umzug au
 
 **Safari-Tab oder Home-Screen-App:** Beides wird unterstützt. Welche Variante dauerhaft seltener nach der Kamera fragt, entscheidet **POC-2**. Das ist die größte UX-Unsicherheit des gesamten Projekts.
 
-**HTTPS:** Empfohlen ist die eigene (Sub-)Domain mit DNS-01-Zertifikat über den vorhandenen Reverse Proxy und Split-DNS im LAN. Alternative ist Tailscale `serve`. Eine eigene CA ist nur die Notlösung.
+**HTTPS:**
+
+- Stashbert ist unter `stashbert.home.schmitz-hellwig.de` erreichbar.
+- Caddy läuft in derselben Compose-Datei und holt per DNS-01 über deSEC ein **Wildcard-Zertifikat** für `*.home.schmitz-hellwig.de`. Das Wildcard-Zertifikat verrät in den öffentlichen CT-Logs keine einzelnen Dienstnamen und passt auch für spätere Dienste im Heimnetz.
+- Der Name zeigt auf die LAN-IP des LXC. Details stehen in 16.5.
+- Kein Port ist aus dem Internet erreichbar.
+- Alternative ist Tailscale `serve`. Eine eigene CA ist nur die Notlösung.
 
 **Offline:**
 
@@ -630,6 +651,80 @@ Weil nur Standard-SQL ohne ORM-Magie benutzt wird, bleibt ein späterer Umzug au
 - Die spätere Offline-Warteschlange (IndexedDB) ist über `request_id` in der API vorbereitet. Weil iOS kein Background Sync hat, würde sie beim nächsten App-Start bzw. beim `online`-Ereignis abgearbeitet.
 
 **Pragmatische Alternative ohne Kamera:** Ein Bluetooth-Barcodescanner im Tastaturmodus (HID) am iPhone liefert Hardware-Piepton und Geschwindigkeit. Die PWA empfängt die Ziffern über ein fokussiertes Eingabefeld und ruft denselben Scan-Endpunkt auf. Optional, **POC-7**.
+
+### 7.8 Fakten: native Alternativen zur PWA
+
+Recherche vom 22.09.2026, aktuell sind iOS 27 und Xcode 27.
+
+- **VisionKit `DataScannerViewController`:**
+  - Ab iOS 16, auf Geräten mit A12 Bionic oder neuer, also auch auf beiden iPhones ([Apple](https://developer.apple.com/documentation/visionkit/datascannerviewcontroller)).
+  - Erkennt EAN-13, EAN-8 und UPC-E (UPC-A wird als EAN-13 gelesen) und scannt fortlaufend, bis `stopScanning()` aufgerufen wird ([WWDC22](https://developer.apple.com/videos/play/wwdc2022/10025/)).
+  - Einziger Kamera-Parameter ist der Zoom. Linsenwahl und Nahfokus lassen sich nicht steuern. Ein Apple-Forum-Thread zum Ultraweitwinkel blieb ohne Lösung ([Forum](https://developer.apple.com/forums/thread/770153)).
+- **AVFoundation:**
+  - `AVCaptureMetadataOutput` liest EAN-13, EAN-8 und UPC-E.
+  - Apples Beispiel **AVCamBarcode** löst das Nahfokus-Problem, indem es aus `minimumFocusDistance` einen `videoZoomFactor` berechnet. Der Nutzer hält das Gerät dann weiter weg ([Apple](https://developer.apple.com/documentation/avfoundation/avcambarcode-detecting-barcodes-and-faces), [WWDC21](https://developer.apple.com/videos/play/wwdc2021/10047/)).
+  - Die virtuelle `.builtInTripleCamera` (Pro-Modelle) wechselt selbst die Linse, abhängig von Zoom, Licht und Fokus.
+- **Haptik und Ton nativ:**
+  - Haptik über `UIImpactFeedbackGenerator` bzw. SwiftUI `.sensoryFeedback`.
+  - Die Audio-Kategorie `.playback` spielt trotz Stummschalter; mit `.mixWithOthers` läuft Musik weiter ([Apple](https://developer.apple.com/documentation/avfaudio/avaudiosession/category-swift.struct/playback)).
+- **Eigene WKWebView-Hülle:**
+  - `getUserMedia` funktioniert in WKWebView seit iOS 14.3.
+  - Ab iOS 15 kann die App über `webView(_:requestMediaCapturePermissionFor:…)` die Kamera-Freigabe für die Webseite selbst mit `.grant` beantworten. Die Kamera-Berechtigung fragt iOS dann einmal pro App ab, nicht pro Aufruf ([Apple](https://developer.apple.com/documentation/webkit/wkuidelegate/webview(_:requestmediacapturepermissionfor:initiatedbyframe:type:decisionhandler:))).
+  - JS und Swift kommunizieren über `WKScriptMessageHandler`.
+  - Mit `WKAppBoundDomains` funktionieren Message-Handler nur, wenn `limitsNavigationsToAppBoundDomains` gesetzt ist ([WebKit](https://webkit.org/blog/10882/app-bound-domains/)).
+  - Service Worker in WKWebView laufen laut Community-Berichten nur auf App-Bound-Domains (nicht offiziell belegt).
+  - Beim ersten Zugriff auf das Heimnetz erscheint einmalig die Abfrage „Lokales Netzwerk" ([TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)).
+- **Capacitor 8.5.2** (MIT, 11.09.2026):
+  - Verpackt die bestehende Vite-SPA als iOS-App (iOS 15+, Xcode 26+).
+  - Sein WebView-Delegate beantwortet Kamera-Anfragen bereits mit `.grant` ([Quellcode](https://github.com/ionic-team/capacitor/blob/main/ios/Capacitor/Capacitor/WebViewDelegationHandler.swift)).
+  - Eine entfernte URL als App-Inhalt (`server.url`) ist laut Doku „not intended for use in production" ([Doku](https://capacitorjs.com/docs/config)).
+  - Plugins:
+    - Das offizielle `@capacitor/barcode-scanner` 3.1.2 liefert nur **einen** Treffer pro Aufruf.
+    - `@capacitor-mlkit/barcode-scanning` 8.2.1 (Apache-2.0) scannt fortlaufend und nutzt auf iOS `.builtInTripleCamera`, falls vorhanden. Es braucht Google ML Kit und **CocoaPods**, während Capacitor 8 standardmäßig Swift Package Manager verwendet.
+    - `@capacitor/haptics` 8.0.2.
+- **Apple Kurzbefehle:**
+  - Die Aktion „QR-/Barcode scannen" liefert den gelesenen Text. Dass sie EAN-13 zuverlässig liest, ist nur durch Community-Beispiele belegt, nicht durch Apple-Doku.
+  - „Inhalte von URL abrufen" kann POST mit JSON-Body und eigenen Headern.
+  - Start über die Action-Taste (iPhone 16 Pro; das iPhone 15 hat keine), das Kontrollzentrum oder ein Widget.
+  - Pro Ausführung wird genau ein Code gelesen.
+- **Verteilung auf zwei Familien-iPhones:**
+  - Kostenloses Entwicklerkonto: Das Profil läuft nach **7 Tagen** ab, dann muss neu installiert werden. Höchstens 3 Apps pro Gerät ([Apple](https://developer.apple.com/help/account/basics/about-your-developer-account/)).
+  - Apple Developer Program: **98,99 €/Jahr** in Deutschland ([App Store](https://apps.apple.com/de/app/apple-developer/id640199958)).
+  - TestFlight für interne Tester ohne Review, jeder Build ist **90 Tage** nutzbar ([Apple](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/)).
+  - Xcode 27 braucht macOS Tahoe 26.6 oder neuer.
+
+### 7.9 Option: eigene iOS-App
+
+| Kriterium | PWA (Plan) | Kurzbefehl | Swift-Hülle: WKWebView lädt die PWA vom Server, plus Bridge | Capacitor mit gebündelter SPA | Native Swift-App |
+|---|---|---|---|---|---|
+| Kamera-Rückfragen | offen, POC-2 | einmalige App-Berechtigung (vermutlich) | gelöst (`.grant`) | gelöst | gelöst |
+| Nahfokus iPhone 16 Pro | offen, POC-1 | unbekannt | mit nativem Scanner über die Bridge lösbar (Triple Camera, AVCamBarcode-Zoom) | mit ML-Kit-Plugin wahrscheinlich | lösbar |
+| Serienscans | ja | nein (ein Code pro Start) | ja | ja (ML-Kit-Plugin) | ja |
+| Haptik, Ton bei Stumm | nein bzw. offen (POC-3) | Vibrieren/Ton-Aktionen | ja | ja (Plugin + eigener Code) | ja |
+| UI-Änderungen | sofort vom Server | n/a | **sofort vom Server** | neuer App-Build | neuer App-Build |
+| Zusätzliche Sprache/Werkzeuge | keine | keine | etwas Swift (Annahme: wenige Hundert Zeilen), Xcode | Capacitor-CLI, Xcode, CocoaPods, ML Kit | Swift, Xcode, UI doppelt |
+| Kosten/Verteilung | 0 € | 0 € | 98,99 €/Jahr + TestFlight alle 90 Tage (oder 0 € mit Neuinstallation alle 7 Tage) | wie Hülle | wie Hülle |
+
+**Bewertung:**
+
+- **Native Swift-App:** Sie würde die komplette Oberfläche doppeln und widerspricht damit dem Ziel „eine Sprache, wenig Code". Sie scheidet aus.
+- **Capacitor:** Capacitor bündelt die SPA in die App, jede UI-Änderung bräuchte also einen neuen App-Build. Das sinnvolle Scanner-Plugin bringt Google ML Kit und CocoaPods mit.
+- **Swift-Hülle:** Sie behält die Web-Oberfläche als einzige UI und ergänzt nur, was das Web auf iOS nicht kann: dauerhafte Kamera-Freigabe, Haptik, Ton trotz Stummschalter und bei Bedarf einen nativen Scanner für das 16 Pro. Der Swift-Teil bleibt klein und ändert sich selten.
+- **Kurzbefehl:** Er ist kostenlos und ergänzt die PWA für den häufigsten Einzelfall („beim Kochen schnell eine Dose entnehmen"). Er braucht nur ein API-Token mit Scope `scan`.
+
+**Entscheidung:**
+
+1. **Jetzt keine App.** Zuerst zeigen POC-1 bis POC-3 auf beiden iPhones, ob die PWA reicht.
+2. **Kurzbefehl „Stashbert entnehmen" als kostenlose Ergänzung (POC-8):**
+   - Ablauf: scannen, `POST /api/v1/scan` mit `action: consume` und Bearer-Token, Ergebnis als Mitteilung.
+   - Start auf dem 16 Pro über die Action-Taste, auf dem iPhone 15 über Kontrollzentrum oder Widget.
+   - Dafür rücken die API-Tokens von M2 in M1 vor.
+   - Kurzbefehle werden über iCloud synchronisiert; das Token hat deshalb nur Scope `scan`.
+3. **Wenn POC-1 oder POC-2 scheitern, dann eine Swift-Hülle (M1.5, POC-9 vorab),** nicht Capacitor und keine native App:
+   - WKWebView lädt `https://stashbert.home.schmitz-hellwig.de`, gibt die Kamera frei und stellt über die Bridge Haptik und Ton bereit.
+   - Nur falls nötig ruft sie einen nativen AVFoundation-Scanner (Triple Camera bzw. Zoom nach AVCamBarcode) auf, der den Code an die Web-Oberfläche zurückgibt.
+   - Die Hülle gibt es nur für die eigenen Geräte und nicht im App Store. Die Kosten (98,99 €/Jahr und ein Build alle 90 Tage) werden erst dann fällig.
+4. **Architektur unverändert:** Die API ist in jedem Fall dieselbe, alle Varianten rufen `POST /api/v1/scan` auf.
 
 ---
 
@@ -829,9 +924,13 @@ Damit das Gerät dumm bleibt:
   - Der Standard von `scan_interval` beim Top-Level-`rest:` ist laut Quellcode 15 s, laut Doku 30 s; man sollte ihn explizit setzen.
 - **`rest_command`:** Unterstützt `response_variable`. Bei 4xx/5xx gibt es nur eine Warnung im Log.
 - **MQTT:**
-  - Gerätebasierte Discovery unter `<prefix>/device/<id>/config`.
-  - Plattformen unter anderem `sensor`, `binary_sensor`, `event`, `button`, `text`, `number`. **Keine `todo`-Plattform.**
+  - Gerätebasierte Discovery unter `<prefix>/device/<id>/config`. Das Payload enthält `dev`, `o` (Origin) und unter `cmps` eine Liste der Komponenten mit Plattform `p` und `unique_id`. Ein leeres retained Payload entfernt eine Komponente.
+  - Plattformen unter anderem `sensor`, `binary_sensor`, `event`, `button`, `text`, `number`. **Keine `todo`-Plattform** ([Quellcode](https://github.com/home-assistant/core/blob/2026.9.3/homeassistant/components/mqtt/const.py)).
+  - Die Discovery-Konfiguration wird entweder retained publiziert oder erneut gesendet, sobald HA `online` auf `homeassistant/status` meldet.
+  - MQTT-`event`-Entitäten verwerfen retained Nachrichten, die beim Abonnieren erneut zugestellt werden ([Doku](https://www.home-assistant.io/integrations/event.mqtt/)).
   - HA verlangt einen Broker mit MQTT 5 ([Doku](https://www.home-assistant.io/integrations/mqtt/)).
+  - Der MQTT-Trigger in Automationen stellt das Payload als `trigger.payload_json` bereit ([Doku](https://www.home-assistant.io/docs/automation/templating/#mqtt)).
+  - Node.js-Client: mqtt.js (npm `mqtt`) 5.16.0 vom 16.09.2026, MIT, unterstützt MQTT 3.1.1 und 5.
 - **Eigene Integration (HACS):**
   - `manifest.json`, Brand-Icons (seit 2026.3 lokal), Config Flow erwartet, `DataUpdateCoordinator` empfohlen.
   - HA gibt 12 Monate Deprecation für Entwickler-APIs. Der Entwickler-Blog hatte 49 Beiträge seit Januar 2026, viele davon Deprecations ([Doku](https://developers.home-assistant.io/docs/deprecating/)).
@@ -844,21 +943,26 @@ Damit das Gerät dumm bleibt:
 | REST-Sensor pollt `GET /api/v1/summary` | HA zieht | lose | minimal | wenige Zeilen YAML | gut für Zustände (Anzahl Einkauf, leer), nicht für Einzelereignisse |
 | Generische Webhooks an HA-Webhook-Trigger | Stashbert pusht | lose; Stashbert kennt nur eine URL | Outbox + Zustellung | Automationen | **gut für Ereignisse**, auch für andere Empfänger (Node-RED, n8n) |
 | HA-Events über `POST /api/events` | Stashbert pusht | eng: Admin-Token von HA in Stashbert | gering | gering | abgelehnt: Admin-Rechte und HA-spezifisch |
-| MQTT mit Discovery | Stashbert publiziert | lose über Broker | MQTT-Client, Discovery-Payloads | keiner, Entitäten entstehen automatisch | sehr gut, aber zusätzliche Infrastruktur |
+| MQTT mit Discovery | Stashbert publiziert | lose über Broker | MQTT-Client, Discovery-Payloads | keiner für Sensoren, Automationen für Aktionen | **sehr gut**, Broker ist vorhanden (A8) |
 | Eigene HA-Integration | beidseitig | eng, zweites Repo in Python | eigene Codebasis | Installation über HACS | nur bei nachgewiesenem Bedarf |
 
 ### 10.3 Entscheidung
 
-- **Stufe 1 (M2): generische Webhooks + REST-Summary + `rest_command`.**
-  - Stashbert schreibt jedes Ereignis in eine Outbox-Tabelle, und zwar in derselben Transaktion wie die Bestandsänderung. Ein Hintergrundjob stellt es an alle konfigurierten URLs zu.
-  - HA empfängt die Ereignisse über einen Webhook-Trigger mit `local_only: true`.
-  - Für Zustände pollt HA `GET /api/v1/summary` als REST-Sensor.
-  - Aktionen aus HA heraus, etwa ein Dashboard-Button „Bestand +1", laufen über `rest_command` mit einem Token mit Scope `read`/`full`.
-  - Stashbert enthält **keinen HA-spezifischen Code**.
-- **Stufe 2 (M4, optional): MQTT-Publisher mit HA-Device-Discovery.**
-  - Entitäten: Sensoren „Einkauf: Anzahl", „Leer: Anzahl" und ein `event`-Entity für Scans.
-  - Lohnt sich, wenn ohnehin ein Broker läuft. Umgesetzt als zusätzlicher Ausgang der Outbox, nicht als Ersatz.
-- **Stufe 3: eigene Integration nur bei echtem Bedarf,** z. B. `todo`-Entity „Stashbert-Einkauf" oder Services mit UI. Der Wartungsaufwand durch die HA-Änderungsrate ist erheblich.
+Revision 2: Weil bereits ein MQTT-Broker läuft (A8), wird MQTT der primäre Kanal. In Revision 1 war es nur eine optionale Stufe 2.
+
+- **Stufe 1 (M2): MQTT mit HA-Device-Discovery.**
+  - Stashbert schreibt jedes Ereignis in eine Outbox-Tabelle, und zwar in derselben Transaktion wie die Bestandsänderung. Ein Hintergrundjob publiziert es mit QoS 1 an den Broker (Topics in 10.5).
+  - Zusätzlich publiziert Stashbert einen **retained Zustand** (Zusammenfassung mit Anzahl Einkauf, Anzahl leer, Anzahl zu prüfen und der Einkaufsliste). Er überlebt Neustarts von HA und Broker.
+  - Mit `MQTT_HA_DISCOVERY=true` meldet Stashbert ein Gerät „Stashbert" mit Sensoren und einer `event`-Entität an. In HA ist dafür **kein YAML für Sensoren** nötig.
+  - Automationen (Benachrichtigung, Bring!-Sync) reagieren per MQTT-Trigger auf `stashbert/events/<typ>`.
+  - Stashbert enthält außer dem optionalen Discovery-Payload **keinen HA-spezifischen Code**. MQTT selbst ist generisch: Node-RED, n8n oder eigene Skripte können dieselben Topics abonnieren.
+  - Ist `MQTT_URL` nicht gesetzt, läuft Stashbert ohne MQTT. Die Outbox-Einträge werden dann nicht zugestellt und nach 7 Tagen gelöscht.
+- **REST bleibt nutzbar:**
+  - `GET /api/v1/summary` für REST-Sensoren.
+  - `rest_command` für Aktionen aus HA heraus, etwa ein Dashboard-Button „Bestand +1".
+  - Für beides braucht HA ein Token mit Scope `read` bzw. `full`.
+- **Generische Webhooks (M4, optional):** eine zweite Senke der Outbox für Umgebungen ohne Broker. Sie ist wichtig, falls das Projekt veröffentlicht wird, für diesen Haushalt aber nicht nötig.
+- **Eigene Integration nur bei echtem Bedarf,** z. B. `todo`-Entity „Stashbert-Einkauf" oder Services mit UI. Der Wartungsaufwand durch die HA-Änderungsrate ist erheblich.
 
 ### 10.4 Ereigniskatalog
 
@@ -894,49 +998,57 @@ Envelope (für alle Typen gleich):
 }
 ```
 
-### 10.5 Zustellung
+### 10.5 MQTT-Topics und Zustellung
 
-- **Konfiguration:** Die Webhook-URLs kommen im MVP aus Umgebungsvariablen (`WEBHOOK_URLS`, kommagetrennt). Jede URL bekommt alle Ereignisse, gefiltert wird in HA über `trigger.json.type`.
-- **Wiederholungen:** Nur bei Netzfehlern, Timeout (5 s) und 5xx, mit exponentiellem Backoff bis 24 h. Danach wird das Ereignis verworfen und geloggt.
-- **HA meldet keine Fehler:** Weil HA immer 200 antwortet, bleibt eine falsche Webhook-ID unbemerkt. Deshalb gibt es in den Einstellungen „Testereignis senden" und ein Zustellprotokoll.
-- **Signatur (später):** Eine HMAC-Signatur nach „Standard Webhooks" ist für andere Empfänger vorgesehen. HA kann sie nicht prüfen, im LAN reicht die geheime Webhook-ID.
+Präfix konfigurierbar (`MQTT_TOPIC_PREFIX`, Standard `stashbert`).
+
+| Topic | Retained | QoS | Inhalt |
+|---|---|---|---|
+| `stashbert/status` | ja | 1 | `online` / `offline` (Last Will), Verfügbarkeit für HA |
+| `stashbert/state/summary` | ja | 1 | JSON wie `GET /api/v1/summary` (15.4), bei jeder Änderung neu |
+| `stashbert/events/<typ>` | nein | 1 | Envelope aus 10.4, z. B. `stashbert/events/shopping.changed` |
+| `stashbert/cmd/snapshot` | nein | 1 | eingehend: löst `shopping.snapshot` aus (z. B. von HA nach dessen Neustart) |
+| `homeassistant/device/stashbert/config` | ja | 1 | Discovery (nur mit `MQTT_HA_DISCOVERY=true`), wird bei `homeassistant/status = online` erneut gesendet |
+
+Discovery-Komponenten (Vorschlag): Sensor „Einkauf" (Anzahl, Einkaufsliste als Attribut), Sensor „Leer", Sensor „Zu prüfen", Sensor „Produkte", `event`-Entität „Scan" mit den Ereignistypen `stock.added` und `stock.consumed`. **Keine Entität pro Produkt:** Bei bis zu 1000 Produkten würde das HA unnötig aufblähen.
+
+Zustellung:
+
+- **Wiederholen:** Die Outbox publiziert der Reihe nach und wiederholt, solange der Broker nicht erreichbar ist (Backoff bis 5 min). Einträge bleiben erhalten, bis der Broker sie bestätigt hat (PUBACK).
+- **HA offline:** Ist HA beim Publizieren nicht verbunden, verpasst es nicht-retained Ereignisse. Das ist bei MQTT normal. Der Zustand ist über das retained Summary-Topic trotzdem korrekt. Für die Bring!-Liste gibt es `shopping.snapshot`, das eine HA-Automation beim HA-Start über `stashbert/cmd/snapshot` anfordern kann.
+- **Zugang:** Stashbert bekommt einen eigenen Broker-Benutzer. Es darf nur auf `stashbert/#` und `homeassistant/device/stashbert/config` schreiben und nur `stashbert/cmd/#` sowie `homeassistant/status` lesen (ACL am Broker).
+- **Testen:** In den Einstellungen gibt es „Testereignis senden" und ein Zustellprotokoll.
 
 ### 10.6 Beispielkonfiguration (Skizze, in M2 zu verifizieren)
 
-REST-Sensor für Zustände:
-
-```yaml
-rest:
-  - resource: https://stashbert.example.org/api/v1/summary
-    headers:
-      Authorization: !secret stashbert_bearer   # "Bearer <token mit Scope read>"
-    scan_interval: 60
-    sensor:
-      - name: Stashbert Einkauf
-        unique_id: stashbert_shopping_count
-        value_template: "{{ value_json.shopping_count }}"
-        json_attributes:
-          - shopping
-      - name: Stashbert leer
-        unique_id: stashbert_empty_count
-        value_template: "{{ value_json.empty_count }}"
-```
-
-Benachrichtigung bei leerem Produkt:
+Sensoren entstehen per Discovery automatisch. Für Automationen genügt ein MQTT-Trigger, z. B. eine Benachrichtigung bei leerem Produkt:
 
 ```yaml
 automation:
   - alias: "Stashbert: Produkt leer"
     triggers:
-      - trigger: webhook
-        webhook_id: stashbert-<lange-zufällige-id>
-        local_only: true
-    conditions:
-      - "{{ trigger.json.type == 'product.empty' }}"
+      - trigger: mqtt
+        topic: stashbert/events/product.empty
     actions:
-      - action: notify.mobile_app_iphone
+      - action: notify.mobile_app_iphone_16_pro
         data:
-          message: "{{ trigger.json.data.product.name }} ist leer."
+          message: "{{ trigger.payload_json.data.product.name }} ist leer."
+```
+
+Snapshot nach HA-Neustart anfordern:
+
+```yaml
+automation:
+  - alias: "Stashbert: Einkaufsliste nach HA-Start abgleichen"
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:01:00"          # Bring!-Integration und MQTT verbinden lassen
+      - action: mqtt.publish
+        data:
+          topic: stashbert/cmd/snapshot
+          payload: "{}"
 ```
 
 ---
@@ -976,7 +1088,7 @@ automation:
 | Bring! ersetzen | Code ändern | Automation ändern | `entity_id` ändern |
 | Zugangsdaten | Bring!-Passwort in Stashbert | in HA | in HA |
 | Wartung bei API-Änderungen | selbst, ohne gepflegte JS-Bibliothek | HA-Community (Platinum-Integration) | HA-Community |
-| Aufwand in Stashbert | Bring!-Client, Mapping, Fehlerbehandlung | HA-spezifischer Aufruf | Outbox + Webhooks, ohnehin für F10 nötig |
+| Aufwand in Stashbert | Bring!-Client, Mapping, Fehlerbehandlung | HA-spezifischer Aufruf | Outbox + MQTT, ohnehin für F10 nötig |
 | Nutzen für andere Empfänger | keiner | gering | hoch (Node-RED, n8n, eigene Skripte) |
 
 ### 11.3 Entscheidung
@@ -1013,14 +1125,11 @@ automation:
   - alias: "Stashbert: Einkauf nach Bring!"
     mode: queued
     triggers:
-      - trigger: webhook
-        webhook_id: stashbert-<lange-zufällige-id>
-        local_only: true
-    conditions:
-      - "{{ trigger.json.type == 'shopping.changed' }}"
+      - trigger: mqtt
+        topic: stashbert/events/shopping.changed
     variables:
       liste: todo.bring_einkauf
-      d: "{{ trigger.json.data }}"
+      d: "{{ trigger.payload_json.data }}"
     actions:
       - choose:
           - conditions: "{{ d.missing_before == 0 and d.missing_after > 0 }}"
@@ -1057,15 +1166,18 @@ automation:
 | **DB-Zugriff** | vorbereitete SQL-Statements in einem Datenmodul, kein ORM |
 | **Migrationen** | nummerierte `.sql`-Dateien + `PRAGMA user_version`, beim Start, vorher automatisches Backup |
 | **API** | REST/JSON, `/api/v1`, RFC 9457 Problem Details, Idempotenz über `request_id` |
-| **Ereignisse** | Outbox-Tabelle + generische Webhooks; später optional MQTT |
-| **HA-Anbindung** | Webhook-Trigger + REST-Sensor + `rest_command`; kein HA-Code in Stashbert |
+| **Ereignisse** | Outbox-Tabelle, Zustellung per MQTT (mqtt.js, QoS 1); generische Webhooks optional (M4) |
+| **HA-Anbindung** | MQTT-Device-Discovery + MQTT-Trigger; REST-Summary und `rest_command` zusätzlich nutzbar |
+| **Docker-Host** | unprivilegierter Debian-LXC auf Proxmox mit `nesting=1` und `keyctl=1`, Docker Engine + Compose |
+| **Reverse Proxy/TLS** | Caddy mit Modul `caddy-dns/desec`, Wildcard-Zertifikat `*.home.schmitz-hellwig.de` per DNS-01 |
 | **Einkaufsliste** | berechnet in Stashbert, Übertragung nach Bring! über HA `todo.*` |
 | **Hardware-Scanner** | ESPHome, `http_request` → `POST /api/v1/scan`, Token mit Scope `scan` |
 | **Auth** | Haushaltspasswort (scrypt aus `node:crypto`), signiertes Session-Cookie; API-Tokens mit Scopes |
-| **Deployment** | ein Container, Docker Compose, Volume `/data`, TLS am vorhandenen Reverse Proxy |
+| **Deployment** | Docker Compose mit zwei Diensten (Stashbert, Caddy), Volume `/data` |
 | **Backup** | täglich `VACUUM INTO` nach `/data/backups`, JSON-Export, Host-Backup sichert `/data` |
 | **Tests** | Vitest für `shared/` und Server (In-Memory-SQLite), wenige Playwright-Smoke-Tests später |
 | **Qualität** | `tsc --noEmit`, `svelte-check`, Prettier; GitHub Actions baut ein Multi-Arch-Image (amd64/arm64) |
+| **iOS-Ergänzung** | Kurzbefehl „Stashbert entnehmen" (Action-Taste/Kontrollzentrum); Swift-Hülle nur bei Bedarf (7.9) |
 
 Hinweis zur Werkzeugkette: Auf npm ist TypeScript 7 inzwischen `latest`. Welche Version `svelte-check` unterstützt, wird beim Aufsetzen des Repositories geprüft.
 
@@ -1136,11 +1248,20 @@ Jede Entscheidung mit Begründung, wichtigster Alternative, Grund gegen die Alte
 - **Alternative:** MQTT als Geräteprotokoll.
 - **Warum nicht:** Anfrage/Antwort über MQTT 3.1.1 ist nicht standardisiert und braucht einen Broker als Voraussetzung. MQTT kommt später für Ereignisse, nicht für Befehle.
 
-### 13.10 Ereignisse und HA-Anbindung: Outbox + generische Webhooks
+### 13.10 Ereignisse und HA-Anbindung: Outbox + MQTT mit Discovery
 
-- **Warum:** Kein HA-Code und keine HA-Zugangsdaten in Stashbert. Die Webhooks funktionieren auch für Node-RED oder n8n. Die Outbox garantiert, dass kein Ereignis verloren geht, das zu einer gespeicherten Bestandsänderung gehört.
-- **Alternative:** MQTT mit HA-Discovery.
-- **Warum nicht zuerst:** Setzt einen Broker voraus und bringt mehr Code (Discovery-Payloads, Retain-Regeln). Als optionale Stufe 2 bleibt es vorgesehen.
+- **Warum:**
+  - Der Broker läuft bereits.
+  - HA legt die Sensoren per Discovery selbst an, ohne YAML.
+  - Der retained Zustand überlebt Neustarts von HA und Broker, und Ereignisse gehen per QoS 1 raus.
+  - MQTT ist generisch (Node-RED, n8n, ESPHome könnten mitlesen), es landen keine HA-Zugangsdaten in Stashbert.
+  - Die Outbox garantiert, dass kein Ereignis verloren geht, das zu einer gespeicherten Bestandsänderung gehört.
+- **Alternative:** generische Webhooks an HA-Webhook-Trigger plus REST-Sensor.
+- **Warum nicht als Hauptweg:**
+  - Sensoren bräuchten YAML.
+  - HA antwortet bei Webhooks immer mit 200, Fehlkonfigurationen bleiben also unsichtbar.
+  - Ohne Broker wären Webhooks die bessere Wahl; deshalb bleiben sie als optionale zweite Senke vorgesehen.
+- **Neu bewerten, wenn:** das Projekt veröffentlicht wird und viele Nutzer keinen Broker haben. Dann Webhooks gleichrangig anbieten.
 
 ### 13.11 Bring!: über HA statt direkt
 
@@ -1154,23 +1275,50 @@ Jede Entscheidung mit Begründung, wichtigster Alternative, Grund gegen die Alte
 - **Alternative:** ESPHome über die native API mit HA als Vermittler.
 - **Warum nicht:** Das macht HA zur Voraussetzung für jeden Scan, was Anforderung N3 widerspricht.
 
-### 13.13 Deployment: ein Container, Docker Compose
+### 13.13 Deployment: ein Anwendungscontainer, Docker Compose in einem LXC
 
-- **Warum:** Ein Prozess liefert API und SPA aus. Ein Volume enthält den kompletten Zustand. Updates heißen: Image-Tag ändern und `docker compose up -d`.
-- **Alternative:** getrennte Container für Frontend (nginx) und Backend.
-- **Warum nicht:** Die statischen Dateien sind wenige Hundert KB. Ein zweiter Container bringt dafür nur Konfiguration.
+- **Warum:**
+  - Ein Prozess liefert API und SPA aus, ein Volume enthält den kompletten Zustand. Updates heißen: Image-Tag ändern und `docker compose up -d`.
+  - Docker hält Stashbert portabel: derselbe Compose-Stack läuft im LXC, auf einem Raspberry Pi oder einer VM.
+  - Der LXC passt zum bestehenden Proxmox-Betrieb.
+- **Alternative:** Docker in einer Proxmox-VM. Proxmox nennt das für maximale Isolation und Live-Migration weiterhin die empfohlene Praxis ([Proxmox VE 9.2, Kapitel Container](https://pve.proxmox.com/pve-docs/chapter-pct.html)).
+- **Warum nicht:**
+  - Stashbert braucht weder Live-Migration noch VM-Isolation.
+  - Ein unprivilegierter LXC mit `nesting=1` und `keyctl=1` ist leichter und fügt sich in den vorhandenen Betrieb ein.
+  - Die OCI-„Application Containers" von Proxmox (Docker-Images direkt als LXC) sind noch Tech Preview und ohne Compose-Unterstützung, daher ebenfalls nicht.
+- **Neu bewerten, wenn:** Docker im LXC Probleme macht (Speichertreiber, AppArmor nach Proxmox-Updates). Dann denselben Compose-Stack in eine kleine VM umziehen.
 
-### 13.14 HTTPS: vorhandener Reverse Proxy mit eigener Domain
+### 13.14 HTTPS: Caddy + deSEC (DNS-01), Wildcard, nur LAN
 
-- **Warum:** Kein Eingriff am iPhone. Öffentlich vertrautes Zertifikat, das auch der ESP32 mit dem Standard-Bundle prüfen kann. Automatische Erneuerung, was angesichts sinkender Laufzeiten wichtig ist.
-- **Alternative:** Tailscale `serve`.
-- **Warum nicht als Standard:** Erfordert eine aktive Tailscale-Verbindung auf dem iPhone und einen Tailscale-Client im Heimnetz. Als Option für Fernzugriff ideal.
+- **Warum:**
+  - Kein Eingriff am iPhone und öffentlich vertrautes Zertifikat, das auch der ESP32 mit dem Standard-Bundle prüfen kann.
+  - Automatische Erneuerung, was angesichts sinkender Laufzeiten wichtig ist.
+  - DNS-01 braucht keinen offenen Port.
+  - Das Wildcard-Zertifikat `*.home.schmitz-hellwig.de` verrät keine Dienstnamen in CT-Logs und passt für weitere Dienste.
+  - Die Caddy-Konfiguration umfasst wenige Zeilen, Caddy braucht keinen Zugriff auf den Docker-Socket, und das deSEC-Token lässt sich per Policy auf `_acme-challenge` beschränken.
+- **Alternative:** Traefik (lego hat einen eingebauten deSEC-Provider, also kein eigenes Build) bzw. Tailscale `serve` für den späteren Fernzugriff.
+- **Warum nicht Traefik:**
+  - Traefik bräuchte kein eigenes Image, dafür aber Docker-Socket-Zugriff für Labels (oder eine Datei-Konfiguration) und mehr Konfiguration.
+  - Caddy braucht ein eigenes Image mit dem deSEC-Modul (ein kurzes Dockerfile mit `xcaddy`), das bei Caddy-Updates neu gebaut wird.
+  - Beides ist vertretbar. Die Entscheidung fällt auf die einfachere Konfiguration.
+- **Neu bewerten, wenn:** später ein zentraler Reverse Proxy für alle Heimdienste entsteht. Dann dort terminieren und Caddy aus dem Stashbert-Stack entfernen.
 
 ### 13.15 Auth: Haushaltspasswort + Tokens
 
 - **Warum:** Schützt vor Gästen und IoT-Geräten im WLAN. Ohne Abhängigkeiten (scrypt und HMAC aus `node:crypto`). Tokens mit Scope für Gerät und HA.
 - **Alternative:** Forward-Auth über Authelia/Authentik am Proxy.
 - **Warum nicht:** Session-Abläufe und Redirects in einer Home-Screen-Web-App sind fehleranfällig, und der ESP32 bräuchte ohnehin Tokens. Wer Forward-Auth betreibt, kann sie zusätzlich vorschalten.
+
+### 13.16 iOS: vorerst PWA + Kurzbefehl, Swift-Hülle nur bei Bedarf
+
+- **Warum:** Die PWA ist die einzige Oberfläche und braucht weder Xcode noch Apple-Konto noch App-Builds. Der Kurzbefehl deckt den häufigsten Einzelfall (schnell entnehmen) kostenlos und mit nativer Kamera ab. Ob mehr nötig ist, entscheiden die POCs, nicht eine Vermutung.
+- **Alternative:** Capacitor (die Svelte-SPA als App verpackt, mit ML-Kit-Scanner-Plugin).
+- **Warum nicht:**
+  - Jede UI-Änderung bräuchte einen neuen App-Build.
+  - Das brauchbare Scanner-Plugin bringt Google ML Kit und CocoaPods mit.
+  - Dazu kommen jährliche Capacitor-Majors.
+  - Falls eine App nötig wird, löst eine kleine Swift-Hülle, die die PWA vom Server lädt, dieselben Probleme mit weniger beweglichen Teilen.
+- **Neu bewerten, wenn:** POC-1 oder POC-2 scheitern (dann Swift-Hülle, POC-9), oder wenn Safari die Kamera-Freigabe für Home-Screen-Apps dauerhaft speichert (dann bleibt es bei der PWA).
 
 ---
 
@@ -1311,8 +1459,8 @@ erDiagram
 | POST | `/api/v1/auth/setup`, `/login`, `/logout`; GET `/me` | Erstpasswort, Anmeldung | öffentlich/Session | M1 |
 | GET | `/api/v1/health` | Healthcheck | öffentlich | M1 |
 | POST | `/api/v1/shopping-list/snapshot` | `shopping.snapshot` auslösen | `full` | M2 |
-| POST | `/api/v1/webhooks/test` | Testereignis senden | `full` | M2 |
-| GET/POST/DELETE | `/api/v1/tokens` | Geräte- und HA-Tokens verwalten | Session | M2 |
+| POST | `/api/v1/events/test` | Testereignis über alle Senken senden (MQTT, optional Webhooks) | `full` | M2 |
+| GET/POST/DELETE | `/api/v1/tokens` | Tokens für Kurzbefehl, HA und Geräte verwalten | Session | M1 |
 
 ### 15.3 Scan-Vertrag
 
@@ -1389,18 +1537,26 @@ Die Werte sind klein genug für einen HA-Zustand (höchstens 255 Zeichen) bzw. f
 
 ## 16. Deployment mit Docker Compose
 
-### 16.1 Container
+### 16.1 Host: Debian-LXC auf Proxmox
+
+- **Container-Typ:** unprivilegierter LXC mit aktuellem Debian-Template und den Features `nesting=1` und `keyctl=1`, damit Docker Engine und Compose laufen. Stashbert bekommt einen eigenen LXC; so bleiben Backups, Updates und Ressourcen getrennt von anderen Diensten.
+- **Ressourcen:** 1 vCPU und 512 MB bis 1 GB RAM reichen voraussichtlich (Annahme, im Betrieb messen). Etwa 8 GB Disk für System, Images, Datenbank, Bilder und Backups.
+- **Datenablage:** `/opt/stashbert/data` im Root-Dateisystem des LXC oder als eigener Proxmox-Mountpoint. Kein NFS/SMB (SQLite, siehe 6.1).
+- **Portabilität:** Der Compose-Stack (`compose.yaml`, `.env`, `caddy/`, `data/`) lässt sich unverändert auf eine VM oder einen anderen Docker-Host umziehen.
+- **Zu prüfen in POC-4:** `docker info` meldet `overlay2`, Docker startet nach einem Neustart des LXC, und AppArmor erlaubt `nesting` nach Proxmox-Updates.
+
+### 16.2 Container
 
 - **Mehrstufiger Build:**
   1. Stage „web": `npm ci`, Vite-Build der SPA.
   2. Stage „runtime": `node:26-alpine` mit Server-Quellen (`.ts`, laufen per Type Stripping), Produktionsabhängigkeiten und SPA-Build.
   - Keine nativen Module (dank `node:sqlite`), daher auch `gcr.io/distroless/nodejs` möglich.
 - **Laufzeit-Härtung:** Non-root-Benutzer, schreibgeschütztes Root-Dateisystem, beschreibbar ist nur `/data`. Healthcheck auf `/api/v1/health`.
-- **Port:** 8080 im Container. Veröffentlicht wird er nur für den Reverse Proxy (gemeinsames Docker-Netz) bzw. auf `127.0.0.1`.
-- **Image:** Multi-Arch (amd64 und arm64) per GitHub Actions nach GHCR (privat, Pull mit Token). Alternativ `docker compose build` direkt auf dem Server aus dem Git-Checkout.
+- **Port:** 8080 im Container, nur im Compose-Netz sichtbar. Nach außen veröffentlicht nur Caddy die Ports 443 (und 80 für die Weiterleitung).
+- **Image:** Multi-Arch (amd64 und arm64) per GitHub Actions nach GHCR (privat, Pull mit Token). Alternativ `docker compose build` direkt im LXC aus dem Git-Checkout.
 - **Migrationen** laufen beim Start. Vorher legt Stashbert automatisch ein Backup an (`pre-migration-<version>.db`).
 
-### 16.2 Compose-Skizze
+### 16.3 Compose-Skizze
 
 ```yaml
 services:
@@ -1408,42 +1564,83 @@ services:
     image: ghcr.io/schmitz-chris/stashbert:0.1.0
     restart: unless-stopped
     read_only: true
+    env_file: .env                                  # MQTT_PASSWORD u. a., nicht im Git
     environment:
       TZ: Europe/Berlin
-      PUBLIC_URL: https://stashbert.example.org
-      OFF_CONTACT: stashbert@example.org       # Kontakt für den OFF-User-Agent
-      # WEBHOOK_URLS: http://homeassistant.lan:8123/api/webhook/stashbert-<id>   (M2)
+      PUBLIC_URL: https://stashbert.home.schmitz-hellwig.de
+      OFF_CONTACT: stashbert@example.org            # Kontakt für den OFF-User-Agent
+      MQTT_URL: mqtt://<broker-ip>:1883             # ab M2
+      MQTT_USERNAME: stashbert
+      MQTT_HA_DISCOVERY: "true"
     volumes:
-      - ./data:/data                           # Linux-Host; auf Docker Desktop Named Volume verwenden
-    networks: [proxy]                          # gemeinsames Netz mit dem Reverse Proxy
+      - ./data:/data
+    # ports: ["8081:8080"]                          # optional ab M3: HTTP nur für den ESP32 im IoT-VLAN
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
       interval: 30s
-networks:
-  proxy:
-    external: true
+
+  caddy:
+    build: ./caddy                                  # offizielles Caddy + Modul caddy-dns/desec
+    restart: unless-stopped
+    ports: ["443:443", "80:80"]
+    env_file: .env                                  # DESEC_TOKEN
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data                          # Zertifikate und ACME-Konto
 ```
 
-### 16.3 Konfiguration
+`caddy/Dockerfile` nach dem dokumentierten Muster des offiziellen Images: `caddy:2-builder` baut mit `xcaddy build --with github.com/caddy-dns/desec`, das Ergebnis wird in `caddy:2` kopiert.
+
+`caddy/Caddyfile` (Syntax laut [caddy-dns/desec](https://github.com/caddy-dns/desec)):
+
+```
+{
+	acme_dns desec {
+		token {$DESEC_TOKEN}
+	}
+}
+
+*.home.schmitz-hellwig.de {
+	@stashbert host stashbert.home.schmitz-hellwig.de
+	handle @stashbert {
+		reverse_proxy stashbert:8080
+	}
+	handle {
+		abort
+	}
+}
+```
+
+### 16.4 Konfiguration
 
 | Variable | Standard | Zweck |
 |---|---|---|
 | `PORT` | 8080 | HTTP-Port im Container |
 | `DATA_DIR` | `/data` | Datenbank, Bilder, Backups, Session-Schlüssel |
-| `PUBLIC_URL` | (leer) | für absolute Links und Cookie-Einstellungen |
+| `PUBLIC_URL` | (leer) | für absolute Links, Origin-Prüfung und Cookie-Einstellungen |
 | `OFF_CONTACT` | (Pflicht für Lookups) | Kontakt im OFF-User-Agent |
 | `LOOKUP_SOURCES` | `openfoodfacts` | Fallback-Kette, z. B. `openfoodfacts,upcitemdb` |
-| `WEBHOOK_URLS` | (leer) | kommagetrennte Webhook-Ziele (M2) |
+| `MQTT_URL` | (leer = aus) | Broker, z. B. `mqtt://broker:1883` oder `mqtts://…` (M2) |
+| `MQTT_USERNAME`, `MQTT_PASSWORD` | (leer) | eigener Broker-Benutzer mit ACL (siehe 10.5) |
+| `MQTT_TOPIC_PREFIX` | `stashbert` | Präfix aller Topics |
+| `MQTT_HA_DISCOVERY` | `false` | HA-Device-Discovery publizieren |
+| `WEBHOOK_URLS` | (leer) | optionale zweite Senke (M4) |
 | `BACKUP_KEEP_DAYS` | 14 | Aufbewahrung der täglichen Backups |
 | `LOG_LEVEL` | `info` | |
+| `DESEC_TOKEN` (nur Caddy) | (Pflicht) | deSEC-Token, per Policy auf `_acme-challenge.home` TXT beschränkt |
 
-Das Haushaltspasswort steht **nicht** in der Konfiguration. Beim ersten Start zeigt die App eine Einrichtungsseite.
+Das Haushaltspasswort steht **nicht** in der Konfiguration. Beim ersten Start zeigt die App eine Einrichtungsseite. Die `.env` enthält nur Geheimnisse, hat die Rechte `600` und ist nicht im Git.
 
-### 16.4 Reverse Proxy
+### 16.5 TLS und Namensauflösung
 
-- **Aufgaben des Proxys:** TLS-Terminierung für `stashbert.<domain>`, Weiterleitung an `stashbert:8080`, `X-Forwarded-For`/`-Proto` setzen, HSTS.
-- **Zertifikat:** DNS-01, damit keine Ports offen sein müssen. Im LAN löst ein lokaler DNS-Eintrag den Namen auf die Server-IP auf (Split-DNS; bei FRITZ!Box Rebind-Ausnahme).
-- **Geräte-Port (optional):** Für den ESP32 kann ein zweiter, nur im IoT-VLAN erreichbarer Port direkt auf den Container zeigen (siehe 9.4).
+- **Zertifikat:**
+  - Caddy holt per DNS-01 über die deSEC-API ein Wildcard-Zertifikat für `*.home.schmitz-hellwig.de` und erneuert es automatisch. Kein Port muss aus dem Internet erreichbar sein.
+  - Das deSEC-Token bekommt eine Token Policy, die nur Schreibzugriff auf TXT-Einträge unter `_acme-challenge.home` erlaubt (siehe 7.6).
+- **Namensauflösung im LAN, zwei Varianten:**
+  1. **Öffentlicher DNS-Eintrag auf private IP (einfachste):** In deSEC `*.home.schmitz-hellwig.de A <LAN-IP des LXC>`. Es gibt nichts weiter zu pflegen. Der Router darf das aber nicht als DNS-Rebind blockieren (bei FRITZ!Box: `home.schmitz-hellwig.de` als Ausnahme vom DNS-Rebind-Schutz eintragen). Die private IP wird dadurch öffentlich sichtbar, was unkritisch ist.
+  2. **Lokaler DNS-Override:** Läuft im Netz Pi-hole, AdGuard Home o. ä., wird der Name dort auf die LAN-IP gesetzt. Öffentlich existiert dann nur der ACME-TXT-Eintrag.
+- **Weitere Aufgaben von Caddy:** Setzt `X-Forwarded-For` und `X-Forwarded-Proto` selbst. HSTS kann per `header`-Direktive ergänzt werden.
+- **Geräte-Port (optional, M3):** Für den ESP32 kann Stashbert zusätzlich Port 8081 im LAN veröffentlichen (siehe 9.4). Standard bleibt HTTPS über Caddy.
 
 ---
 
@@ -1462,7 +1659,9 @@ Das Haushaltspasswort steht **nicht** in der Konfiguration. Beim ersten Start ze
 
 - **Täglich** (und vor jeder Migration) führt Stashbert `VACUUM INTO '/data/backups/stashbert-YYYY-MM-DD.db'` aus. Das ergibt eine konsistente, kompakte Kopie im laufenden Betrieb. Aufbewahrung 14 Tage.
 - **Manuell** gibt es in den Einstellungen „Backup jetzt" und „Export (JSON)".
-- **Offsite:** Das vorhandene Host-Backup (restic, borg o. ä.) sichert `/data/backups` und `/data/images`. Stashbert selbst lädt nichts in die Cloud.
+- **Offsite:** Das Host-Backup (restic, borg o. ä.) sichert `/data/backups` und `/data/images`. Stashbert selbst lädt nichts in die Cloud.
+- **Proxmox-Backup des LXC** (vzdump im Snapshot-Modus): Es erfasst Datenbank und WAL-Datei zum selben Zeitpunkt. Das Ergebnis ist absturzkonsistent, wie nach einem Stromausfall, und SQLite kann es wiederherstellen. Es ist eine gute zusätzliche Ebene. Die primäre, garantiert konsistente Quelle bleiben die `VACUUM INTO`-Dateien.
+- **Caddy-Daten** (`caddy/data`) müssen nicht gesichert werden. Zertifikate werden bei Verlust neu ausgestellt.
 - **Export:** `GET /api/v1/export` liefert Produkte, Barcodes, Kategorien, Lagerorte und Bewegungen als JSON. Das ist menschenlesbar und dient der Migration. Import kommt später.
 - **Litestream** ist nicht nötig. Wer es will, kann es als Sidecar ergänzen.
 
@@ -1498,14 +1697,16 @@ Ein automatisierter Test in CI prüft den Ablauf: Backup erzeugen, in eine frisc
 | Kompromittiertes Gerät (ESP32) | Token mit Scope `scan` (nur Scan und Rückgängig); einzeln widerrufbar; `last_used_at` sichtbar |
 | Abhören im LAN | HTTPS für PWA und HA; HTTP nur als dokumentierte Ausnahme für das Gerät im IoT-VLAN |
 | SSRF über Bild-URLs | Download nur von OFF-Bild-Hosts (Allowlist), Größen- und Typprüfung |
-| Webhook-Spoofing gegen HA | lange zufällige Webhook-ID, `local_only: true`, Webhooks nie öffentlich |
+| Gefälschte Ereignisse oder Befehle über MQTT | eigener Broker-Benutzer für Stashbert mit ACL (schreiben nur `stashbert/#` und eigenes Discovery-Topic, lesen nur `stashbert/cmd/#` und `homeassistant/status`); `stashbert/cmd/snapshot` löst nur einen harmlosen Abgleich aus |
+| Missbrauch des deSEC-Tokens | Token Policy: nur TXT unter `_acme-challenge.home` schreibbar; Token nur in `.env` mit Rechten `600` |
+| Webhook-Spoofing gegen HA (nur bei optionalen Webhooks) | lange zufällige Webhook-ID, `local_only: true`, Webhooks nie öffentlich |
 | Datenverlust | tägliche Backups, Backup vor Migration, Restore-Test in CI |
 | Lieferkette (npm) | Lockfile, wenige Abhängigkeiten, Dependabot, `npm ci` im Build |
 
 ### 18.3 Authentifizierung
 
 - **Menschen:** Ein Haushaltspasswort, beim ersten Start gesetzt. Danach gibt es ein signiertes Session-Cookie (HMAC mit Schlüssel aus `/data/secret`), das 1 Jahr gilt und sich bei Nutzung verlängert. Keine Benutzerkonten, keine Rollen.
-- **Maschinen (M2):**
+- **Maschinen (M1, vorgezogen für den Kurzbefehl):**
   - Tokens mit Name und Scope: `scan` für Scan und Rückgängig, `read` für Lesen, `full` für alles außer der Token-Verwaltung.
   - Ein Token wird einmal angezeigt und als SHA-256-Hash gespeichert.
   - Das ESPHome-Token liegt in `secrets.yaml`.
@@ -1519,12 +1720,13 @@ Ein automatisierter Test in CI prüft den Ablauf: Backup erzeugen, in eine frisc
 
 ### 18.5 Fernzugriff
 
-- **Empfohlen: VPN** (Tailscale oder WireGuard). Stashbert ist dann nie öffentlich erreichbar, und die PWA funktioniert unterwegs wie zu Hause.
+- **Aktueller Stand:** nur im Heimnetz (A1b). Aus dem Internet ist nichts erreichbar; öffentlich existieren nur DNS-Einträge.
+- **Später empfohlen: VPN** (Tailscale oder WireGuard). Stashbert ist dann nie öffentlich erreichbar, und die PWA funktioniert unterwegs wie zu Hause. Mit Split-DNS über das VPN oder dem öffentlichen A-Eintrag auf die private IP (16.5) funktioniert derselbe Name unterwegs.
 - **Falls doch öffentlich:**
   - Nur über den Reverse Proxy mit TLS.
   - Optional Forward-Auth (Authelia/Authentik) vorschalten, zusätzlich CrowdSec/fail2ban am Proxy.
   - Der Geräte-Port bleibt intern.
-  - HA-Webhooks bleiben `local_only`.
+  - MQTT-Broker und HA bleiben intern.
 - **Datenschutz:** Außer den OFF-Lookups (die den gescannten Barcode an OFF senden) verlässt nichts das Heimnetz. Keine Telemetrie.
 
 ---
@@ -1537,17 +1739,19 @@ Ein automatisierter Test in CI prüft den Ablauf: Backup erzeugen, in eine frisc
 |---|---|
 | Produkte | anlegen, bearbeiten, löschen; mehrere Barcodes; Soll und optional Mindestbestand; Kategorie, Lagerort; Bild aus OFF; zusammenführen |
 | Scanner | zentraler Button, Dauer-Scan, Modus Einlagern/Entnehmen, Feedback (Farbe + Ton), [+1], [Rückgängig], manuelle Eingabe, Licht (falls verfügbar), Wake Lock |
-| Unbekannte Produkte | automatisch aus OFF anlegen, ohne Pflichteingabe; Platzhalter + Nachladen im Hintergrund; Karte „Neu" mit Schnellauswahl für den Sollbestand ([0] [1] [2] [3] [5] [10]) |
+| Unbekannte Produkte | automatisch aus OFF anlegen, ohne Pflichteingabe; Platzhalter + Nachladen im Hintergrund; Karte „Neu" mit Schnellauswahl für den Sollbestand ([1] [2] [3] [5] [10]); Standard ist `0` (bestätigt, siehe 1.5) |
 | Vorrat | Liste mit Suche, Filtern (Alle, Nachkaufen, Leer, Prüfen, Ohne Soll), [-]/[+], Inventur-Korrektur |
 | Einkauf | berechnete Liste „3 × Kidneybohnen", „Als Text teilen" |
 | PWA | Manifest, Icons, Service Worker (App-Shell + WASM), iOS-Meta-Tags, Safe Areas |
-| Sicherheit | Haushaltspasswort, Session-Cookie, CSP |
+| Sicherheit | Haushaltspasswort, Session-Cookie, CSP, API-Tokens mit Scopes (für Kurzbefehl und HA) |
 | Betrieb | ein Container, Compose, Migrationen, tägliches Backup, JSON-Export, Healthcheck, Doku für HTTPS |
-| API | alle M1-Endpunkte aus 15.2 inkl. `/scan` und `/summary`, OpenAPI |
+| API | alle M1-Endpunkte aus 15.2 inkl. `/scan`, `/summary` und Token-Verwaltung, OpenAPI |
+| iOS-Kurzbefehl | Anleitung in `docs/` für „Stashbert entnehmen" (Action-Taste, Kontrollzentrum), sofern POC-8 erfolgreich |
 
 ### 19.2 Nicht im MVP
 
-- **M2:** Outbox/Webhooks, HA-Beispiele, Bring!-Sync, API-Tokens.
+- **M2:** Outbox + MQTT mit HA-Discovery, HA-Beispiele, Bring!-Sync.
+- **M1.5 (nur falls POC-1/POC-2 scheitern):** Swift-Hülle nach 7.9.
 - **M3:** ESP32.
 - **M4:** MQTT, Offline-Warteschlange, MHD, Foto-Aufnahme für Produkte ohne OFF-Bild, Fallback-Quellen, Import.
 
@@ -1603,14 +1807,14 @@ stashbert/
 │   ├── domain/              Scan, Bestand, Einkauf, Merge
 │   ├── db/                  Datenmodul, migrations/*.sql
 │   ├── lookup/              OFF-Client, Rate-Limiter, Hintergrund-Nachladen, Bilder
-│   └── events/              Outbox, Webhook-Zustellung (M2)
+│   └── events/              Outbox, MQTT-Publisher und Discovery (M2), Webhooks (M4)
 ├── web/
 │   ├── src/views/           Vorrat, Scanner, Einkauf, Produkt, Einstellungen
 │   ├── src/lib/scanner/     Kamera, Decoder, Feedback (framework-unabhängig)
 │   └── public/              Icons, Töne
 ├── hardware/esphome/        (M3)
+├── deploy/                  compose.yaml, caddy/ (Dockerfile, Caddyfile), .env.example
 ├── Dockerfile
-├── compose.yaml
 ├── package.json             ein Paket, ein Lockfile
 └── tsconfig.json            erasableSyntaxOnly, verbatimModuleSyntax, allowImportingTsExtensions
 ```
@@ -1623,9 +1827,9 @@ Bewusst **ein** `package.json` statt eines Monorepos mit Workspaces: `shared/` w
 
 | Schritt | Ergebnis |
 |---|---|
-| 0.1 | HTTPS-Zugang im LAN einrichten (POC-4) |
-| 0.2 | Wegwerf-Scannerseite mit zxing-wasm, Kamerawahl, Ton; auf dem iPhone als Tab und Home-Screen-App testen (POC-1 bis POC-3) |
-| 0.3 | Ergebnisse in `docs/poc/` festhalten, Entscheidungen in diesem Dokument ggf. anpassen |
+| 0.1 | Debian-LXC auf Proxmox mit `nesting`/`keyctl`, Docker + Compose; deSEC-Token mit Policy; Caddy mit deSEC-Modul; Wildcard-Zertifikat für `*.home.schmitz-hellwig.de`; DNS-Eintrag und ggf. Rebind-Ausnahme (POC-4) |
+| 0.2 | Wegwerf-Scannerseite mit zxing-wasm, Kamerawahl, Ton, hinter Caddy ausgeliefert; auf iPhone 15 und iPhone 16 Pro jeweils als Safari-Tab und als Home-Screen-App testen (POC-1 bis POC-3) |
+| 0.3 | Ergebnisse in `docs/poc/` festhalten, Entscheidungen in diesem Dokument ggf. anpassen, insbesondere zur eigenen iOS-App (7.9) |
 
 **Phase 1: MVP (M1)**
 
@@ -1636,7 +1840,7 @@ Bewusst **ein** `package.json` statt eines Monorepos mit Workspaces: `shared/` w
 | 1.3 | Datenmodul: Pragmas, Migrationsrunner, Schema v1 | Migration auf leerer DB und erneut (idempotent) |
 | 1.4 | Domäne: Scan (add/consume/create/placeholder), Undo, Merge, Stock-Set, Idempotenz | Tests für jede Zeile der Verhaltensmatrix in 15.3 |
 | 1.5 | Lookup: OFF-Client (v3.6), Feldzuordnung, Cache, Rate-Limiter, Hintergrund-Nachladen, Bild-Download | Tests mit aufgezeichneten Antworten (gefunden, 404, 429 mit HTML, Redirect auf Schwester-DB) |
-| 1.6 | HTTP-API mit Hono, OpenAPI, Auth (Setup, Login, Session), CSP | API-Tests gegen In-Memory-DB |
+| 1.6 | HTTP-API mit Hono, OpenAPI, Auth (Setup, Login, Session, API-Tokens mit Scopes, Verwaltung in den Einstellungen), CSP | API-Tests gegen In-Memory-DB; `scan`-Token kann keine Produkte ändern |
 | 1.7 | Web-Grundgerüst: Vite + Svelte, Tab-Leiste mit zentralem Scan-Button, Router, API-Client, Login/Setup | läuft auf dem iPhone über HTTPS |
 | 1.8 | Ansicht Vorrat: Liste, lokale Suche, Filter, [-]/[+] | 1000 Testprodukte flüssig |
 | 1.9 | Ansicht Scanner: Kameramodul aus POC, Modus, Feedback, Sperrzeit, [+1], [Rückgängig], Karte „Neu" mit Soll-Schnellauswahl, manuelle Eingabe | AK1, AK2, AK3, AK8 |
@@ -1645,16 +1849,17 @@ Bewusst **ein** `package.json` statt eines Monorepos mit Workspaces: `shared/` w
 | 1.12 | PWA: Manifest, Icons, `apple-touch-icon`, Service Worker mit WASM-Precache, Update-Hinweis | AK7, App-Shell offline |
 | 1.13 | Backup-Job, Export, Restore-Doku und Restore-Test | AK6 |
 | 1.14 | Dockerfile, Compose, Multi-Arch-Build, Betriebsdoku (HTTPS, Update, Restore); Inbetriebnahme zu Hause | AK4, AK9, alle AK auf echtem Gerät |
+| 1.15 | Kurzbefehl „Stashbert entnehmen" nach POC-8 einrichten und dokumentieren | auf beiden iPhones: scannen, Mitteilung mit neuem Bestand |
 
 **Phase 2: Integrationen (M2)**
 
 | Nr. | Aufgabe | Abnahme |
 |---|---|---|
-| 2.1 | Outbox-Tabelle, Ereignisse in denselben Transaktionen, Zustell-Job mit Backoff, Testereignis | Ereignis bleibt nach Neustart erhalten und wird zugestellt |
-| 2.2 | API-Tokens mit Scopes, Verwaltung in den Einstellungen | `scan`-Token kann keine Produkte ändern |
-| 2.3 | HA-Beispiele in `docs/home-assistant/`: REST-Sensor, Benachrichtigung „leer" | in der eigenen HA-Instanz aktiv |
+| 2.1 | Outbox-Tabelle, Ereignisse in denselben Transaktionen, MQTT-Publisher (QoS 1, Last Will, retained Summary), Testereignis | Ereignis bleibt bei gestopptem Broker erhalten und wird nach dem Start zugestellt |
+| 2.2 | HA-Device-Discovery inkl. erneutem Senden bei `homeassistant/status = online`; Broker-Benutzer mit ACL | Gerät „Stashbert" mit Sensoren erscheint ohne YAML in HA |
+| 2.3 | HA-Beispiele in `docs/home-assistant/`: Benachrichtigung „leer", Snapshot nach HA-Start | in der eigenen HA-Instanz aktiv |
 | 2.4 | Bring!-Sync-Automation nach 11.4, POC-5 vorher | Übergänge 0→n, n→m, n→0 korrekt in Bring! |
-| 2.5 | `shopping.snapshot` + Button „Liste neu senden" | Abgleich lässt fremde Einträge unberührt |
+| 2.5 | `shopping.snapshot` über Button „Liste neu senden" und `stashbert/cmd/snapshot` | Abgleich lässt fremde Einträge unberührt |
 
 **Phase 3: Hardware-Scanner (M3)**
 
@@ -1672,25 +1877,39 @@ Bewusst **ein** `package.json` statt eines Monorepos mit Workspaces: `shared/` w
 
 | ID | Frage | Warum unklar | Vorgehen | Erfolgskriterium | Blockiert |
 |---|---|---|---|---|---|
-| POC-1 | Erkennt zxing-wasm EAN-13 auf dem eigenen iPhone schnell und zuverlässig, auch auf gewölbten Dosen und bei wenig Licht? Welche Kamera bzw. welcher Zoom auf Pro-Modellen? Funktioniert die CSP mit `wasm-unsafe-eval`? | nur Herstellerbenchmarks; Nahfokus-Problem bei Pro-Modellen; Linsenwechsel seit iOS 17 | Wegwerfseite: `facingMode` vs. `deviceId` (Dual Wide) vs. `zoom`, 720p vs. 1080p, ROI-Streifen; 30 reale Vorratsartikel | ≥ 95 % der Artikel in unter 1 s erkannt, keine Falschlesung | 1.9 |
-| POC-2 | Wie oft fragt iOS 27 nach der Kamera, in einer Home-Screen-App bzw. in einem Safari-Tab mit „Erlauben"? Übersteht der Stream App-Wechsel, Kontrollzentrum und Sperre? | offene WebKit-Bugs 280394/215884, Regression seit 26.3.1 berichtet | Kaltstart, Sperre, App-Wechsel je 5-mal, mit und ohne Stoppen der Tracks bei `hidden` | Empfehlung Tab oder Home-Screen-App; dokumentierter Wiederherstellungsweg | Empfehlung in der Doku |
+| POC-1 | Erkennt zxing-wasm EAN-13 auf **iPhone 15 und iPhone 16 Pro** schnell und zuverlässig, auch auf gewölbten Dosen und bei wenig Licht? Welche Kamera bzw. welcher Zoom auf dem 16 Pro? Funktioniert die CSP mit `wasm-unsafe-eval`? | nur Herstellerbenchmarks; Nahfokus-Problem bei Pro-Modellen; Linsenwechsel seit iOS 17 | Wegwerfseite: `facingMode` vs. `deviceId` (Dual Wide, Ultra Wide) vs. `zoom`, 720p vs. 1080p, ROI-Streifen; 30 reale Vorratsartikel, beide Geräte | ≥ 95 % der Artikel in unter 1 s erkannt, keine Falschlesung, auf beiden Geräten | 1.9 |
+| POC-2 | Wie oft fragt iOS 27 nach der Kamera, in einer Home-Screen-App bzw. in einem Safari-Tab mit „Erlauben"? Übersteht der Stream App-Wechsel, Kontrollzentrum und Sperre? | offene WebKit-Bugs 280394/215884, Regression seit 26.3.1 berichtet | auf beiden iPhones: Kaltstart, Sperre, App-Wechsel je 5-mal, mit und ohne Stoppen der Tracks bei `hidden` | Empfehlung Tab oder Home-Screen-App; dokumentierter Wiederherstellungsweg | Empfehlung in der Doku |
 | POC-3 | Hört man den Piepton bei aktivem Stummschalter? Läuft Musik weiter? Funktioniert Audio nach der Rückkehr in die App? | `audioSession.type = "playback"` nur durch Entwicklerberichte belegt | Web Audio mit/ohne `audioSession`, Fallback `<audio>` | zuverlässiger Ton oder bewusste Entscheidung „nur visuell bei Stumm" | 1.9 |
-| POC-4 | Funktioniert der geplante HTTPS-Weg (Domain + DNS-01 + Split-DNS) im eigenen Netz inkl. Router-Rebind-Schutz, Service Worker und Home-Screen-Installation? | hängt von Router, DNS und Proxy ab | Test-Subdomain, Proxy-Route, iPhone im WLAN | Kamera + SW + Install ohne Zertifikatswarnung | 1.7 |
+| POC-4 | Funktioniert der geplante Betriebsweg: Docker im unprivilegierten LXC (`overlay2`, Neustart), Caddy mit deSEC-Modul und eingeschränktem Token, Wildcard-Zertifikat, Namensauflösung inkl. Router-Rebind-Schutz, Service Worker und Home-Screen-Installation? | hängt von Proxmox-Storage, Router und DNS ab | LXC anlegen, Caddy mit Testseite, iPhone im WLAN | Zertifikat ausgestellt und erneuerbar; Kamera + SW + Install ohne Warnung | 1.7 |
 | POC-5 | Verhalten der Bring!-Integration: doppelter Name bei `add_item`, `update_item` mit `status` + `description`, `remove_item`, Katalognamen, von Hand gelöschte Einträge | aus Quellcode abgeleitet, nicht live getestet | Test-Liste in Bring!, HA-Entwicklerwerkzeuge | Automation aus 11.4 bestätigt oder angepasst | 2.4 |
 | POC-6 | Latenz ESP32 → Stashbert mit TLS (Handshake pro Request) vs. HTTP; Erzeugung der `request_id`; Antwortgröße im 1-KB-Puffer | ESPHome-Requests blockieren die Hauptschleife, TLS auf ESP32 ist teuer | ESP32 + GM65/GM861 + `http_request` gegen Test-Instanz | Scan bis Piepton unter 1,5 s | 3.2 |
 | POC-7 (optional) | Taugt ein Bluetooth-HID-Scanner am iPhone als schnelle Alternative zur Kamera? | Fokus- und Tastaturverhalten von iOS mit externer Tastatur in einer PWA | günstiger BT-Scanner im Tastaturmodus, verstecktes Eingabefeld | Serienscans ohne eingeblendete Tastatur | nichts |
+| POC-8 | Liest die Kurzbefehl-Aktion „QR-/Barcode scannen" auf iOS 27 EAN-13/EAN-8 zuverlässig, und funktioniert der POST mit Bearer-Token? Wie schnell ist der Ablauf über die Action-Taste? | EAN-Unterstützung nur durch Community-Beispiele belegt | Kurzbefehl auf beiden iPhones, 20 Artikel, Start über Action-Taste (16 Pro) und Kontrollzentrum (15) | Code korrekt (12/13 Stellen normalisiert), Mitteilung „Kidneybohnen 3→2" in unter 5 s ab Tastendruck | Kurzbefehl-Doku |
+| POC-9 (bedingt) | Swift-Hülle: Wird die Kamera ohne Web-Rückfrage freigegeben, laufen Service Worker und Message-Handler mit `WKAppBoundDomains` + `limitsNavigationsToAppBoundDomains`, und löst ein AVFoundation-Scanner mit Triple Camera den Nahfokus auf dem 16 Pro? | App-Bound-Domains und Service Worker nur teilweise dokumentiert | minimale Xcode-App mit kostenlosem Entwicklerkonto (7-Tage-Profil reicht für den Test) | Serienscans mit Haptik und Ton, keine Rückfrage nach Neustart | M1.5 |
 
 ---
 
 ## 23. Offene Fragen
 
-1. Welcher Reverse Proxy läuft (Traefik, Caddy, NPM), und gibt es eine Domain für `stashbert.<domain>`? Oder ist Tailscale bevorzugt?
-2. Welches iPhone-Modell wird genutzt? Pro-Modelle haben das Nahfokus-Thema aus POC-1.
-3. Wie ist Home Assistant installiert (OS oder Container), und läuft bereits ein MQTT-Broker? Das ist relevant für Stufe 2.
-4. Welche Bring!-Liste soll befüllt werden, und nutzen andere Haushaltsmitglieder sie mit? Das ist relevant für den Abgleich in 11.4.
-5. **Standard-Sollbestand für neu angelegte Produkte:** Vorschlag `0` (nur zählen) plus Schnellauswahl in der „Neu"-Karte. Alternative `1`, dann landet jedes verbrauchte Produkt automatisch auf der Liste.
-6. Soll „Stashbert" der endgültige Name sein?
-7. Welche Lizenz beim späteren Veröffentlichen? MIT/Apache-2.0 (einfach, permissiv) oder AGPL-3.0 (wie Homebox/StoreStash, schützt vor geschlossenen SaaS-Ablegern). Die OFF-Lizenz (ODbL) betrifft die Daten, nicht den Code.
+### 23.1 Beantwortet (Revision 2)
+
+| Frage | Antwort | Eingearbeitet in |
+|---|---|---|
+| Reverse Proxy und Domain | Proxmox mit LXC, noch kein zentraler Proxy; Domain `schmitz-hellwig.de` (DNS bei deSEC); zunächst nur intern | 1.6, 7.7, 13.13, 13.14, 16 |
+| iPhone-Modelle | iPhone 15 und iPhone 16 Pro | 1.6, 7.7, POC-1, POC-2 |
+| MQTT-Broker | läuft | 10.3, 10.5, 13.10 |
+| Standard-Sollbestand | `0` | 1.5, 19.1 |
+| Docker | gesetzt, wegen Portabilität | 13.13, 16.1 |
+
+### 23.2 Noch offen
+
+1. **Lizenz:** noch nicht entschieden. Bis zur Veröffentlichung bleibt das Repository privat und ohne Lizenzdatei. Die bisher geplanten Abhängigkeiten stehen unter MIT bzw. Apache-2.0 (Svelte, Vite, vite-plugin-pwa, Hono, Zod, mqtt.js, barcode-detector und zxing-wasm unter MIT, per `npm view` am 22.09.2026 geprüft; zxing-cpp unter Apache-2.0) und schränken die Wahl nicht ein. Die OFF-Lizenz (ODbL) betrifft die Daten, nicht den Code. Entscheiden vor der ersten Veröffentlichung: MIT/Apache-2.0 (permissiv) oder AGPL-3.0 (wie Homebox/StoreStash).
+2. **Namensauflösung im LAN:** Welcher Router bzw. gibt es einen lokalen DNS (Pi-hole, AdGuard Home)? Davon hängt ab, welche Variante aus 16.5 genutzt wird.
+3. **Broker:** Welcher Broker läuft, unterstützt er MQTT 5 (von HA verlangt, siehe 10.1) und Benutzer mit ACL?
+4. **Home Assistant:** OS oder Container? Das betrifft nur Beispiel-URLs und Ports.
+5. **Bring!-Liste:** Welche Liste soll befüllt werden, und nutzen andere Haushaltsmitglieder sie mit? Relevant für den Abgleich in 11.4.
+6. **Name:** Soll „Stashbert" der endgültige Name sein?
+7. **Eigene iOS-App:** Entscheidung nach POC-2, Optionen in 7.9.
 
 ---
 
@@ -1789,8 +2008,37 @@ Alle Quellen wurden am 22.09.2026 abgerufen. Die Liste enthält die Primärquell
 - Bring!-Integration, Quellcode: <https://github.com/home-assistant/core/tree/2026.9.3/homeassistant/components/bring>
 - bring-api: <https://github.com/miaucl/bring-api>
 - HA Deprecation-Regeln: <https://developers.home-assistant.io/docs/deprecating/>
+- HA MQTT-Event: <https://www.home-assistant.io/integrations/event.mqtt/>
+- HA Templating MQTT-Trigger: <https://www.home-assistant.io/docs/automation/templating/#mqtt>
 - ESPHome `http_request`: <https://esphome.io/components/http_request/>
 - ESPHome UART-Debugging: <https://esphome.io/components/uart/#debugging>
 - ESPHome API: <https://esphome.io/components/api/>
 - ESPHome MQTT: <https://esphome.io/components/mqtt/>
 - ESPHome Fonts: <https://esphome.io/components/font/>
+
+**Betrieb (Revision 2):**
+
+- Proxmox VE 9.2, Container: <https://pve.proxmox.com/pve-docs/chapter-pct.html>
+- deSEC Token Policies: <https://desec.readthedocs.io/en/latest/auth/tokens.html>
+- caddy-dns/desec: <https://github.com/caddy-dns/desec>
+- lego deSEC-Provider: <https://github.com/go-acme/lego/tree/master/providers/dns/desec>
+
+**iOS-App-Optionen (Revision 2):**
+
+- VisionKit DataScannerViewController: <https://developer.apple.com/documentation/visionkit/datascannerviewcontroller>
+- AVCamBarcode: <https://developer.apple.com/documentation/avfoundation/avcambarcode-detecting-barcodes-and-faces>
+- WKUIDelegate Media Capture: <https://developer.apple.com/documentation/webkit/wkuidelegate/webview(_:requestmediacapturepermissionfor:initiatedbyframe:type:decisionhandler:)>
+- App-Bound Domains: <https://webkit.org/blog/10882/app-bound-domains/>
+- Capacitor Config: <https://capacitorjs.com/docs/config>
+- capacitor-mlkit barcode-scanning: <https://github.com/capawesome-team/capacitor-mlkit/tree/main/packages/barcode-scanning>
+- Apple-Entwicklerkonten: <https://developer.apple.com/help/account/basics/about-your-developer-account/>
+- TestFlight: <https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/>
+
+---
+
+## Änderungshistorie
+
+| Revision | Datum | Änderung |
+|---|---|---|
+| 1 | 22.09.2026 | Erste Fassung: Recherche, Stack-Entscheidung, Datenmodell, API, Plan, POCs |
+| 2 | 22.09.2026 | Rahmenbedingungen eingearbeitet: Proxmox mit LXC, Docker Compose im LXC; Domain bei deSEC, Caddy mit DNS-01-Wildcard, nur LAN; iPhone 15 und 16 Pro; MQTT wird primärer Kanal zu HA (vorher Webhooks); Standard-Sollbestand `0` bestätigt; Option eigene iOS-App (7.9) |

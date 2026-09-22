@@ -28,8 +28,9 @@ Planungsphase. Es gibt noch keinen Anwendungscode.
 | Backend | Node.js LTS + Hono, TypeScript (native Type Stripping) |
 | Datenbank | SQLite (eine Datei, WAL) |
 | API | REST/JSON unter `/api/v1`, OpenAPI aus Zod-Schemas |
-| Home Assistant | generische Webhooks (Outbox) + REST-Sensor, optional später MQTT |
+| Home Assistant | MQTT mit HA-Discovery (Outbox, QoS 1), REST-Summary zusätzlich |
 | Einkaufsliste | Stashbert berechnet, Home Assistant überträgt per `todo.*` nach Bring! |
-| Deployment | ein Container, Docker Compose, ein Volume `/data` |
+| Deployment | Docker Compose (Stashbert + Caddy) im LXC auf Proxmox, ein Volume `/data` |
+| HTTPS | Caddy mit deSEC DNS-01, Wildcard-Zertifikat, nur im LAN |
 
 Details, Begründungen und Alternativen stehen im Architektur-Dokument.
