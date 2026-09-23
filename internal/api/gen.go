@@ -38,6 +38,54 @@ func (e HealthStatus) Valid() bool {
 	}
 }
 
+// Defines values for MovementKind.
+const (
+	MovementKindAdd       MovementKind = "add"
+	MovementKindConsume   MovementKind = "consume"
+	MovementKindInventory MovementKind = "inventory"
+	MovementKindMerge     MovementKind = "merge"
+	MovementKindReversal  MovementKind = "reversal"
+)
+
+// Valid indicates whether the value is a known member of the MovementKind enum.
+func (e MovementKind) Valid() bool {
+	switch e {
+	case MovementKindAdd:
+		return true
+	case MovementKindConsume:
+		return true
+	case MovementKindInventory:
+		return true
+	case MovementKindMerge:
+		return true
+	case MovementKindReversal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MovementCreateKind.
+const (
+	MovementCreateKindAdd       MovementCreateKind = "add"
+	MovementCreateKindConsume   MovementCreateKind = "consume"
+	MovementCreateKindInventory MovementCreateKind = "inventory"
+)
+
+// Valid indicates whether the value is a known member of the MovementCreateKind enum.
+func (e MovementCreateKind) Valid() bool {
+	switch e {
+	case MovementCreateKindAdd:
+		return true
+	case MovementCreateKindConsume:
+		return true
+	case MovementCreateKindInventory:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProductLookupState.
 const (
 	Done     ProductLookupState = "done"
@@ -118,6 +166,57 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// Movement defines model for Movement.
+type Movement struct {
+	// Barcode Normalisierter Barcode, falls per Barcode gebucht wurde.
+	Barcode   nullable.Nullable[string] `json:"barcode"`
+	CreatedAt time.Time                 `json:"created_at"`
+
+	// Delta Tatsächliche Änderung des Bestands, darf 0 sein.
+	Delta     int          `json:"delta"`
+	Id        string       `json:"id"`
+	Kind      MovementKind `json:"kind"`
+	ProductId string       `json:"product_id"`
+
+	// ReversesId ID der stornierten Buchung, nur bei kind reversal.
+	ReversesId nullable.Nullable[string] `json:"reverses_id"`
+
+	// StockAfter Bestand nach der Buchung.
+	StockAfter int `json:"stock_after"`
+}
+
+// MovementKind defines model for Movement.Kind.
+type MovementKind string
+
+// MovementCreate Buchung für ein Produkt. quantity gilt für add und consume, stock ist bei inventory Pflicht und bei add und consume nicht erlaubt.
+type MovementCreate struct {
+	Kind      MovementCreateKind `json:"kind"`
+	ProductId string             `json:"product_id"`
+
+	// Quantity Menge für add und consume.
+	Quantity *int `json:"quantity,omitempty"`
+
+	// Stock Neuer Bestand für inventory.
+	Stock *int `json:"stock,omitempty"`
+}
+
+// MovementCreateKind defines model for MovementCreate.Kind.
+type MovementCreateKind string
+
+// MovementResult defines model for MovementResult.
+type MovementResult struct {
+	// Message Fertiger deutscher Anzeigetext, z. B. "Kidneybohnen 3 → 2".
+	Message  string   `json:"message"`
+	Movement Movement `json:"movement"`
+	Product  Product  `json:"product"`
+
+	// ProductCreated true, wenn das Produkt mit dieser Buchung angelegt wurde.
+	ProductCreated bool `json:"product_created"`
+
+	// Warnings Hinweise zur Buchung, z. B. clamped_to_zero, wenn der Bestand auf 0 begrenzt wurde.
+	Warnings []string `json:"warnings"`
+}
 
 // Problem Fehler nach RFC 9457 mit zusätzlichem Feld code.
 type Problem struct {
@@ -213,6 +312,9 @@ type ProductPatch struct {
 	Target *int `json:"target,omitempty"`
 }
 
+// CreateMovementJSONRequestBody defines body for CreateMovement for application/json ContentType.
+type CreateMovementJSONRequestBody = MovementCreate
+
 // CreateProductJSONRequestBody defines body for CreateProduct for application/json ContentType.
 type CreateProductJSONRequestBody = ProductCreate
 
@@ -227,6 +329,9 @@ type ServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// CreateMovement Buchung anlegen
+	// (POST /movements)
+	CreateMovement(w http.ResponseWriter, r *http.Request)
 	// ListProducts Alle Produkte, sortiert nach Name
 	// (GET /products)
 	ListProducts(w http.ResponseWriter, r *http.Request)
@@ -264,6 +369,20 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateMovement operation middleware
+func (siw *ServerInterfaceWrapper) CreateMovement(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateMovement(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -568,6 +687,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/products/{id}", wrapper.UpdateProduct)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/products/{id}/barcodes", wrapper.AddBarcode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/products/{id}/barcodes/{code}", wrapper.RemoveBarcode)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/movements", wrapper.CreateMovement)
 
 	return m
 }
@@ -599,6 +719,45 @@ type GetHealthdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetHealthdefaultApplicationProblemPlusJSONResponse) VisitGetHealthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateMovementRequestObject struct {
+	Body *CreateMovementJSONRequestBody
+}
+
+type CreateMovementResponseObject interface {
+	VisitCreateMovementResponse(w http.ResponseWriter) error
+}
+
+type CreateMovement201JSONResponse MovementResult
+
+func (response CreateMovement201JSONResponse) VisitCreateMovementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateMovementdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateMovementdefaultApplicationProblemPlusJSONResponse) VisitCreateMovementResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -886,6 +1045,9 @@ type StrictServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// CreateMovement Buchung anlegen
+	// (POST /movements)
+	CreateMovement(ctx context.Context, request CreateMovementRequestObject) (CreateMovementResponseObject, error)
 	// ListProducts Alle Produkte, sortiert nach Name
 	// (GET /products)
 	ListProducts(ctx context.Context, request ListProductsRequestObject) (ListProductsResponseObject, error)
@@ -965,6 +1127,37 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
 		if err := validResponse.VisitGetHealthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateMovement operation middleware
+func (sh *strictHandler) CreateMovement(w http.ResponseWriter, r *http.Request) {
+	var request CreateMovementRequestObject
+
+	var body CreateMovementJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateMovement(ctx, request.(CreateMovementRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateMovement")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateMovementResponseObject); ok {
+		if err := validResponse.VisitCreateMovementResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1177,36 +1370,45 @@ func (sh *strictHandler) RemoveBarcode(w http.ResponseWriter, r *http.Request, i
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"eV+ELo3bl1UcD3EQ+Hj+cf7/AQA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

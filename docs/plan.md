@@ -494,7 +494,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B16a: Buchungen per product_id
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B14
 - **Referenzen:** architecture.md 6.3, 6.5, ADR-0004
 - **Umfang:**

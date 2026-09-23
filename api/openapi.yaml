@@ -184,6 +184,30 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /movements:
+    post:
+      operationId: createMovement
+      summary: Buchung anlegen
+      description: "Fehler-code: invalid_request (400), not_found (404), stock_already_zero (409)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovementCreate"
+      responses:
+        "201":
+          description: Die angelegte Buchung mit dem geänderten Produkt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovementResult"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:
@@ -381,3 +405,92 @@ components:
         note:
           type: [string, "null"]
           description: Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null.
+    MovementCreate:
+      type: object
+      description: >-
+        Buchung für ein Produkt. quantity gilt für add und consume, stock ist
+        bei inventory Pflicht und bei add und consume nicht erlaubt.
+      required:
+        - product_id
+        - kind
+      properties:
+        product_id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - add
+            - consume
+            - inventory
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Menge für add und consume.
+        stock:
+          type: integer
+          minimum: 0
+          description: Neuer Bestand für inventory.
+    Movement:
+      type: object
+      required:
+        - id
+        - product_id
+        - kind
+        - delta
+        - stock_after
+        - barcode
+        - reverses_id
+        - created_at
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - add
+            - consume
+            - inventory
+            - reversal
+            - merge
+        delta:
+          type: integer
+          description: Tatsächliche Änderung des Bestands, darf 0 sein.
+        stock_after:
+          type: integer
+          description: Bestand nach der Buchung.
+        barcode:
+          type: [string, "null"]
+          description: Normalisierter Barcode, falls per Barcode gebucht wurde.
+        reverses_id:
+          type: [string, "null"]
+          description: ID der stornierten Buchung, nur bei kind reversal.
+        created_at:
+          type: string
+          format: date-time
+    MovementResult:
+      type: object
+      required:
+        - movement
+        - product
+        - product_created
+        - warnings
+        - message
+      properties:
+        movement:
+          $ref: "#/components/schemas/Movement"
+        product:
+          $ref: "#/components/schemas/Product"
+        product_created:
+          type: boolean
+          description: true, wenn das Produkt mit dieser Buchung angelegt wurde.
+        warnings:
+          type: array
+          description: Hinweise zur Buchung, z. B. clamped_to_zero, wenn der Bestand auf 0 begrenzt wurde.
+          items:
+            type: string
+        message:
+          type: string
+          description: Fertiger deutscher Anzeigetext, z. B. "Kidneybohnen 3 → 2".
