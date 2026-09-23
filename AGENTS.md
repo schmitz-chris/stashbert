@@ -144,6 +144,8 @@ docs/                          Architektur, ADRs, Plan, Recherche
 - Schreibende Abläufe mit mehreren Statements laufen in einer Transaktion. **Innerhalb einer Transaktion nur über die Transaktion zugreifen** (`queries.WithTx(tx)`), nie über `*sql.DB`.
 - Tests mit Datenbank nutzen eine temporäre Datei in `t.TempDir()`, kein `:memory:` (mehrere Verbindungen). Tests, die blockieren könnten, bekommen einen Kontext mit Deadline.
 - Texteingaben (Namen) werden vor der Längenprüfung getrimmt.
+- UNIQUE- und Primärschlüssel-Konflikte werden ausschließlich mit `store.IsUniqueViolation(err)` erkannt (erkennt beide SQLite-Codes).
+- sqlc erzeugt für nullbare Spalten Zeiger (`*string`, `*int64`), nicht `sql.Null*`.
 
 **API:**
 

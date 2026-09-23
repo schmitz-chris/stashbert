@@ -4,10 +4,6 @@
 
 package db
 
-import (
-	"database/sql"
-)
-
 type Member struct {
 	ID        string
 	Name      string
@@ -16,7 +12,7 @@ type Member struct {
 
 type Session struct {
 	TokenHash  string
-	MemberID   sql.NullString
+	MemberID   *string
 	CreatedAt  string
 	LastSeenAt string
 	ExpiresAt  string
