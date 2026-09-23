@@ -457,7 +457,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B14: Produkte ändern und löschen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B13b
 - **Referenzen:** architecture.md 6.1 (PATCH), 6.2 (`updateProduct`, `deleteProduct`), 6.5, 6.6
 - **Umfang:**

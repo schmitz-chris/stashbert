@@ -25,3 +25,14 @@ RETURNING *;
 INSERT INTO barcodes (code, product_id, units, created_at)
 VALUES (?, ?, ?, ?)
 RETURNING *;
+
+-- name: UpdateProduct :one
+UPDATE products
+SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,
+    needs_review = ?, updated_at = ?
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteProduct :execrows
+DELETE FROM products
+WHERE id = ?;

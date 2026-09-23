@@ -47,9 +47,9 @@ type NewProduct struct {
 // barcode given twice, min_stock > target or a text of the wrong length, and
 // 409 barcode_in_use for a barcode that belongs to another product.
 func CreateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewProduct) (Product, error) {
-	name := strings.TrimSpace(in.Name)
-	if n := utf8.RuneCountInString(name); n < 1 || n > maxNameLength {
-		return Product{}, httpx.BadRequest(fmt.Sprintf("name muss 1 bis %d Zeichen haben", maxNameLength))
+	name, err := productName(in.Name)
+	if err != nil {
+		return Product{}, err
 	}
 	brand, err := optionalText("brand", in.Brand, maxBrandLength)
 	if err != nil {
@@ -126,6 +126,16 @@ func CreateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in 
 		Origin:    p.Origin,
 	}))
 	return p, nil
+}
+
+// productName trims name. It returns a 400 invalid_request error if the
+// trimmed name does not have 1 to maxNameLength characters.
+func productName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(name); n < 1 || n > maxNameLength {
+		return "", httpx.BadRequest(fmt.Sprintf("name muss 1 bis %d Zeichen haben", maxNameLength))
+	}
+	return name, nil
 }
 
 // optionalText trims the optional text s of field. It returns nil if s is nil

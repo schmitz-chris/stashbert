@@ -192,8 +192,32 @@ type ProductList struct {
 	Items []Product `json:"items"`
 }
 
+// ProductPatch JSON Merge Patch. Ein fehlendes Feld bleibt unverändert, null löscht ein nullbares Feld. needs_review wird false, wenn der Patch name, brand oder package_size enthält.
+type ProductPatch struct {
+	// Brand Wird getrimmt, danach höchstens 120 Zeichen. Leer wird null.
+	Brand nullable.Nullable[string] `json:"brand,omitempty"`
+
+	// MinStock Mindestbestand, nach dem Ändern höchstens target.
+	MinStock nullable.Nullable[int] `json:"min_stock,omitempty"`
+
+	// Name Wird getrimmt, danach 1 bis 120 Zeichen.
+	Name *string `json:"name,omitempty"`
+
+	// Note Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null.
+	Note nullable.Nullable[string] `json:"note,omitempty"`
+
+	// PackageSize Wird getrimmt, danach höchstens 40 Zeichen. Leer wird null.
+	PackageSize nullable.Nullable[string] `json:"package_size,omitempty"`
+
+	// Target Sollbestand.
+	Target *int `json:"target,omitempty"`
+}
+
 // CreateProductJSONRequestBody defines body for CreateProduct for application/json ContentType.
 type CreateProductJSONRequestBody = ProductCreate
+
+// UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
+type UpdateProductJSONRequestBody = ProductPatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -206,9 +230,15 @@ type ServerInterface interface {
 	// CreateProduct Produkt manuell anlegen
 	// (POST /products)
 	CreateProduct(w http.ResponseWriter, r *http.Request)
+	// DeleteProduct Produkt mit Barcodes und Buchungen löschen
+	// (DELETE /products/{id})
+	DeleteProduct(w http.ResponseWriter, r *http.Request, id string)
 	// GetProduct Ein Produkt
 	// (GET /products/{id})
 	GetProduct(w http.ResponseWriter, r *http.Request, id string)
+	// UpdateProduct Produkt ändern (JSON Merge Patch)
+	// (PATCH /products/{id})
+	UpdateProduct(w http.ResponseWriter, r *http.Request, id string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -262,6 +292,32 @@ func (siw *ServerInterfaceWrapper) CreateProduct(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteProduct operation middleware
+func (siw *ServerInterfaceWrapper) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteProduct(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProduct operation middleware
 func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Request) {
 
@@ -279,6 +335,32 @@ func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetProduct(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProduct operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProduct(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -411,7 +493,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products", wrapper.ListProducts)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/products", wrapper.CreateProduct)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/products/{id}", wrapper.DeleteProduct)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products/{id}", wrapper.GetProduct)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/products/{id}", wrapper.UpdateProduct)
 
 	return m
 }
@@ -539,6 +623,39 @@ func (response CreateProductdefaultApplicationProblemPlusJSONResponse) VisitCrea
 	return err
 }
 
+type DeleteProductRequestObject struct {
+	Id string `json:"id"`
+}
+
+type DeleteProductResponseObject interface {
+	VisitDeleteProductResponse(w http.ResponseWriter) error
+}
+
+type DeleteProduct204Response struct {
+}
+
+func (response DeleteProduct204Response) VisitDeleteProductResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteProductdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteProductdefaultApplicationProblemPlusJSONResponse) VisitDeleteProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetProductRequestObject struct {
 	Id string `json:"id"`
 }
@@ -578,6 +695,46 @@ func (response GetProductdefaultApplicationProblemPlusJSONResponse) VisitGetProd
 	return err
 }
 
+type UpdateProductRequestObject struct {
+	Id   string `json:"id"`
+	Body *UpdateProductJSONRequestBody
+}
+
+type UpdateProductResponseObject interface {
+	VisitUpdateProductResponse(w http.ResponseWriter) error
+}
+
+type UpdateProduct200JSONResponse Product
+
+func (response UpdateProduct200JSONResponse) VisitUpdateProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateProductdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateProductdefaultApplicationProblemPlusJSONResponse) VisitUpdateProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Status des Servers
@@ -589,9 +746,15 @@ type StrictServerInterface interface {
 	// CreateProduct Produkt manuell anlegen
 	// (POST /products)
 	CreateProduct(ctx context.Context, request CreateProductRequestObject) (CreateProductResponseObject, error)
+	// DeleteProduct Produkt mit Barcodes und Buchungen löschen
+	// (DELETE /products/{id})
+	DeleteProduct(ctx context.Context, request DeleteProductRequestObject) (DeleteProductResponseObject, error)
 	// GetProduct Ein Produkt
 	// (GET /products/{id})
 	GetProduct(ctx context.Context, request GetProductRequestObject) (GetProductResponseObject, error)
+	// UpdateProduct Produkt ändern (JSON Merge Patch)
+	// (PATCH /products/{id})
+	UpdateProduct(ctx context.Context, request UpdateProductRequestObject) (UpdateProductResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -712,6 +875,32 @@ func (sh *strictHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DeleteProduct operation middleware
+func (sh *strictHandler) DeleteProduct(w http.ResponseWriter, r *http.Request, id string) {
+	var request DeleteProductRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteProduct(ctx, request.(DeleteProductRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteProduct")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteProductResponseObject); ok {
+		if err := validResponse.VisitDeleteProductResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetProduct operation middleware
 func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, id string) {
 	var request GetProductRequestObject
@@ -738,35 +927,72 @@ func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, id s
 	}
 }
 
+// UpdateProduct operation middleware
+func (sh *strictHandler) UpdateProduct(w http.ResponseWriter, r *http.Request, id string) {
+	var request UpdateProductRequestObject
+
+	request.Id = id
+
+	var body UpdateProductJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateProduct(ctx, request.(UpdateProductRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateProduct")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateProductResponseObject); ok {
+		if err := validResponse.VisitUpdateProductResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"zFffbtu2F34Vgr/fRYsp/pOm2Oq7JGu7DF0WLBsKLAgMWjyWWFOHGnmYIgn8Nn2GXfUuLzaQkmxZVpxk",
-	"a4FeGLAo8vz5znc+Ht3y1BSlQUByfHLLXZpDIeLfI2FTIyH8La0pwZKC+KJZleBSq0pSBvmEnxpbCK2c",
-	"AktgWX16wBNO1yXwCXdkFWZ8mXCPity2hXO6+5wubkSuEyYVMFDIzlOB4cGBa0w6NvNpTi3LCgkysHy5",
-	"TLiFv7yyIPnkogq0cXe52m5mHyClEEht8QRLT4/N8/Xh6d4PCfvj7HjvMGHhafyCGQmWvf395HRvfDBg",
-	"75WVDFt4sAxcCSrNwdJDiMyF18Qn4+Q/o1MoVIUvoq3HINWH0E8gNOXb2DgS5OM/wODigpsFv+zJ7Aqs",
-	"iwncdt91Qqgtrk/0hXNmzUxDsV2VN5BrsAxFmrPf3hyzVwcvv2eFInbj3d0nutEB/IK9AS1Zw8v+am9l",
-	"IIGE0r2v1ih08U04KdL9BquFh/CozidrXO6t0Zk10qc9BJ7VlNiGqyFLwpwJ2y1V0B3X0CiCIh77v4U5",
-	"n/D/DdcyMaw1YlgbWafEhbXiOjzPrEC5zvGiSTLh6LXml8uEpxYEgZyKGPg8dAvxCZeCYI9UAX1tkgs3",
-	"VYXI2vDNjNEgMLxWshdvbczCl9MAJLQZiwaDlxJQVrHJagENTefGo+wldKFw6siki21Uf1EowdEMHAmU",
-	"A/ZrjsDex/5XmljQiHOjdf2eCe3YeZp/BK1bOnmxIlELrEI5F/z38r4AzIDN7z7bKAyvFS6EnzutHMGA",
-	"nXrLNDjAhH0MujQDC2mO0CugCUdR9LMWAaSbWrhS8LEffjQEu2turMoUbqhGCTg3Rs5FSo4n8XkGwtN1",
-	"e6UE6m4qK9K7Zq0Q6IUO5dQihdxoCba3fqVIFyKDqVM3D0R7T5WPmvK2kAXL7j6hDKV2Ks0Zesukt2nO",
-	"jnyae8wA++EmYTOgnrtwzZP+g76UT2yfjr4oyetqN+3awaYuaIPDKtZ2C6yZ2SHIqtad9mv3cLIWqA05",
-	"2Ehuh+AdxyP/RvZY+EUrC3ID9jOE1gzax6Sw81g9UFgIza6MXZiiAHyqKlYzxS5p3AwtzgwZkFVFQQmT",
-	"Iupxfvd3mjsCdGy8P2J/xhkCB+wdgK3aObC1d6R4tE4lbS9VjTemh9EumXhMEmM2U5vx98XbqMcTYXk5",
-	"ehos3fZ/oruDp3lrt3c92I2S3a2+C/dOC8ci7GiQd8r1TAUrFj+KzrWpbSZ35SQa2w4m7FM4N8FPPRLx",
-	"cxIuPwpieXh20pr4Jnw0GA9GfFlJvCgVn/AXcSkUjvIY7TBfzaQ1tiE7EdA8kXzC3wLVU2uI0JUGXZX4",
-	"/mhUDXpIgPGgKEut0nh0+MFVU2qV+EOw1B5iepvl/DHc8mCvwDJ998nPaVANkXX57/VfVqPtd0+LoxmI",
-	"ewLpG4kHsW7OF4Ww11UlyFdyWMXs4oZhc7veC3Kg1lmz6Svi3GZyT46HWkMj5BDnfZVbwNXH0LeM/Ubs",
-	"3UH8NLR2kCvj6L6vnb2Q4oQpvBJayWnoRnDEnh2MRs8TVt+CU4VT7yCsvnqerDbXb9mzg/395wOedMpb",
-	"Xa1N71edDo6OjLz+0qWtXFUgrgWFrIflFq/GX9p5bwMLxwRmoCGjVYEitxwo3CBXwnMQEmwM752pItku",
-	"19lcyI2RI2FDUarh1XjVaMNbJZcD3oUgaaXTHeeW3y61V6AJ9KA1E6ghA9zUlphyS2B2UHz1RRZofNDD",
-	"17dAbbJ+XTG6jzQ7qfLtFuu1wib0akCyogCKpL645SqYCXdv87Uwqb4cHs/Ty+iuvl2CSW81n/C6A/jy",
-	"cvnPAA==",
+	"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",
+	"AA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

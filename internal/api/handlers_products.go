@@ -87,6 +87,43 @@ func (s *Server) CreateProduct(ctx context.Context, request CreateProductRequest
 	}, nil
 }
 
+// UpdateProduct changes the fields given in the merge patch and returns the product.
+func (s *Server) UpdateProduct(ctx context.Context, request UpdateProductRequestObject) (UpdateProductResponseObject, error) {
+	body := request.Body
+	patch := domain.ProductPatch{
+		Name:        body.Name,
+		Brand:       body.Brand,
+		PackageSize: body.PackageSize,
+		Note:        body.Note,
+	}
+	if body.Target != nil {
+		patch.Target = new(int64(*body.Target))
+	}
+	switch {
+	case body.MinStock.IsNull():
+		patch.MinStock.SetNull()
+	case body.MinStock.IsSpecified():
+		patch.MinStock.Set(int64(body.MinStock.GetOrEmpty()))
+	}
+	p, err := domain.UpdateProduct(ctx, s.deps.DB, s.deps.Publisher, request.Id, patch)
+	if err != nil {
+		return nil, err
+	}
+	return UpdateProduct200JSONResponse(productResponse(p)), nil
+}
+
+// DeleteProduct deletes a product. The foreign keys delete its barcodes and movements.
+func (s *Server) DeleteProduct(ctx context.Context, request DeleteProductRequestObject) (DeleteProductResponseObject, error) {
+	n, err := s.queries.DeleteProduct(ctx, request.Id)
+	if err != nil {
+		return nil, fmt.Errorf("delete product %s: %w", request.Id, err)
+	}
+	if n == 0 {
+		return nil, httpx.NotFound("Produkt nicht gefunden")
+	}
+	return DeleteProduct204Response{}, nil
+}
+
 // productResponse maps p to the schema Product.
 func productResponse(p domain.Product) Product {
 	barcodes := make([]Barcode, len(p.Barcodes))

@@ -9,6 +9,19 @@ import (
 	"context"
 )
 
+const deleteProduct = `-- name: DeleteProduct :execrows
+DELETE FROM products
+WHERE id = ?
+`
+
+func (q *Queries) DeleteProduct(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteProduct, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getProduct = `-- name: GetProduct :one
 SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at FROM products
 WHERE id = ?
@@ -234,4 +247,57 @@ func (q *Queries) ListProducts(ctx context.Context) ([]Product, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,
+    needs_review = ?, updated_at = ?
+WHERE id = ?
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
+`
+
+type UpdateProductParams struct {
+	Name        string
+	Brand       *string
+	PackageSize *string
+	Target      int64
+	MinStock    *int64
+	Note        *string
+	NeedsReview int64
+	UpdatedAt   string
+	ID          string
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, updateProduct,
+		arg.Name,
+		arg.Brand,
+		arg.PackageSize,
+		arg.Target,
+		arg.MinStock,
+		arg.Note,
+		arg.NeedsReview,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Brand,
+		&i.PackageSize,
+		&i.Stock,
+		&i.Target,
+		&i.MinStock,
+		&i.Note,
+		&i.Origin,
+		&i.LookupState,
+		&i.NeedsReview,
+		&i.ImageSourceUrl,
+		&i.ImageFile,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
