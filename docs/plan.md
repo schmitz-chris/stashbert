@@ -841,11 +841,11 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F02: API-Client
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F01
 - **Referenzen:** ADR-0003
 - **Umfang:**
-  - npm-Skript `generate:api`: `openapi-typescript ../api/openapi.yaml -o src/lib/api/schema.d.ts`.
+  - npm-Skript `generate:api`: `openapi-typescript ../api/openapi.yaml -o src/lib/api/schema.d.ts --default-non-nullable false` (sonst werden Felder mit `default` in Request-Schemas wie `quantity`, `target` und `units` zu Pflichtfeldern, obwohl der Server sie als optional führt).
   - `make generate` ruft es auf, sofern `web/package.json` existiert.
   - **`src/lib/api/client.ts`:**
     - `createApiClient(baseUrl: string)` auf Basis von `createClient<paths>` mit `credentials: "same-origin"`.

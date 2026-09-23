@@ -99,7 +99,7 @@ Diese Befehle gibt es ab Task P0-1:
 **Frontend (npm), abschließende Liste (ADR-0007):**
 
 - Laufzeit: `react`, `react-dom`, `react-router` (Hauptversion **7**, nicht 8), `@tanstack/react-query` (5), `openapi-fetch`, `barcode-detector` (bringt `zxing-wasm` als eigene, gepinnte Abhängigkeit mit; `zxing-wasm` **nicht** direkt installieren)
-- Build: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `tailwindcss`, `@tailwindcss/vite`, `openapi-typescript`, `vite-plugin-pwa` (samt der Peer-Abhängigkeiten, die npm dafür selbst installiert)
+- Build: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `tailwindcss`, `@tailwindcss/vite`, `openapi-typescript`, `vite-plugin-pwa` (samt der Peer-Abhängigkeiten, die npm dafür selbst installiert). `openapi-typescript` läuft per `overrides` in `web/package.json` mit dem TypeScript des Projekts, weil es nur `typescript ^5` als Peer angibt (Upstream-Issue openapi-ts/openapi-typescript#2723); der Override wird entfernt, sobald ein Release TypeScript 6 unterstützt.
 - Test und Lint: `vitest`, `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `globals` (die Lint-Pakete der Vite-Vorlage `react-ts`)
 
 Alles andere braucht einen ausdrücklichen Task oder ein ADR.

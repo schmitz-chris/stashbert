@@ -2,9 +2,14 @@
 
 .PHONY: generate check test run build
 
+# With web/package.json, the API types of the web UI are generated too.
+# Without web/node_modules (fresh clone), npm ci installs the tools first.
 generate:
 	go generate ./...
 	go tool sqlc generate
+	@if [ -f web/package.json ]; then \
+		(cd web && if [ ! -d node_modules ]; then npm ci; fi && npm run generate:api) || exit 1; \
+	fi
 
 check:
 	@unformatted="$$(gofmt -l $$(go list -f '{{.Dir}}' ./...))" || exit 1; \
