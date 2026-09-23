@@ -310,7 +310,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B06: GTIN-Paket
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** P0-1
 - **Referenzen:** architecture.md 7.1, research.md 8.3
 - **Umfang:** `internal/gtin` mit:
