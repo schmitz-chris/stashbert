@@ -9,6 +9,23 @@ import (
 	"context"
 )
 
+const clearProductImageSource = `-- name: ClearProductImageSource :exec
+UPDATE products
+SET image_source_url = NULL, updated_at = ?
+WHERE id = ? AND image_source_url = ?
+`
+
+type ClearProductImageSourceParams struct {
+	UpdatedAt      string
+	ID             string
+	ImageSourceUrl *string
+}
+
+func (q *Queries) ClearProductImageSource(ctx context.Context, arg ClearProductImageSourceParams) error {
+	_, err := q.db.ExecContext(ctx, clearProductImageSource, arg.UpdatedAt, arg.ID, arg.ImageSourceUrl)
+	return err
+}
+
 const firstProductBarcode = `-- name: FirstProductBarcode :one
 SELECT code FROM barcodes
 WHERE product_id = ?
@@ -74,6 +91,67 @@ func (q *Queries) ListPendingProducts(ctx context.Context, limit int64) ([]strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const listProductsWithoutImage = `-- name: ListProductsWithoutImage :many
+SELECT id, image_source_url FROM products
+WHERE image_source_url IS NOT NULL AND image_file IS NULL
+ORDER BY created_at, id
+LIMIT ?
+`
+
+type ListProductsWithoutImageRow struct {
+	ID             string
+	ImageSourceUrl *string
+}
+
+func (q *Queries) ListProductsWithoutImage(ctx context.Context, limit int64) ([]ListProductsWithoutImageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProductsWithoutImage, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsWithoutImageRow
+	for rows.Next() {
+		var i ListProductsWithoutImageRow
+		if err := rows.Scan(&i.ID, &i.ImageSourceUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setProductImageFile = `-- name: SetProductImageFile :execrows
+UPDATE products
+SET image_file = ?, updated_at = ?
+WHERE id = ? AND image_source_url = ?
+`
+
+type SetProductImageFileParams struct {
+	ImageFile      *string
+	UpdatedAt      string
+	ID             string
+	ImageSourceUrl *string
+}
+
+func (q *Queries) SetProductImageFile(ctx context.Context, arg SetProductImageFileParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setProductImageFile,
+		arg.ImageFile,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ImageSourceUrl,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateProductLookup = `-- name: UpdateProductLookup :exec

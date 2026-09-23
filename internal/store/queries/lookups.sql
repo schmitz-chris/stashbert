@@ -27,3 +27,19 @@ UPDATE products
 SET name = ?, brand = ?, package_size = ?, origin = ?, image_source_url = ?,
     lookup_state = ?, updated_at = ?
 WHERE id = ?;
+
+-- name: ListProductsWithoutImage :many
+SELECT id, image_source_url FROM products
+WHERE image_source_url IS NOT NULL AND image_file IS NULL
+ORDER BY created_at, id
+LIMIT ?;
+
+-- name: SetProductImageFile :execrows
+UPDATE products
+SET image_file = ?, updated_at = ?
+WHERE id = ? AND image_source_url = ?;
+
+-- name: ClearProductImageSource :exec
+UPDATE products
+SET image_source_url = NULL, updated_at = ?
+WHERE id = ? AND image_source_url = ?;

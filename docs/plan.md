@@ -649,7 +649,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B22a: Bild-Download
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B21
 - **Referenzen:** architecture.md 7.3
 - **Umfang:** `internal/lookup/images.go`:

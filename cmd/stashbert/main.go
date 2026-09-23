@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -65,9 +66,21 @@ func run() error {
 		off = lookup.NewClient("https://world.openfoodfacts.org",
 			"StashBert/"+version+" ("+cfg.OFFContact+")", &http.Client{}, offLimiter)
 	}
+	// The background jobs end with ctx. Every return waits for them before
+	// the database is closed.
+	var jobs sync.WaitGroup
+	defer func() {
+		stop()
+		jobs.Wait()
+	}()
 	// Looks up pending products every 60 s with the same client and limiter
 	// (architecture.md, 7.3).
-	go lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second)
+	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second) })
+	// Loads product images every 60 s into DATA_DIR/images
+	// (architecture.md, 7.3).
+	images := lookup.NewImageFetcher(db, &http.Client{}, filepath.Join(cfg.DataDir, "images"),
+		lookup.DefaultImageHosts, logger)
+	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
 
 	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off})
 	if err != nil {
