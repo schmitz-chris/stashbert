@@ -816,7 +816,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 **React-Angaben aus P0-6** (gelten für alle F-Tasks):
 
-- Framework: React 19 mit Vite, angelegt mit `npm create vite@latest web -- --template react-ts`.
+- Framework: React 19 mit Vite, angelegt mit `npm create --yes vite@latest web -- --template react-ts --eslint --no-interactive --no-immediate` (ohne `--eslint` legt create-vite 9 Oxlint statt ESLint an).
 - Ordner und Dateien nach AGENTS.md, Frontend-Regeln: Routentabelle in `web/src/router.tsx`, Ansichten in `web/src/routes/`, reine Funktionen in `web/src/lib/`.
 - Router React Router 7 im Data-Modus, Daten mit TanStack Query 5, keine Komponentenbibliothek, Dialoge mit `<dialog>`.
 - Vite legt Assets unter `/assets/` ab und erzeugt keine Inline-Skripte; `internal/webui` (B29) braucht keine Anpassung.
@@ -827,7 +827,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 - **Abhängig von:** P0-6, B29
 - **Referenzen:** ADR-0007, AGENTS.md, architecture.md 8 (CSP)
 - **Umfang:**
-  - **Projekt in `web/`** mit `npm create vite@latest web -- --template react-ts` (Vorlage behalten, auch ihre ESLint-Konfiguration; die Regeln von `eslint-plugin-react-hooks` auf Fehler stellen): TypeScript strict, Tailwind CSS 4 über `@tailwindcss/vite`, Vitest.
+  - **Projekt in `web/`** mit `npm create --yes vite@latest web -- --template react-ts --eslint --no-interactive --no-immediate` (ohne `--eslint` legt create-vite 9 Oxlint statt ESLint an) (Vorlage behalten, auch ihre ESLint-Konfiguration; die Regeln von `eslint-plugin-react-hooks` auf Fehler stellen): TypeScript strict, Tailwind CSS 4 über `@tailwindcss/vite`, Vitest.
   - **npm-Skripte:** `dev`, `build` (Ausgabe `web/dist`), `check` (`tsc -b`), `lint` (`eslint .`), `test` (`vitest run`).
   - **Vite-Dev-Proxy:** `/api` wird an `http://localhost:8080` weitergeleitet.
   - **`make check`** ruft zusätzlich `npm ci`, `npm run check`, `npm run lint` und `npm test` in `web/` auf, sofern `web/package.json` existiert.
