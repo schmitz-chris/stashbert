@@ -780,7 +780,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B29: Web-Oberfläche einbetten und ausliefern
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B03
 - **Referenzen:** architecture.md 4.2, 8 (Sicherheits-Header)
 - **Umfang:**

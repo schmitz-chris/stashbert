@@ -101,7 +101,7 @@ func TestRequestErrorHandler(t *testing.T) {
 func TestPanicReturnsInternal(t *testing.T) {
 	var logs bytes.Buffer
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking)
+	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking, http.NotFoundHandler())
 	if err != nil {
 		t.Fatalf("newChain: %v", err)
 	}
@@ -117,4 +117,17 @@ func TestPanicReturnsInternal(t *testing.T) {
 	if entry.Level != "ERROR" || entry.Panic != "boom" || !strings.Contains(entry.Stack, "goroutine") {
 		t.Errorf("log = %s, want error entry with panic value and stack trace", logs.String())
 	}
+}
+
+func TestWebPanicReturnsInternal(t *testing.T) {
+	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
+	h, err := newChain(slog.New(slog.DiscardHandler), http.NotFoundHandler(), panicking)
+	if err != nil {
+		t.Fatalf("newChain: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/vorrat", nil))
+
+	checkProblem(t, rec, http.StatusInternalServerError, "internal", "")
 }
