@@ -10,12 +10,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -36,6 +38,21 @@ func run() error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	db, err := store.Open(ctx, filepath.Join(cfg.DataDir, "stashbert.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
+		return err
+	}
+
 	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
@@ -50,9 +67,6 @@ func run() error {
 		IdleTimeout:       120 * time.Second,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {

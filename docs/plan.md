@@ -267,7 +267,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B04: SQLite öffnen und Migrationen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B02
 - **Referenzen:** ADR-0005, architecture.md 5 (`settings`, `members`, `sessions`, Zeitformat)
 - **Umfang:**
