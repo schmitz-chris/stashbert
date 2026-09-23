@@ -188,7 +188,21 @@ paths:
     post:
       operationId: createMovement
       summary: Buchung anlegen
-      description: "Fehler-code: invalid_request (400), not_found (404), unknown_barcode (404), stock_already_zero (409), invalid_barcode (422)."
+      description: "Fehler-code: invalid_request (400), not_found (404), unknown_barcode (404), stock_already_zero (409), invalid_barcode (422), idempotency_key_mismatch (422)."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >-
+            Schlüssel für Wiederholungen. Gleicher Schlüssel mit gleichem Body
+            bucht nicht erneut, sondern liefert 201 mit der aus der
+            gespeicherten Buchung rekonstruierten Antwort (aktuelles Produkt,
+            product_created false, warnings leer). Gleicher Schlüssel mit
+            anderem Body ergibt idempotency_key_mismatch.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
       requestBody:
         required: true
         content:

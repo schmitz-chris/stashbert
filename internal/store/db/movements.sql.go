@@ -9,20 +9,46 @@ import (
 	"context"
 )
 
+const getMovementByIdempotencyKey = `-- name: GetMovementByIdempotencyKey :one
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+WHERE idempotency_key = ?
+`
+
+func (q *Queries) GetMovementByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Movement, error) {
+	row := q.db.QueryRowContext(ctx, getMovementByIdempotencyKey, idempotencyKey)
+	var i Movement
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.Kind,
+		&i.Delta,
+		&i.StockAfter,
+		&i.Barcode,
+		&i.ReversesID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertMovement = `-- name: InsertMovement :one
-INSERT INTO movements (id, product_id, kind, delta, stock_after, barcode, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO movements (id, product_id, kind, delta, stock_after, barcode,
+    idempotency_key, request_hash, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at
 `
 
 type InsertMovementParams struct {
-	ID         string
-	ProductID  string
-	Kind       string
-	Delta      int64
-	StockAfter int64
-	Barcode    *string
-	CreatedAt  string
+	ID             string
+	ProductID      string
+	Kind           string
+	Delta          int64
+	StockAfter     int64
+	Barcode        *string
+	IdempotencyKey *string
+	RequestHash    *string
+	CreatedAt      string
 }
 
 func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) (Movement, error) {
@@ -33,6 +59,8 @@ func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) 
 		arg.Delta,
 		arg.StockAfter,
 		arg.Barcode,
+		arg.IdempotencyKey,
+		arg.RequestHash,
 		arg.CreatedAt,
 	)
 	var i Movement

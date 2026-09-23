@@ -548,7 +548,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B18: Idempotency-Key für Buchungen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B17
 - **Referenzen:** architecture.md 5 (`idempotency_key`, `request_hash`), 6.1
 - **Umfang:**

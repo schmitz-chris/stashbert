@@ -2,7 +2,9 @@ package app_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -442,5 +444,227 @@ func TestCreateMovementErrors(t *testing.T) {
 				t.Errorf("events = %d, want 0", n)
 			}
 		})
+	}
+}
+
+// postWithKey is like post but sends the header Idempotency-Key with key.
+func postWithKey(h http.Handler, path, body, key string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", key)
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// storedIdempotency returns idempotency_key and request_hash of the stored
+// movement id.
+func storedIdempotency(t *testing.T, db *sql.DB, id string) (key, hash sql.NullString) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := db.QueryRowContext(ctx, "SELECT idempotency_key, request_hash FROM movements WHERE id = ?", id).Scan(
+		&key, &hash); err != nil {
+		t.Fatalf("read movement %s: %v", id, err)
+	}
+	return key, hash
+}
+
+// idempotencyKey is a key as a client would send it.
+const idempotencyKey = "0199a5c4-7b1e-7c3a-9f00-3d2b1a0c9e11"
+
+func TestCreateMovementIdempotencyKeyRepeats(t *testing.T) {
+	var recorder events.Recorder
+	h, db := newAppWithPublisher(t, &recorder)
+	insertProducts(t, db)
+
+	// See insertProducts: p2 "kidneybohnen" has stock 2, so consume 3 is clamped to 0.
+	first, firstMovement := decodeMovementResult(t, postWithKey(h, "/api/v1/movements",
+		`{"product_id": "p2", "kind": "consume", "quantity": 3}`, idempotencyKey))
+	checkFields(t, first, `{"product_created": false, "warnings": ["clamped_to_zero"], "message": "kidneybohnen 2 → 0"}`)
+	published := len(recorder.Events())
+	if published == 0 {
+		t.Fatal("events = 0, want the events of the first request")
+	}
+
+	// The same body with another order and spacing of the fields.
+	second, secondMovement := decodeMovementResult(t, postWithKey(h, "/api/v1/movements",
+		`{"quantity":3,"kind":"consume","product_id":"p2"}`, idempotencyKey))
+
+	if !reflect.DeepEqual(secondMovement, firstMovement) {
+		t.Errorf("movement = %v\n    want %v", secondMovement, firstMovement)
+	}
+	checkFields(t, second, `{"product_created": false, "warnings": [], "message": "kidneybohnen 2 → 0"}`)
+	product, _ := second["product"].(map[string]any)
+	if stored := decodeProduct(t, get(h, "/api/v1/products/p2")); !reflect.DeepEqual(product, stored) {
+		t.Errorf("product = %v\nwant stored %v", product, stored)
+	}
+	if !reflect.DeepEqual(product, first["product"]) {
+		t.Errorf("product = %v\nwant unchanged %v", product, first["product"])
+	}
+	if n := countRows(t, db, "movements"); n != 1 {
+		t.Errorf("movements = %d, want 1", n)
+	}
+	if n := len(recorder.Events()); n != published {
+		t.Errorf("events = %d, want only the %d of the first request", n, published)
+	}
+
+	// The hash is taken from json.Marshal of the decoded body.
+	id, _ := firstMovement["id"].(string)
+	key, hash := storedIdempotency(t, db, id)
+	sum := sha256.Sum256([]byte(`{"kind":"consume","product_id":"p2","quantity":3}`))
+	if want := (sql.NullString{String: idempotencyKey, Valid: true}); key != want {
+		t.Errorf("idempotency_key = %v, want %v", key, want)
+	}
+	if want := (sql.NullString{String: hex.EncodeToString(sum[:]), Valid: true}); hash != want {
+		t.Errorf("request_hash = %v, want %v", hash, want)
+	}
+}
+
+func TestCreateMovementIdempotencyKeyMismatch(t *testing.T) {
+	// See insertProducts: the first request adds 1 to p2 "kidneybohnen", which
+	// has the barcode 4001686301265 with 1 unit.
+	const first = `{"product_id": "p2", "kind": "add"}`
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"other quantity", `{"product_id": "p2", "kind": "add", "quantity": 2}`},
+		{"other kind", `{"product_id": "p2", "kind": "consume"}`},
+		{"other product", `{"product_id": "p4", "kind": "add"}`},
+		{"same product by barcode", `{"barcode": "4001686301265", "kind": "add"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+			decodeMovementResult(t, postWithKey(h, "/api/v1/movements", first, idempotencyKey))
+			published := len(recorder.Events())
+			before := get(h, "/api/v1/products").Body.String()
+
+			rec := postWithKey(h, "/api/v1/movements", tt.body, idempotencyKey)
+
+			checkProblemCode(t, rec, http.StatusUnprocessableEntity, "idempotency_key_mismatch")
+			if n := countRows(t, db, "movements"); n != 1 {
+				t.Errorf("movements = %d, want 1", n)
+			}
+			if after := get(h, "/api/v1/products").Body.String(); after != before {
+				t.Errorf("products = %s\nwant %s", after, before)
+			}
+			if n := len(recorder.Events()); n != published {
+				t.Errorf("events = %d, want only the %d of the first request", n, published)
+			}
+		})
+	}
+}
+
+func TestCreateMovementWithoutIdempotencyKeyBooksTwice(t *testing.T) {
+	h, db := newApp(t)
+	insertProducts(t, db)
+	const body = `{"product_id": "p2", "kind": "add"}`
+
+	_, first := decodeMovementResult(t, post(h, "/api/v1/movements", body))
+	result, second := decodeMovementResult(t, post(h, "/api/v1/movements", body))
+
+	if first["id"] == second["id"] {
+		t.Errorf("movement id = %v twice, want two movements", first["id"])
+	}
+	checkFields(t, result, `{"message": "kidneybohnen 3 → 4"}`)
+	if n := countRows(t, db, "movements"); n != 2 {
+		t.Errorf("movements = %d, want 2", n)
+	}
+	for _, m := range []map[string]any{first, second} {
+		id, _ := m["id"].(string)
+		if key, hash := storedIdempotency(t, db, id); key.Valid || hash.Valid {
+			t.Errorf("movement %s: idempotency_key, request_hash = %v, %v, want NULL", id, key, hash)
+		}
+	}
+}
+
+func TestCreateMovementIdempotencyKeyLength(t *testing.T) {
+	const body = `{"product_id": "p2", "kind": "add"}`
+	tests := []struct {
+		name   string
+		key    string
+		status int
+	}{
+		{"255 characters", strings.Repeat("k", 255), http.StatusCreated},
+		{"256 characters", strings.Repeat("k", 256), http.StatusBadRequest},
+		{"empty", "", http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, db := newApp(t)
+			insertProducts(t, db)
+
+			rec := postWithKey(h, "/api/v1/movements", body, tt.key)
+
+			if tt.status == http.StatusCreated {
+				_, movement := decodeMovementResult(t, rec)
+				id, _ := movement["id"].(string)
+				if key, _ := storedIdempotency(t, db, id); key.String != tt.key {
+					t.Errorf("idempotency_key = %q, want %q", key.String, tt.key)
+				}
+				return
+			}
+			checkProblemCode(t, rec, tt.status, "invalid_request")
+			if n := countRows(t, db, "movements"); n != 0 {
+				t.Errorf("movements = %d, want 0", n)
+			}
+		})
+	}
+}
+
+func TestCreateMovementIdempotencyKeyAfterBarcodeRemoved(t *testing.T) {
+	var recorder events.Recorder
+	h, db := newAppWithPublisher(t, &recorder)
+	insertProducts(t, db)
+	// See insertProducts: p2 "kidneybohnen" has stock 2 and the barcodes
+	// 0034000470693 with 6 units and 4001686301265 with 1 unit.
+	const body = `{"barcode": "0034000470693", "kind": "add"}`
+	first, movement := decodeMovementResult(t, postWithKey(h, "/api/v1/movements", body, idempotencyKey))
+	checkFields(t, first, `{"message": "kidneybohnen 2 → 8"}`)
+	if rec := removeBarcode(h, "p2", "0034000470693"); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove barcode: status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	// A movement without key changes the current stock to 7.
+	decodeMovementResult(t, post(h, "/api/v1/movements", `{"product_id": "p2", "kind": "consume"}`))
+	published := len(recorder.Events())
+
+	result, repeated := decodeMovementResult(t, postWithKey(h, "/api/v1/movements", body, idempotencyKey))
+
+	if !reflect.DeepEqual(repeated, movement) {
+		t.Errorf("movement = %v\n    want %v", repeated, movement)
+	}
+	// The product is the current one, the message is the one of the movement.
+	checkFields(t, result, `{"product_created": false, "warnings": [], "message": "kidneybohnen 2 → 8"}`)
+	product, _ := result["product"].(map[string]any)
+	checkFields(t, product, `{"id": "p2", "stock": 7, "barcodes": [{"code": "4001686301265", "units": 1}]}`)
+	if stored := decodeProduct(t, get(h, "/api/v1/products/p2")); !reflect.DeepEqual(product, stored) {
+		t.Errorf("product = %v\nwant stored %v", product, stored)
+	}
+	if n := countRows(t, db, "movements"); n != 2 {
+		t.Errorf("movements = %d, want 2", n)
+	}
+	if n := len(recorder.Events()); n != published {
+		t.Errorf("events = %d, want %d", n, published)
+	}
+}
+
+func TestCreateMovementIdempotencyKeyAfterError(t *testing.T) {
+	h, db := newApp(t)
+	insertProducts(t, db)
+
+	// See insertProducts: p3 "Kidneybohnen" has stock 0.
+	checkProblemCode(t, postWithKey(h, "/api/v1/movements", `{"product_id": "p3", "kind": "consume"}`, idempotencyKey),
+		http.StatusConflict, "stock_already_zero")
+	// The failed request has stored nothing, so the key books another body.
+	result, _ := decodeMovementResult(t, postWithKey(h, "/api/v1/movements",
+		`{"product_id": "p3", "kind": "add"}`, idempotencyKey))
+
+	checkFields(t, result, `{"warnings": [], "message": "Kidneybohnen 0 → 1"}`)
+	if n := countRows(t, db, "movements"); n != 1 {
+		t.Errorf("movements = %d, want 1", n)
 	}
 }

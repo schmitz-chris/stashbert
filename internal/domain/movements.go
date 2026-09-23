@@ -32,6 +32,16 @@ type NewMovement struct {
 	Quantity int64
 	// Stock is the new stock for inventory. It must be nil for add and consume.
 	Stock *int64
+	// Idempotency is nil for a request without Idempotency-Key.
+	Idempotency *Idempotency
+}
+
+// Idempotency is the Idempotency-Key of a request with the hash of its body
+// (architecture.md 5 and 6.1).
+type Idempotency struct {
+	Key string
+	// RequestHash is the SHA-256 of the request body in lower case hex.
+	RequestHash string
 }
 
 // Movement is a stored movement (architecture.md, 5).
@@ -65,6 +75,12 @@ type MovementResult struct {
 // normalized barcode. After the commit it publishes the events of the
 // movement to pub (see publishMovementEvents).
 //
+// With in.Idempotency, the movement keeps its key and request hash. Before
+// it reads the product or barcode, Book looks up a movement with the key in
+// the same transaction. If there is one, it books nothing: the same request
+// hash results in the reconstructed result (see repeatedMovement), another
+// one in 422 idempotency_key_mismatch. Neither publishes events.
+//
 // Invalid input results in an *httpx.Error and nothing is booked: 400
 // invalid_request if not exactly one of product_id and barcode is set, for
 // inventory without stock or add and consume with stock, 422 invalid_barcode
@@ -91,6 +107,13 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	defer tx.Rollback()
 	q := db.New(tx)
 
+	var key, hash *string
+	if in.Idempotency != nil {
+		key, hash = &in.Idempotency.Key, &in.Idempotency.RequestHash
+		if r, ok, err := repeatedMovement(ctx, q, *in.Idempotency); err != nil || ok {
+			return r, err
+		}
+	}
 	cur, units, err := movementProduct(ctx, q, in.ProductID, code)
 	if err != nil {
 		return MovementResult{}, err
@@ -102,14 +125,28 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 
 	now := store.FormatTime(time.Now())
 	row, err := q.InsertMovement(ctx, db.InsertMovementParams{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		ProductID:  cur.ID,
-		Kind:       in.Kind,
-		Delta:      stockAfter - cur.Stock,
-		StockAfter: stockAfter,
-		Barcode:    code,
-		CreatedAt:  now,
+		ID:             uuid.Must(uuid.NewV7()).String(),
+		ProductID:      cur.ID,
+		Kind:           in.Kind,
+		Delta:          stockAfter - cur.Stock,
+		StockAfter:     stockAfter,
+		Barcode:        code,
+		IdempotencyKey: key,
+		RequestHash:    hash,
+		CreatedAt:      now,
 	})
+	if in.Idempotency != nil && store.IsUniqueViolation(err) {
+		// The UNIQUE index on idempotency_key: a concurrent request with the
+		// same key has stored its movement since the lookup above. Its
+		// movement is read after the rollback.
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return MovementResult{}, fmt.Errorf("book movement: rollback: %w", rbErr)
+		}
+		r, ok, repeatErr := repeatedMovement(ctx, db.New(sqlDB), *in.Idempotency)
+		if repeatErr != nil || ok {
+			return r, repeatErr
+		}
+	}
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("book movement for product %s: %w", cur.ID, err)
 	}
@@ -144,6 +181,48 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		Warnings: warnings,
 		Message:  movementMessage(p.Name, m),
 	}, nil
+}
+
+// repeatedMovement looks up the movement stored with the key of idem. If
+// there is none, it returns false. If its request hash equals the one of
+// idem, it returns true and the result reconstructed from the movement
+// (architecture.md, 6.1): the current product, product_created false, no
+// warnings and the message of the movement with the current product name.
+// Another request hash results in 422 idempotency_key_mismatch.
+func repeatedMovement(ctx context.Context, q *db.Queries, idem Idempotency) (MovementResult, bool, error) {
+	row, err := q.GetMovementByIdempotencyKey(ctx, &idem.Key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return MovementResult{}, false, nil
+	}
+	if err != nil {
+		return MovementResult{}, false, fmt.Errorf("book movement: movement of idempotency key: %w", err)
+	}
+	if row.RequestHash == nil || *row.RequestHash != idem.RequestHash {
+		return MovementResult{}, false, httpx.NewError(http.StatusUnprocessableEntity, "idempotency_key_mismatch",
+			"Der Idempotency-Key wurde schon für eine andere Anfrage verwendet")
+	}
+	cur, err := q.GetProduct(ctx, row.ProductID)
+	if err != nil {
+		return MovementResult{}, false, fmt.Errorf("book movement: product %s of movement %s: %w", row.ProductID, row.ID, err)
+	}
+	barcodes, err := q.ListProductBarcodes(ctx, cur.ID)
+	if err != nil {
+		return MovementResult{}, false, fmt.Errorf("book movement: list barcodes of product %s: %w", cur.ID, err)
+	}
+	p, err := ProductFromDB(cur, barcodes)
+	if err != nil {
+		return MovementResult{}, false, err
+	}
+	m, err := movementFromDB(row)
+	if err != nil {
+		return MovementResult{}, false, err
+	}
+	return MovementResult{
+		Movement: m,
+		Product:  p,
+		Warnings: []string{},
+		Message:  movementMessage(p.Name, m),
+	}, true, nil
 }
 
 // checkNewMovement returns a 400 invalid_request error if not exactly one of
