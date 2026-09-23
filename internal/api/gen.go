@@ -219,6 +219,9 @@ type CreateProductJSONRequestBody = ProductCreate
 // UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
 type UpdateProductJSONRequestBody = ProductPatch
 
+// AddBarcodeJSONRequestBody defines body for AddBarcode for application/json ContentType.
+type AddBarcodeJSONRequestBody = BarcodeInput
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetHealth Status des Servers
@@ -239,6 +242,12 @@ type ServerInterface interface {
 	// UpdateProduct Produkt ändern (JSON Merge Patch)
 	// (PATCH /products/{id})
 	UpdateProduct(w http.ResponseWriter, r *http.Request, id string)
+	// AddBarcode Barcode einem Produkt zuordnen
+	// (POST /products/{id}/barcodes)
+	AddBarcode(w http.ResponseWriter, r *http.Request, id string)
+	// RemoveBarcode Barcode von einem Produkt entfernen
+	// (DELETE /products/{id}/barcodes/{code})
+	RemoveBarcode(w http.ResponseWriter, r *http.Request, id string, code string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -361,6 +370,67 @@ func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateProduct(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddBarcode operation middleware
+func (siw *ServerInterfaceWrapper) AddBarcode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddBarcode(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveBarcode operation middleware
+func (siw *ServerInterfaceWrapper) RemoveBarcode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "code" -------------
+	var code string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "code", r.PathValue("code"), &code, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "code", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveBarcode(w, r, id, code)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -496,6 +566,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/products/{id}", wrapper.DeleteProduct)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products/{id}", wrapper.GetProduct)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/products/{id}", wrapper.UpdateProduct)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/products/{id}/barcodes", wrapper.AddBarcode)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/products/{id}/barcodes/{code}", wrapper.RemoveBarcode)
 
 	return m
 }
@@ -735,6 +807,80 @@ func (response UpdateProductdefaultApplicationProblemPlusJSONResponse) VisitUpda
 	return err
 }
 
+type AddBarcodeRequestObject struct {
+	Id   string `json:"id"`
+	Body *AddBarcodeJSONRequestBody
+}
+
+type AddBarcodeResponseObject interface {
+	VisitAddBarcodeResponse(w http.ResponseWriter) error
+}
+
+type AddBarcode201JSONResponse Barcode
+
+func (response AddBarcode201JSONResponse) VisitAddBarcodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddBarcodedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AddBarcodedefaultApplicationProblemPlusJSONResponse) VisitAddBarcodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveBarcodeRequestObject struct {
+	Id   string `json:"id"`
+	Code string `json:"code"`
+}
+
+type RemoveBarcodeResponseObject interface {
+	VisitRemoveBarcodeResponse(w http.ResponseWriter) error
+}
+
+type RemoveBarcode204Response struct {
+}
+
+func (response RemoveBarcode204Response) VisitRemoveBarcodeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveBarcodedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RemoveBarcodedefaultApplicationProblemPlusJSONResponse) VisitRemoveBarcodeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Status des Servers
@@ -755,6 +901,12 @@ type StrictServerInterface interface {
 	// UpdateProduct Produkt ändern (JSON Merge Patch)
 	// (PATCH /products/{id})
 	UpdateProduct(ctx context.Context, request UpdateProductRequestObject) (UpdateProductResponseObject, error)
+	// AddBarcode Barcode einem Produkt zuordnen
+	// (POST /products/{id}/barcodes)
+	AddBarcode(ctx context.Context, request AddBarcodeRequestObject) (AddBarcodeResponseObject, error)
+	// RemoveBarcode Barcode von einem Produkt entfernen
+	// (DELETE /products/{id}/barcodes/{code})
+	RemoveBarcode(ctx context.Context, request RemoveBarcodeRequestObject) (RemoveBarcodeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -960,39 +1112,101 @@ func (sh *strictHandler) UpdateProduct(w http.ResponseWriter, r *http.Request, i
 	}
 }
 
+// AddBarcode operation middleware
+func (sh *strictHandler) AddBarcode(w http.ResponseWriter, r *http.Request, id string) {
+	var request AddBarcodeRequestObject
+
+	request.Id = id
+
+	var body AddBarcodeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddBarcode(ctx, request.(AddBarcodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddBarcode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddBarcodeResponseObject); ok {
+		if err := validResponse.VisitAddBarcodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveBarcode operation middleware
+func (sh *strictHandler) RemoveBarcode(w http.ResponseWriter, r *http.Request, id string, code string) {
+	var request RemoveBarcodeRequestObject
+
+	request.Id = id
+	request.Code = code
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveBarcode(ctx, request.(RemoveBarcodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveBarcode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveBarcodeResponseObject); ok {
+		if err := validResponse.VisitRemoveBarcodeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"AA==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

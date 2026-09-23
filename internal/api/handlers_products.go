@@ -124,6 +124,27 @@ func (s *Server) DeleteProduct(ctx context.Context, request DeleteProductRequest
 	return DeleteProduct204Response{}, nil
 }
 
+// AddBarcode assigns a barcode to a product and returns it normalized.
+func (s *Server) AddBarcode(ctx context.Context, request AddBarcodeRequestObject) (AddBarcodeResponseObject, error) {
+	units := int64(1)
+	if request.Body.Units != nil {
+		units = int64(*request.Body.Units)
+	}
+	b, err := domain.AddBarcode(ctx, s.deps.DB, request.Id, domain.Barcode{Code: request.Body.Code, Units: units})
+	if err != nil {
+		return nil, err
+	}
+	return AddBarcode201JSONResponse{Code: b.Code, Units: int(b.Units)}, nil
+}
+
+// RemoveBarcode removes a barcode from a product.
+func (s *Server) RemoveBarcode(ctx context.Context, request RemoveBarcodeRequestObject) (RemoveBarcodeResponseObject, error) {
+	if err := domain.RemoveBarcode(ctx, s.deps.DB, request.Id, request.Code); err != nil {
+		return nil, err
+	}
+	return RemoveBarcode204Response{}, nil
+}
+
 // productResponse maps p to the schema Product.
 func productResponse(p domain.Product) Product {
 	barcodes := make([]Barcode, len(p.Barcodes))

@@ -22,6 +22,24 @@ func (q *Queries) DeleteProduct(ctx context.Context, id string) (int64, error) {
 	return result.RowsAffected()
 }
 
+const deleteProductBarcode = `-- name: DeleteProductBarcode :execrows
+DELETE FROM barcodes
+WHERE code = ? AND product_id = ?
+`
+
+type DeleteProductBarcodeParams struct {
+	Code      string
+	ProductID string
+}
+
+func (q *Queries) DeleteProductBarcode(ctx context.Context, arg DeleteProductBarcodeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteProductBarcode, arg.Code, arg.ProductID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getProduct = `-- name: GetProduct :one
 SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at FROM products
 WHERE id = ?

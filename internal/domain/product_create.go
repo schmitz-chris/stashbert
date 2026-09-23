@@ -161,10 +161,9 @@ func optionalText(field string, s *string, maxLength int) (*string, error) {
 func normalizeBarcodes(barcodes []Barcode) ([]Barcode, error) {
 	out := make([]Barcode, len(barcodes))
 	for i, b := range barcodes {
-		code, err := gtin.Normalize(b.Code)
+		code, err := normalizeBarcode(b.Code)
 		if err != nil {
-			return nil, httpx.NewError(http.StatusUnprocessableEntity, "invalid_barcode",
-				fmt.Sprintf("Barcode %q ist ungültig", b.Code))
+			return nil, err
 		}
 		out[i] = Barcode{Code: code, Units: b.Units}
 	}
@@ -176,4 +175,15 @@ func normalizeBarcodes(barcodes []Barcode) ([]Barcode, error) {
 		seen[b.Code] = true
 	}
 	return out, nil
+}
+
+// normalizeBarcode returns code normalized by gtin.Normalize. An invalid code
+// results in 422 invalid_barcode.
+func normalizeBarcode(code string) (string, error) {
+	normalized, err := gtin.Normalize(code)
+	if err != nil {
+		return "", httpx.NewError(http.StatusUnprocessableEntity, "invalid_barcode",
+			fmt.Sprintf("Barcode %q ist ungültig", code))
+	}
+	return normalized, nil
 }

@@ -36,3 +36,7 @@ RETURNING *;
 -- name: DeleteProduct :execrows
 DELETE FROM products
 WHERE id = ?;
+
+-- name: DeleteProductBarcode :execrows
+DELETE FROM barcodes
+WHERE code = ? AND product_id = ?;

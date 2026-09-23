@@ -480,7 +480,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B15: Barcodes zuordnen und entfernen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B13b
 - **Referenzen:** architecture.md 6.2 (`addBarcode`, `removeBarcode`)
 - **Umfang:**
