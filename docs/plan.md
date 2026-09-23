@@ -329,7 +329,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B07: Passwort-Hash und Setup-API
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B03, B05
 - **Referenzen:** architecture.md 4.4, 6.2 (`getSetup`, `createSetup`), 6.5 (Setup-Request), 8, ADR-0009
 - **Umfang:**

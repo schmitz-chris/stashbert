@@ -1,27 +1,49 @@
 package app_test
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
-func newHandler(t *testing.T) http.Handler {
+// newApp returns the handler from app.NewHandler and its migrated database in t.TempDir().
+func newApp(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "stashbert.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
+		t.Fatalf("store.Migrate: %v", err)
+	}
 	cfg, err := config.Load(func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	h, err := app.NewHandler(cfg, app.Deps{Logger: slog.New(slog.DiscardHandler), Version: "dev"})
+	h, err := app.NewHandler(cfg, app.Deps{Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
+	return h, db
+}
+
+func newHandler(t *testing.T) http.Handler {
+	t.Helper()
+	h, _ := newApp(t)
 	return h
 }
 

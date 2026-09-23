@@ -53,7 +53,7 @@ func run() error {
 		return err
 	}
 
-	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version})
+	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
 	}

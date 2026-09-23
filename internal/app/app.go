@@ -2,6 +2,7 @@
 package app
 
 import (
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,11 +18,12 @@ import (
 type Deps struct {
 	Logger  *slog.Logger
 	Version string
+	DB      *sql.DB
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
-	server := api.NewServer(api.ServerDeps{Version: d.Version})
+	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
 		ResponseErrorHandlerFunc: responseErrorHandler(d.Logger),

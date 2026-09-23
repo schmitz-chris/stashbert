@@ -53,11 +53,32 @@ type Problem struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// SetupRequest defines model for SetupRequest.
+type SetupRequest struct {
+	// Members Namen der Haushaltsmitglieder.
+	Members  []string `json:"members"`
+	Password string   `json:"password"`
+}
+
+// SetupStatus defines model for SetupStatus.
+type SetupStatus struct {
+	Configured bool `json:"configured"`
+}
+
+// CreateSetupJSONRequestBody defines body for CreateSetup for application/json ContentType.
+type CreateSetupJSONRequestBody = SetupRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// GetSetup Ist die Instanz eingerichtet?
+	// (GET /setup)
+	GetSetup(w http.ResponseWriter, r *http.Request)
+	// CreateSetup Passwort und Mitglieder anlegen
+	// (POST /setup)
+	CreateSetup(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -74,6 +95,34 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSetup operation middleware
+func (siw *ServerInterfaceWrapper) GetSetup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSetup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSetup operation middleware
+func (siw *ServerInterfaceWrapper) CreateSetup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSetup(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -204,6 +253,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health", wrapper.GetHealth)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/setup", wrapper.GetSetup)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/setup", wrapper.CreateSetup)
 
 	return m
 }
@@ -246,11 +297,88 @@ func (response GetHealthdefaultApplicationProblemPlusJSONResponse) VisitGetHealt
 	return err
 }
 
+type GetSetupRequestObject struct {
+}
+
+type GetSetupResponseObject interface {
+	VisitGetSetupResponse(w http.ResponseWriter) error
+}
+
+type GetSetup200JSONResponse SetupStatus
+
+func (response GetSetup200JSONResponse) VisitGetSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSetupdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetSetupdefaultApplicationProblemPlusJSONResponse) VisitGetSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSetupRequestObject struct {
+	Body *CreateSetupJSONRequestBody
+}
+
+type CreateSetupResponseObject interface {
+	VisitCreateSetupResponse(w http.ResponseWriter) error
+}
+
+type CreateSetup204Response struct {
+}
+
+func (response CreateSetup204Response) VisitCreateSetupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CreateSetupdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateSetupdefaultApplicationProblemPlusJSONResponse) VisitCreateSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// GetSetup Ist die Instanz eingerichtet?
+	// (GET /setup)
+	GetSetup(ctx context.Context, request GetSetupRequestObject) (GetSetupResponseObject, error)
+	// CreateSetup Passwort und Mitglieder anlegen
+	// (POST /setup)
+	CreateSetup(ctx context.Context, request CreateSetupRequestObject) (CreateSetupResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -316,18 +444,79 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetSetup operation middleware
+func (sh *strictHandler) GetSetup(w http.ResponseWriter, r *http.Request) {
+	var request GetSetupRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSetup(ctx, request.(GetSetupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSetup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSetupResponseObject); ok {
+		if err := validResponse.VisitGetSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSetup operation middleware
+func (sh *strictHandler) CreateSetup(w http.ResponseWriter, r *http.Request) {
+	var request CreateSetupRequestObject
+
+	var body CreateSetupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSetup(ctx, request.(CreateSetupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSetup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSetupResponseObject); ok {
+		if err := validResponse.VisitCreateSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"lFLLbtUwEP0Va2BHlKQ8hPCOhy50V9Fl1YWbTG5cHNuMx1dqr/I3/ZP+GLIdCFwiUFeZeHyOz5w5R+jc",
-	"5J1FywHkEUI34qRy+QWV4TFVnpxHYo3lCiuOuUIbJ5BX4L7BdQV85xEkBCZt9zBXcEAK2tl086Q3V0D4",
-	"PWrCPuEXxhWxsrmbW+w4sV2QuzE4JbYeQ0facyaHHY4GSVjVjeLr7qN49/rNWzFpFvcxPD7wvdFpJrFD",
-	"04vO9VhDdTJROt1QWUGPrLTZbK0uLC1tGfdIqceazTZhOfifHwVfrb5kgX+bknDaDi4zljfhklUYPyCx",
-	"eH9x/pulEtr6rG6TCOfRKq9Bwqt8VIFXPOZZmvHX0vfI6ZN8Usnp8x4kfEZeYpEUB+9sKBa+bNvipGW0",
-	"Gai8N7rL0OY2OLumK1XPCQeQ8KxZ49eUbmiWF/J4f676E5K4RDogCfP4EAeuy5YGFQ3/431fsvPiaTp+",
-	"Jm5DyFbm6rzHEKdJ0V3ZBMcgegyL5lCYwvIjr44QyYCERnndHM5gvp5/DAA=",
+	"zFXNbhs3EH4Vgu2hQTf6SV002UvRJHUjICmM+NBDHAS0ONplQg43w6Fi2dDb+Bl66k0vVpCUtLa0TVCg",
+	"BXLjksOPM9988+2NnHvXeQTkIOsbGeYtOJWXL0BZbtOqI98BsYESwopjXgFGJ+s30n+QbyvJqw5kLQOT",
+	"wUauK7kECsZjijw4W1eS4GM0BDrd3yL2N3o0f/ke5pzQzshfWnAJTUOYk+k4g8tTaC2QQDVvxevTZ+LJ",
+	"yY8/CWdYXMewueVra1JN4hSsFnOvYSSrg4rS7kCWldTAytjBo56F7ZFBhgYonbFhOwxYNr7ER7lf9bzk",
+	"BIdIOQeO3Wv4GCHwcaccuEugcEzZ78oBCg0kXqgYWmU5OMONNaCBEj+GwRUIdfUSsEk6OJlU0hncfU4H",
+	"Ou7U1azcnJbg3dc+VhGpVQrtVAifPOmDR6aPHt975XH1Ba72ONW+3H8k6nzfs8P+48I0MSPue3PpvQWF",
+	"Rw/eCT5+KAUbXPiMU1Qgz1mF9ikQi1/OZndEXsvJaDqapOx8B6g6I2v5Q95K9HCbcxu3+zFsIPc4Za5S",
+	"I2da1vI34O2gpjRD5zGUoh5NJtvaGDBfVF1nzTxfHb8PHvt5T6tvCRaylt+Me0MYl9Mw3r6Qy7uvpOdA",
+	"4hxoCSTs5jYueFTmZqGi5c+835Vp/v7f5bHzgIFEhlxglJsXonOKVqUTHIPQELY5hxwwDkkcn2M4q+f/",
+	"JPiuPAeK+9UgmXnLEZsQdkWQmGFghddfM+WzwEIb2KUqwGADuRbgn7MP+OJcBwYVSbjNn03y7koEbxU2",
+	"ID6AQXFWBp4FXJnABohHovjZJyANKJaeEjsX+HJziw1gR5u/FhEb0QCTcY5HF3iBr7boIEoZD5PHPvwD",
+	"iKEWyhIovXrXz7r47mTy5EElDC6VNfodFc9N25MHowuU1YFqnhEohl44Ofyp16v/VjM771/ftymmCOsj",
+	"vZ4cE/38Tm9M4Hv9+Zp1tVdBRC1e7f9dQqGFBrDAhu2Q129uZCQrazlWnRkvp3L9dv33AA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
