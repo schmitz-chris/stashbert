@@ -948,7 +948,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
   - `camera.ts`: Start und Stopp, Gerätewahl (gespeichert), Licht, Zoom.
   - `decoder.ts`: Ponyfill, Formate `ean_13`, `ean_8`, `upc_a`, und `prepareZXingModule` mit `locateFile` auf `/zxing_reader.wasm`. Der Aufruf erfolgt beim Laden des Moduls, **vor** dem ersten `new BarcodeDetector()`.
   - `loop.ts`: Leseschleife mit Streifen und höchstens einem laufenden Decode.
-  - `dedupe.ts`: rein funktional, 2000 ms.
+  - `dedupe.ts`: rein funktional, 2000 ms als gleitendes Fenster: Jede Erkennung eines Codes verlängert das Fenster, ein Code im Bild bucht also nur einmal. Erst nach 2000 ms ohne diesen Code zählt er wieder (im React-Prototyp mit Buchungen erprobt).
   - `feedback.ts`: Audio mit `audioSession` und `AudioContext`, freigeschaltet beim Start. Tonmuster als exportierte Tabelle:
     - `add`: 880 Hz, 100 ms
     - `consume`: 660 Hz, 100 ms
@@ -958,7 +958,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
   - npm-Skript `copy:wasm` wie in der POC-Spezifikation Punkt 6 (Auflösung relativ zu `barcode-detector`, SHA-256-Prüfung), läuft vor `build` und `dev`.
 - **Nicht im Umfang:** Ansicht, API-Aufrufe.
 - **Abnahmekriterien:**
-  1. Vitest-Tests für `dedupe` und die Tonmuster-Tabelle.
+  1. Vitest-Tests für `dedupe` (auch: ein Code, der dauerhaft im Bild bleibt, zählt nur einmal) und die Tonmuster-Tabelle.
   2. Der Build enthält `zxing_reader.wasm`.
   3. Ein manipulierter Hash lässt `copy:wasm` fehlschlagen (Test mit Umgebungsvariable oder Parameter für den erwarteten Hash).
   4. `make check` ist grün.
