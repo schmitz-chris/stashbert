@@ -11,6 +11,7 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/api"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 )
@@ -22,11 +23,13 @@ type Deps struct {
 	DB      *sql.DB
 	// Publisher receives the domain events after each commit.
 	Publisher events.Publisher
+	// Lookuper looks up unknown barcodes booked with add (architecture.md, 7.2).
+	Lookuper domain.Lookuper
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
-	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB, Publisher: d.Publisher})
+	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
 		ResponseErrorHandlerFunc: responseErrorHandler(d.Logger),

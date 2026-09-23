@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 
+	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/store/db"
 )
@@ -12,6 +13,8 @@ type ServerDeps struct {
 	Version   string
 	DB        *sql.DB
 	Publisher events.Publisher
+	// Lookuper looks up unknown barcodes booked with add.
+	Lookuper domain.Lookuper
 }
 
 // Server implements StrictServerInterface.

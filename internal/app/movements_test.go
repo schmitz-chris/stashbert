@@ -423,10 +423,9 @@ func TestCreateMovementErrors(t *testing.T) {
 		{"invalid barcode length", `{"barcode": "40016863012", "kind": "consume"}`, http.StatusUnprocessableEntity, "invalid_barcode"},
 		{"invalid barcode letters", `{"barcode": "400168630126A", "kind": "inventory", "stock": 1}`, http.StatusUnprocessableEntity, "invalid_barcode"},
 		{"empty barcode", `{"barcode": "", "kind": "add"}`, http.StatusUnprocessableEntity, "invalid_barcode"},
-		{"unknown barcode with add", `{"barcode": "4006381333931", "kind": "add"}`, http.StatusNotFound, "unknown_barcode"},
 		{"unknown barcode with consume", `{"barcode": "4006381333931", "kind": "consume"}`, http.StatusNotFound, "unknown_barcode"},
 		{"unknown barcode with inventory", `{"barcode": "4006381333931", "kind": "inventory", "stock": 1}`, http.StatusNotFound, "unknown_barcode"},
-		{"unknown barcode as UPC-A", `{"barcode": "036000291452", "kind": "add"}`, http.StatusNotFound, "unknown_barcode"},
+		{"unknown barcode as UPC-A", `{"barcode": "036000291452", "kind": "consume"}`, http.StatusNotFound, "unknown_barcode"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

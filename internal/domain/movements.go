@@ -19,6 +19,9 @@ import (
 // warningClampedToZero reports that the stock was limited to 0 (architecture.md, 6.3).
 const warningClampedToZero = "clamped_to_zero"
 
+// codeUnknownBarcode is the error code of an unknown barcode (architecture.md, 6.4).
+const codeUnknownBarcode = "unknown_barcode"
+
 // NewMovement is a movement to book for a product (architecture.md 6.3,
 // MovementCreate). Exactly one of ProductID and Barcode must be set.
 type NewMovement struct {
@@ -75,6 +78,17 @@ type MovementResult struct {
 // normalized barcode. After the commit it publishes the events of the
 // movement to pub (see publishMovementEvents).
 //
+// add with an unknown barcode creates a product for it (architecture.md,
+// 7.2): lookupProduct determines the product outside of any transaction, so
+// the lookup with lookuper holds no write lock. Then one transaction checks
+// the idempotency key and the barcode again and stores the product with
+// needs_review and target 0, its barcode with 1 unit, the movement and the
+// cache entry of the lookup. If the barcode is known by then, the movement is
+// booked on its product. A created product results in product_created, the
+// message prefix "Neu: " and, for a placeholder, the warning
+// placeholder_created; product.created is published before the events of
+// the movement.
+//
 // With in.Idempotency, the movement keeps its key and request hash. Before
 // it reads the product or barcode, Book looks up a movement with the key in
 // the same transaction. If there is one, it books nothing: the same request
@@ -85,9 +99,9 @@ type MovementResult struct {
 // invalid_request if not exactly one of product_id and barcode is set, for
 // inventory without stock or add and consume with stock, 422 invalid_barcode
 // for an invalid barcode, 404 not_found for an unknown product, 404
-// unknown_barcode for an unknown barcode and 409 stock_already_zero for
-// consume on a stock of 0.
-func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMovement) (MovementResult, error) {
+// unknown_barcode for consume and inventory with an unknown barcode and 409
+// stock_already_zero for consume on a stock of 0.
+func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, lookuper Lookuper, in NewMovement) (MovementResult, error) {
 	if err := checkNewMovement(in); err != nil {
 		return MovementResult{}, err
 	}
@@ -100,6 +114,21 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		code = &normalized
 	}
 
+	r, err := book(ctx, sqlDB, pub, in, code, nil)
+	if in.Kind != "add" || !isUnknownBarcode(err) {
+		return r, err
+	}
+	s, err := lookupProduct(ctx, sqlDB, lookuper, *code)
+	if err != nil {
+		return MovementResult{}, err
+	}
+	return book(ctx, sqlDB, pub, in, code, &s)
+}
+
+// book books in within one transaction as described for Book. code is the
+// normalized barcode or nil. An unknown barcode results in 404
+// unknown_barcode if s is nil; otherwise book creates the product s for it.
+func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMovement, code *string, s *scannedProduct) (MovementResult, error) {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("book movement: begin transaction: %w", err)
@@ -114,7 +143,21 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 			return r, err
 		}
 	}
+	now := store.FormatTime(time.Now())
 	cur, units, err := movementProduct(ctx, q, in.ProductID, code)
+	created := false
+	if s != nil && isUnknownBarcode(err) {
+		cur, created, err = insertScannedProduct(ctx, q, *s, *code, now)
+		if err == nil && !created {
+			// A concurrent request has stored the barcode since it was read
+			// above: book on its product after the rollback.
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return MovementResult{}, fmt.Errorf("book movement: rollback: %w", rbErr)
+			}
+			return book(ctx, sqlDB, pub, in, code, nil)
+		}
+		units = 1
+	}
 	if err != nil {
 		return MovementResult{}, err
 	}
@@ -123,7 +166,6 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		return MovementResult{}, err
 	}
 
-	now := store.FormatTime(time.Now())
 	row, err := q.InsertMovement(ctx, db.InsertMovementParams{
 		ID:             uuid.Must(uuid.NewV7()).String(),
 		ProductID:      cur.ID,
@@ -174,12 +216,25 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		return MovementResult{}, fmt.Errorf("book movement: commit: %w", err)
 	}
 
+	message := movementMessage(p.Name, m)
+	if created {
+		message = "Neu: " + message
+		if p.Origin == "placeholder" {
+			warnings = append(warnings, warningPlaceholderCreated)
+		}
+		pub.Publish(ctx, events.New(events.TypeProductCreated, events.ProductCreatedData{
+			ProductID: p.ID,
+			Name:      p.Name,
+			Origin:    p.Origin,
+		}))
+	}
 	publishMovementEvents(ctx, pub, cur, p, m)
 	return MovementResult{
-		Movement: m,
-		Product:  p,
-		Warnings: warnings,
-		Message:  movementMessage(p.Name, m),
+		Movement:       m,
+		Product:        p,
+		ProductCreated: created,
+		Warnings:       warnings,
+		Message:        message,
 	}, nil
 }
 
@@ -265,7 +320,7 @@ func movementProduct(ctx context.Context, q *db.Queries, productID, code *string
 	}
 	b, err := q.GetBarcode(ctx, *code)
 	if errors.Is(err, sql.ErrNoRows) {
-		return db.Product{}, 0, httpx.NewError(http.StatusNotFound, "unknown_barcode",
+		return db.Product{}, 0, httpx.NewError(http.StatusNotFound, codeUnknownBarcode,
 			fmt.Sprintf("Barcode %s ist unbekannt", *code))
 	}
 	if err != nil {

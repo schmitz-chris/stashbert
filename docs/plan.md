@@ -598,7 +598,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B20: Unbekannter Barcode beim Einlagern
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B18, B19
 - **Referenzen:** architecture.md 5 (`lookups`), 6.3, 7.2, ADR-0004
 - **Umfang:**

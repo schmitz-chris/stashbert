@@ -14,7 +14,9 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
+	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -26,7 +28,15 @@ func newApp(t *testing.T) (http.Handler, *sql.DB) {
 }
 
 // newAppWithPublisher is like newApp but publishes the domain events to pub.
+// Unknown barcodes are looked up with lookup.NewDisabledClient.
 func newAppWithPublisher(t *testing.T, pub events.Publisher) (http.Handler, *sql.DB) {
+	t.Helper()
+	return newAppWithLookuper(t, pub, lookup.NewDisabledClient())
+}
+
+// newAppWithLookuper is like newAppWithPublisher but looks up unknown
+// barcodes with l.
+func newAppWithLookuper(t *testing.T, pub events.Publisher, l domain.Lookuper) (http.Handler, *sql.DB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -42,7 +52,9 @@ func newAppWithPublisher(t *testing.T, pub events.Publisher) (http.Handler, *sql
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	h, err := app.NewHandler(cfg, app.Deps{Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db, Publisher: pub})
+	h, err := app.NewHandler(cfg, app.Deps{
+		Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db, Publisher: pub, Lookuper: l,
+	})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

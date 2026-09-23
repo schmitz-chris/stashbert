@@ -117,24 +117,25 @@ func (q *Queries) InsertBarcode(ctx context.Context, arg InsertBarcodeParams) (B
 
 const insertProduct = `-- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
-    origin, lookup_state, needs_review, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    origin, lookup_state, needs_review, image_source_url, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
 `
 
 type InsertProductParams struct {
-	ID          string
-	Name        string
-	Brand       *string
-	PackageSize *string
-	Target      int64
-	MinStock    *int64
-	Note        *string
-	Origin      string
-	LookupState string
-	NeedsReview int64
-	CreatedAt   string
-	UpdatedAt   string
+	ID             string
+	Name           string
+	Brand          *string
+	PackageSize    *string
+	Target         int64
+	MinStock       *int64
+	Note           *string
+	Origin         string
+	LookupState    string
+	NeedsReview    int64
+	ImageSourceUrl *string
+	CreatedAt      string
+	UpdatedAt      string
 }
 
 func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (Product, error) {
@@ -149,6 +150,7 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (P
 		arg.Origin,
 		arg.LookupState,
 		arg.NeedsReview,
+		arg.ImageSourceUrl,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)

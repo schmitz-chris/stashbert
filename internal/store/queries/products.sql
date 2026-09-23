@@ -21,8 +21,8 @@ WHERE code = ?;
 
 -- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
-    origin, lookup_state, needs_review, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    origin, lookup_state, needs_review, image_source_url, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: InsertBarcode :one

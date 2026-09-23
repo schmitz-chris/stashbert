@@ -15,9 +15,12 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
 	"github.com/schmitz-chris/stashbert/internal/events"
+	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -54,7 +57,16 @@ func run() error {
 		return err
 	}
 
-	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}})
+	// All requests to Open Food Facts share one limiter: one token every 6 s,
+	// burst 1 (architecture.md, 7.3).
+	offLimiter := rate.NewLimiter(rate.Every(6*time.Second), 1)
+	off := lookup.NewDisabledClient()
+	if cfg.OFFContact != "" {
+		off = lookup.NewClient("https://world.openfoodfacts.org",
+			"StashBert/"+version+" ("+cfg.OFFContact+")", &http.Client{}, offLimiter)
+	}
+
+	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
 	}

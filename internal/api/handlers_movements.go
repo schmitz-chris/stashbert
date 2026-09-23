@@ -34,7 +34,7 @@ func (s *Server) CreateMovement(ctx context.Context, request CreateMovementReque
 		}
 		in.Idempotency = &domain.Idempotency{Key: *key, RequestHash: hash}
 	}
-	r, err := domain.Book(ctx, s.deps.DB, s.deps.Publisher, in)
+	r, err := domain.Book(ctx, s.deps.DB, s.deps.Publisher, s.deps.Lookuper, in)
 	if err != nil {
 		return nil, err
 	}
