@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState, type ChangeEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Dialog } from "../components/Dialog";
+import { MergeSection } from "../components/MergeSection";
+import { MovementHistory } from "../components/MovementHistory";
+import { StockSection } from "../components/StockSection";
 import { problemCode } from "../lib/api/client";
 import {
   barcodeAddMutation,
@@ -164,6 +167,7 @@ function ProductEditor({ product }: { product: Product }) {
           >
             Passt so
           </button>
+          <MergeSection product={product} />
           <p role="status" className="text-sm font-medium text-red-700">
             {review.isError ? "Speichern fehlgeschlagen" : ""}
           </p>
@@ -231,6 +235,8 @@ function ProductEditor({ product }: { product: Product }) {
         </div>
       </form>
       <BarcodeSection product={product} />
+      <StockSection product={product} />
+      <MovementHistory productId={product.id} />
       {source !== null && (
         <p className="mt-6 text-sm text-stone-500">
           {source.link === null ? (

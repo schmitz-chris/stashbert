@@ -39,8 +39,9 @@ export interface ProductMovement {
  * Books a ProductMovement with POST /movements. A failed booking throws
  * the Problem Details of the response, so problemCode can read its code.
  * On success the product in the cached product list is replaced with
- * product from the response. On stock_already_zero the cached list is out
- * of date (someone else took the last one), so it is fetched again.
+ * product from the response, and the movements of the product are fetched
+ * again. On stock_already_zero the cached list is out of date (someone
+ * else took the last one), so it is fetched again.
  */
 export function productMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -53,10 +54,13 @@ export function productMovementMutation(queryClient: QueryClient) {
       }
       return data;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, { productId }) => {
       queryClient.setQueryData(productListQuery.queryKey, (products) =>
         replaceProduct(products, result.product),
       );
+      void queryClient.invalidateQueries({
+        queryKey: productMovementsQuery(productId).queryKey,
+      });
     },
     onError: (error) => {
       if (problemCode(error) === "stock_already_zero") {
@@ -110,13 +114,17 @@ export function productUpdateMutation(queryClient: QueryClient) {
       }
       return data;
     },
-    onSuccess: (product) => {
-      queryClient.setQueryData(productQuery(product.id).queryKey, product);
-      queryClient.setQueryData(productListQuery.queryKey, (products) =>
-        replaceProduct(products, product),
-      );
-    },
+    onSuccess: (product) => setCachedProduct(queryClient, product),
   });
+}
+
+// Stores product from a response as the cached product and as its entry in
+// the cached product list.
+function setCachedProduct(queryClient: QueryClient, product: Product) {
+  queryClient.setQueryData(productQuery(product.id).queryKey, product);
+  queryClient.setQueryData(productListQuery.queryKey, (products) =>
+    replaceProduct(products, product),
+  );
 }
 
 /**
@@ -223,6 +231,100 @@ export function barcodeRemoveMutation(queryClient: QueryClient) {
           queryKey: productQuery(productId).queryKey,
         });
       }
+    },
+  });
+}
+
+// The number of movements the product page shows.
+const historyLimit = 10;
+
+/**
+ * The latest movements of the product with productId, newest first, at
+ * most historyLimit.
+ */
+export function productMovementsQuery(productId: string) {
+  return queryOptions({
+    queryKey: ["movements", productId],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/movements", {
+        params: { query: { product_id: productId, limit: historyLimit } },
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`GET /movements: status ${response.status}`);
+      }
+      return data.items;
+    },
+  });
+}
+
+/** The new stock of the product with productId, from a stock count. */
+export interface ProductInventory {
+  productId: string;
+  stock: number;
+}
+
+/**
+ * Sets the stock of a product with POST /movements and kind inventory. A
+ * failed booking throws the Problem Details of the response. On success
+ * product from the response replaces the cached product and its entry in
+ * the product list, and the movements of the product are fetched again.
+ */
+export function inventoryMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ productId, stock }: ProductInventory) => {
+      const { data, error, response } = await api.POST("/movements", {
+        body: { product_id: productId, kind: "inventory", stock },
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`POST /movements: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (result, { productId }) => {
+      setCachedProduct(queryClient, result.product);
+      void queryClient.invalidateQueries({
+        queryKey: productMovementsQuery(productId).queryKey,
+      });
+    },
+  });
+}
+
+/** The merge of the product with sourceId into the one with targetId. */
+export interface ProductMerge {
+  sourceId: string;
+  targetId: string;
+}
+
+/**
+ * Merges a product into another with POST /products/{id}/merge; the
+ * server deletes the source then. A failed merge throws the Problem
+ * Details of the response. On success the source is removed from the
+ * cached product list, the target from the response replaces the cached
+ * target and its entry in the list, and all cached movement lists are
+ * fetched again, because the movements of the source moved to the target.
+ */
+export function productMergeMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ sourceId, targetId }: ProductMerge) => {
+      const { data, error, response } = await api.POST(
+        "/products/{id}/merge",
+        {
+          params: { path: { id: sourceId } },
+          body: { target_product_id: targetId },
+        },
+      );
+      if (!response.ok || data === undefined) {
+        const path = `/products/${sourceId}/merge`;
+        throw error ?? new Error(`POST ${path}: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (target, { sourceId }) => {
+      queryClient.setQueryData(productListQuery.queryKey, (products) =>
+        products?.filter((product) => product.id !== sourceId),
+      );
+      setCachedProduct(queryClient, target);
+      void queryClient.invalidateQueries({ queryKey: ["movements"] });
     },
   });
 }

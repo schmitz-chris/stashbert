@@ -935,7 +935,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F06c: Produktdetail: Bestand, Verlauf, Zusammenführen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F06b, B23, B25
 - **Referenzen:** architecture.md 6.2, 6.3, 6.5 (Merge)
 - **Umfang:**

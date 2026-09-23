@@ -38,6 +38,21 @@ export function matches(product: Product, query: string): boolean {
   );
 }
 
+/**
+ * Returns the products the product with ownId can be merged into: all
+ * products except that one which match query (see matches), in their
+ * order.
+ */
+export function mergeCandidates(
+  products: readonly Product[],
+  ownId: string,
+  query: string,
+): Product[] {
+  return products.filter(
+    (product) => product.id !== ownId && matches(product, query),
+  );
+}
+
 const filterPredicates: Record<ProductFilter, (product: Product) => boolean> =
   {
     all: () => true,

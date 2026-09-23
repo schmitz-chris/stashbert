@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterProducts,
   matches,
+  mergeCandidates,
   replaceProduct,
   sortByName,
   withBarcode,
@@ -67,6 +68,37 @@ describe("matches", () => {
 
   it.each(["", " ", "   "])("matches every product for %j", (query) => {
     expect(matches(product({ name: "Mehl" }), query)).toBe(true);
+  });
+});
+
+describe("mergeCandidates", () => {
+  const own = product({ id: "own", name: "Neues Produkt 2000000000008" });
+  const cheese = product({ id: "a", name: "Käse", brand: "Allgäuer Hof" });
+  const beans = product({ id: "b", name: "Kidneybohnen", brand: "Bonduelle" });
+  const flour = product({ id: "c", name: "Mehl" });
+  const products = [cheese, own, beans, flour];
+
+  it("excludes the own product and keeps the others in order", () => {
+    expect(mergeCandidates(products, "own", "")).toEqual([
+      cheese,
+      beans,
+      flour,
+    ]);
+  });
+
+  it("excludes the own product even if it matches", () => {
+    expect(mergeCandidates(products, "own", "neues")).toEqual([]);
+  });
+
+  it("filters with matches", () => {
+    expect(mergeCandidates(products, "own", "kase")).toEqual([cheese]);
+    expect(mergeCandidates(products, "own", "BONDU")).toEqual([beans]);
+    expect(mergeCandidates(products, "own", "milch")).toEqual([]);
+  });
+
+  it("does not change the given list", () => {
+    mergeCandidates(products, "own", "mehl");
+    expect(products).toEqual([cheese, own, beans, flour]);
   });
 });
 
