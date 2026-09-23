@@ -518,7 +518,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B16b: Ereignisse für Buchungen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B16a, B12
 - **Referenzen:** architecture.md 6.6
 - **Umfang:** `domain.Book` löst nach dem Commit die Ereignisse nach 6.6 aus (Typ nach Art, `product.empty`, `shopping.changed`, Reihenfolge, nur bei `delta ≠ 0`).

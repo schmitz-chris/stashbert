@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 	"github.com/schmitz-chris/stashbert/internal/store"
 	"github.com/schmitz-chris/stashbert/internal/store/db"
@@ -55,13 +56,14 @@ type MovementResult struct {
 // Book books in for the product with in.ProductID in one transaction: it
 // reads the product, applies the rules of architecture.md 6.3, inserts the
 // movement and stores the new stock and updated_at at the product. The delta
-// of the movement is the actual change of the stock.
+// of the movement is the actual change of the stock. After the commit it
+// publishes the events of the movement to pub (see publishMovementEvents).
 //
 // Invalid input results in an *httpx.Error and nothing is booked: 400
 // invalid_request for inventory without stock or add and consume with stock,
 // 404 not_found for an unknown product and 409 stock_already_zero for
 // consume on a stock of 0.
-func Book(ctx context.Context, sqlDB *sql.DB, in NewMovement) (MovementResult, error) {
+func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMovement) (MovementResult, error) {
 	if err := checkNewMovement(in); err != nil {
 		return MovementResult{}, err
 	}
@@ -121,6 +123,7 @@ func Book(ctx context.Context, sqlDB *sql.DB, in NewMovement) (MovementResult, e
 		return MovementResult{}, fmt.Errorf("book movement: commit: %w", err)
 	}
 
+	publishMovementEvents(ctx, pub, cur, p, m)
 	return MovementResult{
 		Movement: m,
 		Product:  p,
@@ -167,6 +170,50 @@ func bookedStock(stock int64, in NewMovement) (int64, []string, error) {
 	}
 	// inventory
 	return *in.Stock, warnings, nil
+}
+
+// publishMovementEvents publishes the events of the booked movement m to pub,
+// in the order of architecture.md 6.6: the stock event of the kind of m,
+// product.empty if the stock changed from above 0 to 0 and shopping.changed
+// if missing changed. before is the stored product before and p the product
+// after the booking. A movement with delta 0 publishes no event.
+func publishMovementEvents(ctx context.Context, pub events.Publisher, before db.Product, p Product, m Movement) {
+	if m.Delta == 0 {
+		return
+	}
+	pub.Publish(ctx, events.New(stockEventType(m.Kind), events.StockData{
+		ProductID:  p.ID,
+		MovementID: m.ID,
+		Delta:      m.Delta,
+		StockAfter: m.StockAfter,
+	}))
+	if before.Stock > 0 && p.Stock == 0 {
+		pub.Publish(ctx, events.New(events.TypeProductEmpty, events.ProductEmptyData{
+			ProductID: p.ID,
+			Name:      p.Name,
+		}))
+	}
+	if missingBefore := Missing(before.Stock, before.Target, before.MinStock); missingBefore != p.Missing {
+		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
+			ProductID:     p.ID,
+			Name:          p.Name,
+			MissingBefore: missingBefore,
+			MissingAfter:  p.Missing,
+		}))
+	}
+}
+
+// stockEventType returns the event type of a movement of kind
+// (architecture.md, 6.6): stock.added for add, stock.consumed for consume and
+// stock.adjusted for inventory, reversal and merge.
+func stockEventType(kind string) string {
+	switch kind {
+	case "add":
+		return events.TypeStockAdded
+	case "consume":
+		return events.TypeStockConsumed
+	}
+	return events.TypeStockAdjusted
 }
 
 // movementFromDB converts the stored movement m.

@@ -20,7 +20,7 @@ func (s *Server) CreateMovement(ctx context.Context, request CreateMovementReque
 	if body.Stock != nil {
 		in.Stock = new(int64(*body.Stock))
 	}
-	r, err := domain.Book(ctx, s.deps.DB, in)
+	r, err := domain.Book(ctx, s.deps.DB, s.deps.Publisher, in)
 	if err != nil {
 		return nil, err
 	}

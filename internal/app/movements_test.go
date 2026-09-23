@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -198,8 +199,107 @@ func TestCreateMovementSequence(t *testing.T) {
 	}
 }
 
+func TestCreateMovementPublishesEvents(t *testing.T) {
+	// See insertProducts: p1 "Zucker" has target 0, so missing is always 0.
+	// p2 "kidneybohnen" has target 5 and no min_stock, so missing is 5 - stock
+	// below 5. p4 "Mehl" has target 4 and min_stock 1, so missing is 4 - stock
+	// below 1.
+	type event struct {
+		typ  string
+		data any
+	}
+	// The movement id of events.StockData is set from the response.
+	stock := func(typ, id string, delta, stockAfter int64) event {
+		return event{typ, events.StockData{ProductID: id, Delta: delta, StockAfter: stockAfter}}
+	}
+	empty := func(id, name string) event {
+		return event{events.TypeProductEmpty, events.ProductEmptyData{ProductID: id, Name: name}}
+	}
+	shopping := func(id, name string, before, after int64) event {
+		return event{events.TypeShoppingChanged, events.ShoppingChangedData{
+			ProductID: id, Name: name, MissingBefore: before, MissingAfter: after,
+		}}
+	}
+	tests := []struct {
+		name  string
+		id    string
+		stock int
+		body  string
+		want  []event
+	}{
+		{"consume to 0", "p2", 2, `{"product_id": "p2", "kind": "consume", "quantity": 2}`, []event{
+			stock(events.TypeStockConsumed, "p2", -2, 0),
+			empty("p2", "kidneybohnen"),
+			shopping("p2", "kidneybohnen", 3, 5),
+		}},
+		{"consume clamped to 0", "p2", 1, `{"product_id": "p2", "kind": "consume", "quantity": 3}`, []event{
+			stock(events.TypeStockConsumed, "p2", -1, 0),
+			empty("p2", "kidneybohnen"),
+			shopping("p2", "kidneybohnen", 4, 5),
+		}},
+		{"consume to 0 with target 0", "p1", 2, `{"product_id": "p1", "kind": "consume", "quantity": 2}`, []event{
+			stock(events.TypeStockConsumed, "p1", -2, 0),
+			empty("p1", "Zucker"),
+		}},
+		{"consume changing missing", "p2", 2, `{"product_id": "p2", "kind": "consume"}`, []event{
+			stock(events.TypeStockConsumed, "p2", -1, 1),
+			shopping("p2", "kidneybohnen", 3, 4),
+		}},
+		{"consume without change of missing", "p4", 2, `{"product_id": "p4", "kind": "consume"}`, []event{
+			stock(events.TypeStockConsumed, "p4", -1, 1),
+		}},
+		{"add changing missing", "p2", 2, `{"product_id": "p2", "kind": "add", "quantity": 3}`, []event{
+			stock(events.TypeStockAdded, "p2", 3, 5),
+			shopping("p2", "kidneybohnen", 3, 0),
+		}},
+		{"add without change of missing", "p4", 2, `{"product_id": "p4", "kind": "add"}`, []event{
+			stock(events.TypeStockAdded, "p4", 1, 3),
+		}},
+		{"inventory higher", "p2", 2, `{"product_id": "p2", "kind": "inventory", "stock": 7}`, []event{
+			stock(events.TypeStockAdjusted, "p2", 5, 7),
+			shopping("p2", "kidneybohnen", 3, 0),
+		}},
+		{"inventory to 0", "p4", 2, `{"product_id": "p4", "kind": "inventory", "stock": 0}`, []event{
+			stock(events.TypeStockAdjusted, "p4", -2, 0),
+			empty("p4", "Mehl"),
+			shopping("p4", "Mehl", 0, 4),
+		}},
+		{"inventory unchanged", "p2", 2, `{"product_id": "p2", "kind": "inventory", "stock": 2}`, nil},
+		{"inventory unchanged at 0", "p2", 0, `{"product_id": "p2", "kind": "inventory", "stock": 0}`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+			setStock(t, db, tt.id, tt.stock)
+
+			_, movement := decodeMovementResult(t, post(h, "/api/v1/movements", tt.body))
+
+			recorded := recorder.Events()
+			if len(recorded) != len(tt.want) {
+				t.Fatalf("events = %+v, want %d events", recorded, len(tt.want))
+			}
+			for i, w := range tt.want {
+				if data, ok := w.data.(events.StockData); ok {
+					data.MovementID, _ = movement["id"].(string)
+					w.data = data
+				}
+				e := recorded[i]
+				if e.Type != w.typ || e.Source != events.Source {
+					t.Errorf("event %d: type = %q, source = %q, want %q and %q", i, e.Type, e.Source, w.typ, events.Source)
+				}
+				if e.Data != w.data {
+					t.Errorf("event %d: data = %#v, want %#v", i, e.Data, w.data)
+				}
+			}
+		})
+	}
+}
+
 func TestCreateMovementErrors(t *testing.T) {
-	h, db := newApp(t)
+	var recorder events.Recorder
+	h, db := newAppWithPublisher(t, &recorder)
 	insertProducts(t, db)
 	before := get(h, "/api/v1/products").Body.String()
 
@@ -231,12 +331,15 @@ func TestCreateMovementErrors(t *testing.T) {
 			rec := post(h, "/api/v1/movements", tt.body)
 
 			checkProblemCode(t, rec, tt.status, tt.code)
-			// Nothing is booked and no product is changed.
+			// Nothing is booked, no product is changed and no event is published.
 			if n := countRows(t, db, "movements"); n != 0 {
 				t.Errorf("movements = %d, want 0", n)
 			}
 			if after := get(h, "/api/v1/products").Body.String(); after != before {
 				t.Errorf("products = %s\nwant %s", after, before)
+			}
+			if n := len(recorder.Events()); n != 0 {
+				t.Errorf("events = %d, want 0", n)
 			}
 		})
 	}
