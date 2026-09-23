@@ -104,6 +104,32 @@ export function feedbackFor(scan: ScanResult): Feedback {
   return failure("Buchung fehlgeschlagen");
 }
 
+/**
+ * The outcome of undoing the booking on the result card: the result of
+ * the reversal, or the error it failed with (see reversalMutation).
+ */
+export type UndoResult =
+  | { ok: true; result: MovementResult }
+  | { ok: false; error: unknown };
+
+/**
+ * Returns the feedback for undoing a booking on the result card
+ * (docs/plan.md, F09): the message of the reversal in yellow with the
+ * warn tone, or a red error with the error tone.
+ */
+export function undoFeedbackFor(undo: UndoResult): Feedback {
+  if (undo.ok) {
+    return { color: "yellow", sound: "warn", text: undo.result.message };
+  }
+  if (isUnreachable(undo.error)) {
+    return failure("Server nicht erreichbar");
+  }
+  if (problemCode(undo.error) === "already_reversed") {
+    return failure("Schon rückgängig gemacht");
+  }
+  return failure("Rückgängig fehlgeschlagen");
+}
+
 /** Returns a German text for an error of getUserMedia. */
 export function cameraErrorText(error: unknown): string {
   const name = (error as { name?: unknown } | null)?.name;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "./products";
-import { cameraErrorText, feedbackFor, type MovementResult } from "./scan";
+import {
+  cameraErrorText,
+  feedbackFor,
+  undoFeedbackFor,
+  type MovementResult,
+} from "./scan";
 
 const product: Product = {
   id: "01a0ce63-0000-7000-8000-000000000000",
@@ -112,6 +117,46 @@ describe("feedbackFor", () => {
     [new Error("unexpected"), "red", "error", "Buchung fehlgeschlagen"],
   ])("shows the error %o as %s with the %s tone", (error, color, sound, text) => {
     expect(feedbackFor({ ok: false, error })).toEqual({ color, sound, text });
+  });
+});
+
+describe("undoFeedbackFor", () => {
+  it("shows the message of the reversal yellow with the warn tone", () => {
+    const reversal = result("consume", { message: "Kidneybohnen 3 → 2" });
+    expect(undoFeedbackFor({ ok: true, result: reversal })).toEqual({
+      color: "yellow",
+      sound: "warn",
+      text: "Kidneybohnen 3 → 2",
+    });
+  });
+
+  it("shows a clamped reversal yellow with the warn tone", () => {
+    const reversal = result("consume", {
+      warnings: ["clamped_to_zero"],
+      message: "Kidneybohnen 1 → 0",
+    });
+    expect(undoFeedbackFor({ ok: true, result: reversal })).toEqual({
+      color: "yellow",
+      sound: "warn",
+      text: "Kidneybohnen 1 → 0",
+    });
+  });
+
+  it.each([
+    [problem(409, "already_reversed"), "Schon rückgängig gemacht"],
+    [problem(409, "not_reversible"), "Rückgängig fehlgeschlagen"],
+    [problem(404, "not_found"), "Rückgängig fehlgeschlagen"],
+    [problem(500, "internal"), "Rückgängig fehlgeschlagen"],
+    [statusError(500), "Rückgängig fehlgeschlagen"],
+    [new TypeError("Failed to fetch"), "Server nicht erreichbar"],
+    [new DOMException("", "TimeoutError"), "Server nicht erreichbar"],
+    [statusError(502), "Server nicht erreichbar"],
+  ])("shows the error %o red with the error tone", (error, text) => {
+    expect(undoFeedbackFor({ ok: false, error })).toEqual({
+      color: "red",
+      sound: "error",
+      text,
+    });
   });
 });
 

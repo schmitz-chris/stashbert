@@ -11,6 +11,7 @@ import {
   withoutBarcode,
   type Product,
 } from "../products";
+import type { MovementResult } from "../scan";
 import { api, problemCode } from "./client";
 
 /**
@@ -100,29 +101,93 @@ export function scanMovementMutation(queryClient: QueryClient) {
         signal: AbortSignal.timeout(scanTimeout),
       });
       if (!response.ok || data === undefined) {
-        if (problemCode(error) !== undefined) {
-          throw error;
-        }
-        const message = `POST /movements: status ${response.status}`;
-        throw Object.assign(new Error(message), { status: response.status });
+        throw bookingError(error, response, "POST /movements");
       }
       return data;
     },
     networkMode: "always",
-    onSuccess: ({ product, product_created }) => {
-      if (product_created) {
-        queryClient.setQueryData(productQuery(product.id).queryKey, product);
-        void queryClient.invalidateQueries({
-          queryKey: productListQuery.queryKey,
-          exact: true,
-        });
-      } else {
-        setCachedProduct(queryClient, product);
-      }
-      void queryClient.invalidateQueries({
-        queryKey: productMovementsQuery(product.id).queryKey,
+    onSuccess: (result) => cacheBookingResult(queryClient, result),
+  });
+}
+
+/**
+ * Books one more unit of a product for the result card of the scan view
+ * ([+1]): POST /movements with product_id, like scanMovementMutation with
+ * a new Idempotency-Key, the same timeout, the same errors and the same
+ * cache updates.
+ */
+export function repeatMovementMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ productId, kind }: ProductMovement) => {
+      const { data, error, response } = await api.POST("/movements", {
+        params: { header: { "Idempotency-Key": crypto.randomUUID() } },
+        body: { product_id: productId, kind },
+        signal: AbortSignal.timeout(scanTimeout),
       });
+      if (!response.ok || data === undefined) {
+        throw bookingError(error, response, "POST /movements");
+      }
+      return data;
     },
+    networkMode: "always",
+    onSuccess: (result) => cacheBookingResult(queryClient, result),
+  });
+}
+
+/**
+ * Undoes the booking with the given id for the result card of the scan
+ * view: POST /movements/{id}/reversal with a new Idempotency-Key. Timeout,
+ * errors and cache updates are those of scanMovementMutation.
+ */
+export function reversalMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (id: string) => {
+      const { data, error, response } = await api.POST("/movements/{id}/reversal", {
+        params: {
+          path: { id },
+          header: { "Idempotency-Key": crypto.randomUUID() },
+        },
+        signal: AbortSignal.timeout(scanTimeout),
+      });
+      if (!response.ok || data === undefined) {
+        throw bookingError(error, response, `POST /movements/${id}/reversal`);
+      }
+      return data;
+    },
+    networkMode: "always",
+    onSuccess: (result) => cacheBookingResult(queryClient, result),
+  });
+}
+
+// Returns the error for a failed booking: the Problem Details of the
+// response, or an Error with the field status for a response without them.
+function bookingError(error: unknown, response: Response, request: string): unknown {
+  if (problemCode(error) !== undefined) {
+    return error;
+  }
+  const message = `${request}: status ${response.status}`;
+  return Object.assign(new Error(message), { status: response.status });
+}
+
+// Updates the cache after a booking: product from the result replaces the
+// cached product and its entry in the product list; if the booking created
+// the product, the list is fetched again. The movements of the product are
+// fetched again.
+function cacheBookingResult(
+  queryClient: QueryClient,
+  { product, product_created }: MovementResult,
+) {
+  if (product_created) {
+    queryClient.setQueryData(productQuery(product.id).queryKey, product);
+    void queryClient.invalidateQueries({
+      queryKey: productListQuery.queryKey,
+      exact: true,
+    });
+  } else {
+    setCachedProduct(queryClient, product);
+  }
+  void queryClient.invalidateQueries({
+    queryKey: productMovementsQuery(product.id).queryKey,
   });
 }
 

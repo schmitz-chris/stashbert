@@ -1,16 +1,24 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
+import { ResultCard } from "../components/ResultCard";
 import { useScanner } from "../hooks/useScanner";
-import { scanMovementMutation } from "../lib/api/queries";
+import {
+  repeatMovementMutation,
+  reversalMutation,
+  scanMovementMutation,
+} from "../lib/api/queries";
+import { hiddenCard, resultCardReducer } from "../lib/resultCard";
 import {
   cameraErrorText,
   feedbackFor,
   loadScanMode,
   saveScanMode,
+  undoFeedbackFor,
   type Feedback,
   type FeedbackColor,
+  type MovementResult,
   type ScanMode,
 } from "../lib/scan";
 import { ROI } from "../lib/scanner/decoder";
@@ -19,6 +27,8 @@ import { isSoundUnlocked, playSound, unlockSound } from "../lib/sound";
 // How long the flash over the camera image and the message stay visible.
 const flashDuration = 300;
 const messageDuration = 2000;
+// How often the result card checks whether its time is up.
+const cardTickInterval = 200;
 
 const modes: { mode: ScanMode; label: string; active: string }[] = [
   { mode: "add", label: "Einlagern", active: "bg-emerald-600 text-white" },
@@ -57,6 +67,9 @@ interface Shown {
 export function ScanPage() {
   const queryClient = useQueryClient();
   const { mutateAsync: book } = useMutation(scanMovementMutation(queryClient));
+  const repeat = useMutation(repeatMovementMutation(queryClient));
+  const reversal = useMutation(reversalMutation(queryClient));
+  const [card, dispatchCard] = useReducer(resultCardReducer, hiddenCard);
   const [mode, setMode] = useState(loadScanMode);
   // False when the view was loaded directly: iOS plays sound only after a tap.
   const [soundReady, setSoundReady] = useState(isSoundUnlocked);
@@ -69,15 +82,54 @@ export function ScanPage() {
     setShown((current) => ({ feedback, id: (current?.id ?? 0) + 1, flash: true }));
   }
 
+  // Reports a booking of kind and shows it on the result card.
+  function showBooking(result: MovementResult, kind: ScanMode) {
+    show(feedbackFor({ ok: true, mode: kind, result }));
+    dispatchCard({ type: "show", result, kind, now: Date.now() });
+  }
+
   // Books every accepted code in the mode that is set when it is read.
   const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
     useScanner((code) => {
       const kind = mode;
       book({ barcode: code, kind }).then(
-        (result) => show(feedbackFor({ ok: true, mode: kind, result })),
+        (result) => showBooking(result, kind),
         (error: unknown) => show(feedbackFor({ ok: false, error })),
       );
     });
+
+  // [+1]: books one more unit of the product on the card, with its kind.
+  function plusOne(productId: string, kind: ScanMode) {
+    repeat.mutateAsync({ productId, kind }).then(
+      (result) => showBooking(result, kind),
+      (error: unknown) => show(feedbackFor({ ok: false, error })),
+    );
+  }
+
+  // [Rückgängig]: reverses the booking on the card and hides the card.
+  function undo(movementId: string) {
+    reversal.mutateAsync(movementId).then(
+      (result) => {
+        dispatchCard({ type: "hide", movementId });
+        show(undoFeedbackFor({ ok: true, result }));
+      },
+      (error: unknown) => show(undoFeedbackFor({ ok: false, error })),
+    );
+  }
+
+  // While the card runs, reports the time to the reducer, which hides the
+  // card when its time is up.
+  const cardRunning = card.status === "running";
+  useEffect(() => {
+    if (!cardRunning) {
+      return;
+    }
+    const timer = setInterval(
+      () => dispatchCard({ type: "tick", now: Date.now() }),
+      cardTickInterval,
+    );
+    return () => clearInterval(timer);
+  }, [cardRunning]);
 
   // Ends the flash and then hides the message of the latest feedback.
   const shownId = shown?.id;
@@ -201,6 +253,14 @@ export function ScanPage() {
       >
         {shown?.feedback.text}
       </p>
+      {card.status !== "hidden" && (
+        <ResultCard
+          booking={card.booking}
+          disabled={repeat.isPending || reversal.isPending}
+          onPlusOne={() => plusOne(card.booking.result.product.id, card.booking.kind)}
+          onUndo={() => undo(card.booking.result.movement.id)}
+        />
+      )}
       {!soundReady && (
         <button type="button" className="min-h-11 text-sm text-stone-500">
           Für Ton einmal tippen

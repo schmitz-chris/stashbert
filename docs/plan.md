@@ -1002,7 +1002,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F09: Ergebniskarte: +1 und Rückgängig
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F08, B24
 - **Referenzen:** architecture.md 6.3
 - **Umfang:**
