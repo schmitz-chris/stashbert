@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,7 +77,7 @@ func schemaState(t *testing.T, ctx context.Context, db *sql.DB) string {
 func TestMigrateTwice(t *testing.T) {
 	ctx := testContext(t)
 	db := openMigratedDB(t, ctx)
-	exec(t, ctx, db, "INSERT INTO settings (key, value) VALUES ('password_hash', 'x')")
+	exec(t, ctx, db, "INSERT INTO settings (key, value) VALUES ('test_key', 'x')")
 	before := schemaState(t, ctx, db)
 
 	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
@@ -86,7 +88,7 @@ func TestMigrateTwice(t *testing.T) {
 		t.Errorf("second Migrate changed the schema:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 	var value string
-	if err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = 'password_hash'").Scan(&value); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = 'test_key'").Scan(&value); err != nil {
 		t.Fatalf("read setting after second Migrate: %v", err)
 	}
 	if value != "x" {
@@ -127,7 +129,9 @@ func TestPragmasOnEveryConnection(t *testing.T) {
 	}
 }
 
-func TestTablesAreStrict(t *testing.T) {
+// TestMigratedTables checks that Migrate creates only the goose table and
+// settings, and that settings is STRICT.
+func TestMigratedTables(t *testing.T) {
 	ctx := testContext(t)
 	db := openMigratedDB(t, ctx)
 
@@ -143,7 +147,8 @@ func TestTablesAreStrict(t *testing.T) {
 		if err := rows.Scan(&schema, &name, &typ, &ncol, &withoutRowid, &isStrict); err != nil {
 			t.Fatalf("scan table_list: %v", err)
 		}
-		if schema == "main" && typ == "table" {
+		// SQLite's own tables (sqlite_schema, sqlite_sequence) are not part of the schema.
+		if schema == "main" && typ == "table" && !strings.HasPrefix(name, "sqlite_") {
 			strict[name] = isStrict == 1
 		}
 	}
@@ -151,46 +156,11 @@ func TestTablesAreStrict(t *testing.T) {
 		t.Fatalf("read table_list: %v", err)
 	}
 
-	for _, name := range []string{"settings", "members", "sessions"} {
-		isStrict, ok := strict[name]
-		if !ok {
-			t.Errorf("table %s is missing", name)
-		} else if !isStrict {
-			t.Errorf("table %s is not STRICT", name)
-		}
+	if got, want := slices.Sorted(maps.Keys(strict)), []string{"goose_db_version", "settings"}; !slices.Equal(got, want) {
+		t.Errorf("tables = %v, want %v", got, want)
 	}
-}
-
-func TestSchemaConstraints(t *testing.T) {
-	ctx := testContext(t)
-	db := openMigratedDB(t, ctx)
-	const now = "2026-09-23T12:00:00.000Z"
-	exec(t, ctx, db, "INSERT INTO members (id, name, created_at) VALUES ('m1', 'Chris', ?)", now)
-	exec(t, ctx, db, "INSERT INTO members (id, name, created_at) VALUES ('m2', ?, ?)", strings.Repeat("a", 40), now)
-	exec(t, ctx, db, "INSERT INTO sessions (token_hash, member_id, created_at, last_seen_at, expires_at) VALUES ('t1', 'm1', ?, ?, ?)", now, now, now)
-
-	failing := []struct {
-		name, query string
-		args        []any
-	}{
-		{"name differs only in case", "INSERT INTO members (id, name, created_at) VALUES ('m3', 'chris', ?)", []any{now}},
-		{"empty name", "INSERT INTO members (id, name, created_at) VALUES ('m3', '', ?)", []any{now}},
-		{"name longer than 40", "INSERT INTO members (id, name, created_at) VALUES ('m3', ?, ?)", []any{strings.Repeat("a", 41), now}},
-		{"unknown member in session", "INSERT INTO sessions (token_hash, member_id, created_at, last_seen_at, expires_at) VALUES ('t2', 'unknown', ?, ?, ?)", []any{now, now, now}},
-	}
-	for _, tt := range failing {
-		if _, err := db.ExecContext(ctx, tt.query, tt.args...); err == nil {
-			t.Errorf("%s: insert succeeded, want constraint error", tt.name)
-		}
-	}
-
-	exec(t, ctx, db, "DELETE FROM members WHERE id = 'm1'")
-	var memberID sql.NullString
-	if err := db.QueryRowContext(ctx, "SELECT member_id FROM sessions WHERE token_hash = 't1'").Scan(&memberID); err != nil {
-		t.Fatalf("read session: %v", err)
-	}
-	if memberID.Valid {
-		t.Errorf("session member_id = %q after deleting the member, want NULL", memberID.String)
+	if !strict["settings"] {
+		t.Error("table settings is not STRICT")
 	}
 }
 

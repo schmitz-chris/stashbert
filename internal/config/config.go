@@ -6,30 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strconv"
 )
 
 // Config holds the validated configuration. The comments name the variables.
 type Config struct {
-	Port         int        // PORT
-	DataDir      string     // DATA_DIR
-	PublicURL    string     // PUBLIC_URL, enables the origin check when set
-	CookieSecure bool       // COOKIE_SECURE
-	OFFContact   string     // OFF_CONTACT
-	BackupKeep   int        // BACKUP_KEEP
-	LogLevel     slog.Level // LOG_LEVEL
+	Port       int        // PORT
+	DataDir    string     // DATA_DIR
+	OFFContact string     // OFF_CONTACT
+	BackupKeep int        // BACKUP_KEEP
+	LogLevel   slog.Level // LOG_LEVEL
 }
 
 // Load reads the configuration through getenv, usually os.Getenv.
 // An empty value means the variable is unset and its default applies.
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		Port:         8080,
-		DataDir:      "/data",
-		CookieSecure: true,
-		BackupKeep:   14,
-		LogLevel:     slog.LevelInfo,
+		Port:       8080,
+		DataDir:    "/data",
+		BackupKeep: 14,
+		LogLevel:   slog.LevelInfo,
 	}
 
 	var errs []error
@@ -42,8 +38,6 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	set("PORT", func(v string) (err error) { cfg.Port, err = intInRange(v, 1, 65535); return err })
 	set("DATA_DIR", func(v string) error { cfg.DataDir = v; return nil })
-	set("PUBLIC_URL", func(v string) error { cfg.PublicURL = v; return checkPublicURL(v) })
-	set("COOKIE_SECURE", func(v string) (err error) { cfg.CookieSecure, err = strconv.ParseBool(v); return err })
 	set("OFF_CONTACT", func(v string) error { cfg.OFFContact = v; return nil })
 	set("BACKUP_KEEP", func(v string) (err error) { cfg.BackupKeep, err = intInRange(v, 1, 365); return err })
 	set("LOG_LEVEL", func(v string) (err error) { cfg.LogLevel, err = parseLogLevel(v); return err })
@@ -74,20 +68,4 @@ func parseLogLevel(v string) (slog.Level, error) {
 		return slog.LevelError, nil
 	}
 	return 0, fmt.Errorf("%q is not one of debug, info, warn, error", v)
-}
-
-// checkPublicURL accepts an absolute http or https URL with a host and
-// no path other than "/".
-func checkPublicURL(v string) error {
-	u, err := url.Parse(v)
-	if err != nil {
-		return err
-	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("%q is not an absolute http or https URL", v)
-	}
-	if u.Path != "" && u.Path != "/" {
-		return fmt.Errorf("%q must not have a path", v)
-	}
-	return nil
 }

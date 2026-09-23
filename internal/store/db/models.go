@@ -4,20 +4,6 @@
 
 package db
 
-type Member struct {
-	ID        string
-	Name      string
-	CreatedAt string
-}
-
-type Session struct {
-	TokenHash  string
-	MemberID   *string
-	CreatedAt  string
-	LastSeenAt string
-	ExpiresAt  string
-}
-
 type Setting struct {
 	Key   string
 	Value string

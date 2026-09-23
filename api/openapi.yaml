@@ -22,46 +22,6 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-  /setup:
-    get:
-      operationId: getSetup
-      summary: Ist die Instanz eingerichtet?
-      responses:
-        "200":
-          description: Einrichtungsstatus der Instanz.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SetupStatus"
-        default:
-          description: Fehler nach RFC 9457.
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
-    post:
-      operationId: createSetup
-      summary: Passwort und Mitglieder anlegen
-      description: |
-        Nur möglich, solange kein Passwort existiert. Namen werden vor der
-        Längenprüfung getrimmt.
-
-        Mögliche Fehler-code-Werte: already_configured (409), invalid_request (400).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SetupRequest"
-      responses:
-        "204":
-          description: Die Instanz ist eingerichtet.
-        default:
-          description: Fehler nach RFC 9457.
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:
@@ -94,29 +54,3 @@ components:
             - ok
         version:
           type: string
-    SetupStatus:
-      type: object
-      required:
-        - configured
-      properties:
-        configured:
-          type: boolean
-    SetupRequest:
-      type: object
-      required:
-        - password
-        - members
-      properties:
-        password:
-          type: string
-          minLength: 8
-          maxLength: 128
-        members:
-          type: array
-          description: Namen der Haushaltsmitglieder.
-          minItems: 1
-          maxItems: 10
-          items:
-            type: string
-            minLength: 1
-            maxLength: 40

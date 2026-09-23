@@ -71,6 +71,7 @@ func TestRoutingProblems(t *testing.T) {
 		code         string
 	}{
 		{http.MethodGet, "/api/v1/unbekannt", http.StatusNotFound, "not_found"},
+		{http.MethodGet, "/api/v1/setup", http.StatusNotFound, "not_found"},
 		{http.MethodPost, "/api/v1/health", http.StatusMethodNotAllowed, "method_not_allowed"},
 	}
 	h := newHandler(t)

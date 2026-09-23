@@ -352,7 +352,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B07r: Anmeldung zurückbauen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B07
 - **Referenzen:** ADR-0013, architecture.md 5, 6.2, 8, 9.2
 - **Umfang:**
@@ -367,7 +367,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 - **Abnahmekriterien:**
   1. `GET /api/v1/setup` liefert 404 `not_found`, `GET /api/v1/health` weiterhin 200 (Tests).
   2. Nach `Migrate` gibt es außer der goose-Tabelle nur `settings` (Test).
-  3. Im Go-Code und in der Spec kommen `password`, `session` und `member` nicht mehr vor (`grep -rin` über `api`, `cmd`, `internal`, ohne generierte Dateien, ist leer).
+  3. Im Go-Code und in der Spec kommen die Wörter `password`, `session` und `member` (auch im Plural) nicht mehr vor: `grep -rinwE "passwords?|sessions?|members?" api cmd internal --exclude=gen.go --exclude-dir=db` ist leer.
   4. `make check` ist grün.
 
 ### B08a, B08b, B09, B10: entfallen

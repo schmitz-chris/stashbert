@@ -14,10 +14,8 @@ tool (
 
 require (
 	github.com/getkin/kin-openapi v0.142.0
-	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
 	github.com/pressly/goose/v3 v3.28.0
-	golang.org/x/crypto v0.55.0
 	modernc.org/sqlite v1.59.0
 )
 
@@ -34,6 +32,7 @@ require (
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/google/cel-go v0.28.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

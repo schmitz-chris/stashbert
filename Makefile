@@ -20,7 +20,7 @@ test:
 	go test ./...
 
 run:
-	DATA_DIR=./.data COOKIE_SECURE=false go run ./cmd/stashbert
+	DATA_DIR=./.data go run ./cmd/stashbert
 
 build:
 	go build -o bin/stashbert -ldflags "-X main.version=$$(git describe --tags --always --dirty)" ./cmd/stashbert

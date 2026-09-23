@@ -16,7 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := config.Config{Port: 8080, DataDir: "/data", CookieSecure: true, BackupKeep: 14, LogLevel: slog.LevelInfo}
+	want := config.Config{Port: 8080, DataDir: "/data", BackupKeep: 14, LogLevel: slog.LevelInfo}
 	if cfg != want {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
 	}
@@ -24,25 +24,21 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadValues(t *testing.T) {
 	cfg, err := config.Load(env(map[string]string{
-		"PORT":          "65535",
-		"DATA_DIR":      "./.data",
-		"PUBLIC_URL":    "https://stash.example.com/",
-		"COOKIE_SECURE": "false",
-		"OFF_CONTACT":   "stash@example.com",
-		"BACKUP_KEEP":   "365",
-		"LOG_LEVEL":     "debug",
+		"PORT":        "65535",
+		"DATA_DIR":    "./.data",
+		"OFF_CONTACT": "stash@example.com",
+		"BACKUP_KEEP": "365",
+		"LOG_LEVEL":   "debug",
 	}))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	want := config.Config{
-		Port:         65535,
-		DataDir:      "./.data",
-		PublicURL:    "https://stash.example.com/",
-		CookieSecure: false,
-		OFFContact:   "stash@example.com",
-		BackupKeep:   365,
-		LogLevel:     slog.LevelDebug,
+		Port:       65535,
+		DataDir:    "./.data",
+		OFFContact: "stash@example.com",
+		BackupKeep: 365,
+		LogLevel:   slog.LevelDebug,
 	}
 	if cfg != want {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -59,12 +55,6 @@ func TestLoadInvalidValues(t *testing.T) {
 		{"BACKUP_KEEP", "many"},
 		{"LOG_LEVEL", "trace"},
 		{"LOG_LEVEL", "INFO"},
-		{"COOKIE_SECURE", "yes"},
-		{"PUBLIC_URL", "stash.example.com"},
-		{"PUBLIC_URL", "ftp://stash.example.com"},
-		{"PUBLIC_URL", "https://"},
-		{"PUBLIC_URL", "https://stash.example.com/app"},
-		{"PUBLIC_URL", "https://stash example.com"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key+"="+tt.value, func(t *testing.T) {
