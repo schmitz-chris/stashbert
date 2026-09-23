@@ -4,6 +4,52 @@
 
 package db
 
+type Barcode struct {
+	Code      string
+	ProductID string
+	Units     int64
+	CreatedAt string
+}
+
+type Lookup struct {
+	Code      string
+	Source    string
+	Found     int64
+	Payload   *string
+	FetchedAt string
+}
+
+type Movement struct {
+	ID             string
+	ProductID      string
+	Kind           string
+	Delta          int64
+	StockAfter     int64
+	Barcode        *string
+	ReversesID     *string
+	IdempotencyKey *string
+	RequestHash    *string
+	CreatedAt      string
+}
+
+type Product struct {
+	ID             string
+	Name           string
+	Brand          *string
+	PackageSize    *string
+	Stock          int64
+	Target         int64
+	MinStock       *int64
+	Note           *string
+	Origin         string
+	LookupState    string
+	NeedsReview    int64
+	ImageSourceUrl *string
+	ImageFile      *string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
 type Setting struct {
 	Key   string
 	Value string

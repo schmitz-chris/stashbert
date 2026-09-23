@@ -129,8 +129,8 @@ func TestPragmasOnEveryConnection(t *testing.T) {
 	}
 }
 
-// TestMigratedTables checks that Migrate creates only the goose table and
-// settings, and that settings is STRICT.
+// TestMigratedTables checks that Migrate creates exactly the goose table and
+// the tables of architecture.md 5, and that all of the latter are STRICT.
 func TestMigratedTables(t *testing.T) {
 	ctx := testContext(t)
 	db := openMigratedDB(t, ctx)
@@ -156,11 +156,14 @@ func TestMigratedTables(t *testing.T) {
 		t.Fatalf("read table_list: %v", err)
 	}
 
-	if got, want := slices.Sorted(maps.Keys(strict)), []string{"goose_db_version", "settings"}; !slices.Equal(got, want) {
+	want := []string{"barcodes", "goose_db_version", "lookups", "movements", "products", "settings"}
+	if got := slices.Sorted(maps.Keys(strict)); !slices.Equal(got, want) {
 		t.Errorf("tables = %v, want %v", got, want)
 	}
-	if !strict["settings"] {
-		t.Error("table settings is not STRICT")
+	for _, name := range want {
+		if name != "goose_db_version" && !strict[name] {
+			t.Errorf("table %s is not STRICT", name)
+		}
 	}
 }
 

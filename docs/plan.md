@@ -376,7 +376,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B11: Schema für Produkte, Barcodes, Buchungen und Cache
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B05
 - **Referenzen:** architecture.md 5 (Tabellen und Formel `missing`)
 - **Umfang:**
