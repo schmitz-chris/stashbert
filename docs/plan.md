@@ -658,7 +658,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
     - Nur `https` und erlaubte Hosts; sonst `image_source_url = NULL`.
     - Timeout 30 s. Status 200 und ein erlaubter Content-Type sind Pflicht, maximal 2 MB.
     - Die Datei wird über eine temporäre Datei plus `rename` als `DATA_DIR/images/<id>.<jpg|png|webp>` geschrieben; danach `image_file` setzen.
-    - Bei 404, falschem Typ oder zu groß: `image_source_url = NULL`. Andere Fehler: im nächsten Lauf erneut versuchen.
+    - Bei 4xx außer 408 und 429 (z. B. 403, 404, 410), falschem Typ, leerem Body oder zu groß: `image_source_url = NULL`. Andere Fehler (Netz, 408, 429, 5xx): im nächsten Lauf erneut versuchen.
   - `main` startet den Job mit 60 s Intervall.
 - **Nicht im Umfang:** Endpunkt, Löschen, Bilder verkleinern.
 - **Abnahmekriterien (Tests mit `httptest` und Test-Allowlist):**

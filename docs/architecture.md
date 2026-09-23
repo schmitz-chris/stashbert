@@ -369,7 +369,8 @@ Danach wird mit `target = 0` gebucht.
 - **Bilder:**
   - Für Produkte mit `image_source_url` und ohne `image_file` wird das Bild geladen.
   - Nur von `images.openfoodfacts.org`, `images.openbeautyfacts.org`, `images.openpetfoodfacts.org` und `images.openproductsfacts.org`.
-  - Höchstens 2 MB, Typen `image/jpeg`, `image/png` oder `image/webp`.
+  - Höchstens 2 MB, Typen `image/jpeg`, `image/png` oder `image/webp`. Auch Redirect-Ziele müssen erlaubte Hosts sein.
+  - Dauerhafte Fehler (4xx außer 408 und 429, falscher Typ, leer oder zu groß) setzen `image_source_url = NULL`; vorübergehende werden im nächsten Lauf wiederholt.
   - Ablage unter `DATA_DIR/images/<product_id>.<ext>`. Nie im Scan-Pfad.
 - **Backup:** siehe 9.3.
 

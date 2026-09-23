@@ -356,6 +356,9 @@ func TestImagesRejectAnswer(t *testing.T) {
 		handle http.HandlerFunc
 	}{
 		{"not found", func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }},
+		{"forbidden", func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusForbidden) }},
+		{"gone", func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusGone) }},
+		{"empty body", func(w http.ResponseWriter, _ *http.Request) { serveImage(w, "image/jpeg", nil, true) }},
 		{"html", func(w http.ResponseWriter, _ *http.Request) {
 			serveImage(w, "text/html; charset=utf-8", []byte("<html></html>"), true)
 		}},
@@ -407,9 +410,9 @@ func TestImagesTemporaryError(t *testing.T) {
 		{"unavailable", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "later", http.StatusServiceUnavailable)
 		}, "status 503"},
-		{"forbidden", func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "no", http.StatusForbidden)
-		}, "status 403"},
+		{"too many requests", func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "later", http.StatusTooManyRequests)
+		}, "status 429"},
 		{"connection closed", func(w http.ResponseWriter, _ *http.Request) {
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err == nil {

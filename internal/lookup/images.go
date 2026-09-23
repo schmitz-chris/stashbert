@@ -200,12 +200,14 @@ func (f *ImageFetcher) download(ctx context.Context, src string) ([]byte, string
 	}
 	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusNotFound:
-		return nil, "", fmt.Errorf("%w: status %d", errImageRejected, resp.StatusCode)
+	switch code := resp.StatusCode; {
+	case code == http.StatusOK:
+	case code == http.StatusRequestTimeout, code == http.StatusTooManyRequests, code >= 500:
+		return nil, "", fmt.Errorf("status %d", code)
 	default:
-		return nil, "", fmt.Errorf("status %d", resp.StatusCode)
+		// Other client errors such as 403, 404 or 410 do not go away by
+		// trying again.
+		return nil, "", fmt.Errorf("%w: status %d", errImageRejected, code)
 	}
 	contentType := resp.Header.Get("Content-Type")
 	ext, ok := imageExtension(contentType)
@@ -221,6 +223,9 @@ func (f *ImageFetcher) download(ctx context.Context, src string) ([]byte, string
 	}
 	if len(data) > maxImageBytes {
 		return nil, "", fmt.Errorf("%w: more than %d bytes", errImageRejected, maxImageBytes)
+	}
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("%w: empty body", errImageRejected)
 	}
 	return data, ext, nil
 }
