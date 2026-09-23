@@ -295,6 +295,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - `needs_review`, `origin`, `lookup_state`, `has_image`
   - `barcodes: Barcode[]`, `created_at`, `updated_at`
 - **Barcode:** `code`, `units`
+- **Leere Texte:** `brand`, `package_size` und `note` werden getrimmt; ist das Ergebnis leer, wird `NULL` gespeichert (bei Anlegen und Ändern).
 - **ProductCreate:** `name` (Pflicht), `brand?`, `package_size?`, `target?` (Standard 0), `min_stock?`, `note?`, `barcodes?: [{code, units?}]`
 - **ProductPatch (JSON Merge Patch):**
   - Felder: `name`, `brand`, `package_size`, `target`, `min_stock`, `note`.
