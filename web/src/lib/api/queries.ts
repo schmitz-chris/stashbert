@@ -3,6 +3,7 @@ import {
   queryOptions,
   type QueryClient,
 } from "@tanstack/react-query";
+import type { ProductPatch } from "../productForm";
 import { replaceProduct, sortByName } from "../products";
 import { api, problemCode } from "./client";
 
@@ -55,6 +56,83 @@ export function productMovementMutation(queryClient: QueryClient) {
       if (problemCode(error) === "stock_already_zero") {
         void queryClient.invalidateQueries({ queryKey: productListQuery.queryKey });
       }
+    },
+  });
+}
+
+/**
+ * One product by id. A missing product (404 not_found) is not retried, so
+ * the view shows it at once.
+ */
+export function productQuery(id: string) {
+  return queryOptions({
+    queryKey: ["products", id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/products/{id}", {
+        params: { path: { id } },
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`GET /products/${id}: status ${response.status}`);
+      }
+      return data;
+    },
+    retry: (failureCount, error) =>
+      problemCode(error) !== "not_found" && failureCount < 3,
+  });
+}
+
+/** A change of the product with id, as a JSON Merge Patch. */
+export interface ProductUpdate {
+  id: string;
+  patch: ProductPatch;
+}
+
+/**
+ * Changes a product with PATCH /products/{id}. A failed change throws the
+ * Problem Details of the response. On success the product from the
+ * response replaces the cached product and its entry in the product list.
+ */
+export function productUpdateMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ id, patch }: ProductUpdate) => {
+      const { data, error, response } = await api.PATCH("/products/{id}", {
+        params: { path: { id } },
+        body: patch,
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`PATCH /products/${id}: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (product) => {
+      queryClient.setQueryData(productQuery(product.id).queryKey, product);
+      queryClient.setQueryData(productListQuery.queryKey, (products) =>
+        replaceProduct(products, product),
+      );
+    },
+  });
+}
+
+/**
+ * Deletes the product with the given id with DELETE /products/{id}. A
+ * failed deletion throws the Problem Details of the response. On success
+ * the product is removed from the cached product list.
+ */
+export function productDeleteMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (id: string) => {
+      const { error, response } = await api.DELETE("/products/{id}", {
+        params: { path: { id } },
+      });
+      if (!response.ok) {
+        throw error ?? new Error(`DELETE /products/${id}: status ${response.status}`);
+      }
+      return id;
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData(productListQuery.queryKey, (products) =>
+        products?.filter((product) => product.id !== id),
+      );
     },
   });
 }

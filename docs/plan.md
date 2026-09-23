@@ -904,7 +904,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F06a: Produktdetail: Formular, Löschen, Quellenhinweis
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F05
 - **Referenzen:** architecture.md 6.2, 6.5
 - **Umfang:**
