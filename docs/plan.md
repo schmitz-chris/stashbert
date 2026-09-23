@@ -734,7 +734,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B26: Einkaufsliste
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B13a
 - **Referenzen:** architecture.md 6.2 (`getShoppingList`), 6.5 (`ShoppingItem`), 5 (`missing`)
 - **Umfang:** Spec und Handler: alle Produkte mit `missing > 0`, sortiert nach `name COLLATE NOCASE`. `missing` wird mit `domain.Missing` berechnet.

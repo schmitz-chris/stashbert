@@ -1,6 +1,8 @@
 // Package domain contains the business rules of StashBert.
 package domain
 
+import "github.com/schmitz-chris/stashbert/internal/store/db"
+
 // Missing returns how many units of a product have to be bought
 // (architecture.md, 5). Nothing is missing if target is 0 or if stock has not
 // fallen below the threshold, which is minStock or, if that is nil, target.
@@ -17,4 +19,35 @@ func Missing(stock, target int64, minStock *int64) int64 {
 		return 0
 	}
 	return target - stock
+}
+
+// ShoppingItem is a product on the shopping list (architecture.md, 6.5).
+type ShoppingItem struct {
+	ProductID string
+	Name      string
+	Brand     *string
+	Missing   int64
+	Stock     int64
+	Target    int64
+}
+
+// ShoppingListFromDB returns the stored products of which something is
+// missing (architecture.md, 5), computed with Missing, and keeps their order.
+func ShoppingListFromDB(products []db.Product) []ShoppingItem {
+	var items []ShoppingItem
+	for _, p := range products {
+		missing := Missing(p.Stock, p.Target, p.MinStock)
+		if missing <= 0 {
+			continue
+		}
+		items = append(items, ShoppingItem{
+			ProductID: p.ID,
+			Name:      p.Name,
+			Brand:     p.Brand,
+			Missing:   missing,
+			Stock:     p.Stock,
+			Target:    p.Target,
+		})
+	}
+	return items
 }
