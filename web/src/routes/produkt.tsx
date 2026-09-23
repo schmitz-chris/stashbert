@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState, type ChangeEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Dialog } from "../components/Dialog";
 import { MergeSection } from "../components/MergeSection";
 import { MovementHistory } from "../components/MovementHistory";
@@ -30,6 +30,10 @@ const sourceText = "Daten und Bild: Open Food Facts (ODbL / CC BY-SA 3.0)";
 export function ProductPage() {
   const { id = "" } = useParams();
   const product = useQuery(productQuery(id));
+  const navigate = useNavigate();
+  // The first location of a visit has the key "default". Only then is there
+  // no page of the app to go back to (reload, start of the installed app).
+  const canGoBack = useLocation().key !== "default";
 
   let content = <p className="mt-4 text-stone-500">Produkt wird geladen …</p>;
   if (product.data !== undefined) {
@@ -65,6 +69,13 @@ export function ProductPage() {
     <main className="px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
       <Link
         to="/vorrat"
+        onClick={(event) => {
+          // Back to where the product was opened, e.g. Einkauf or Scan.
+          if (canGoBack) {
+            event.preventDefault();
+            void navigate(-1);
+          }
+        }}
         className="-ml-2 inline-flex min-h-11 items-center px-2 font-medium text-emerald-700"
       >
         <span aria-hidden="true">‹&nbsp;</span>Zurück
