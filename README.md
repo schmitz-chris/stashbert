@@ -32,7 +32,7 @@ Umsetzung von M1 läuft. Der Stand jedes Tasks steht in [docs/plan.md](docs/plan
 | Backend | Go 1.27, Standardbibliothek `net/http` |
 | API | REST/JSON, OpenAPI 3.1 contract-first, Servercode mit oapi-codegen |
 | Datenbank | SQLite (modernc, ohne cgo), sqlc, goose |
-| Frontend | SPA mit TypeScript, Vite, Tailwind CSS 4; Svelte oder React per A/B-Vergleich |
+| Frontend | SPA mit React 19, TypeScript, Vite, Tailwind CSS 4 |
 | Barcode | `barcode-detector` (Ponyfill) mit zxing-wasm, selbst gehostet |
 | Betrieb | ein Binary bzw. Container, ein HTTP-Port; TLS über den eigenen Reverse Proxy |
 | Später | MQTT/Home Assistant, Bring!, ESP32 |

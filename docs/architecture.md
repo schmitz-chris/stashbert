@@ -92,7 +92,7 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
 
 ### 4.2 Web-Oberfläche
 
-- Statische SPA in `web/`, TypeScript, Vite, Tailwind CSS 4. Das Framework wird per A/B-Vergleich in Phase 0 festgelegt (ADR-0007).
+- Statische SPA in `web/`: React 19, TypeScript, Vite, Tailwind CSS 4, React Router 7 und TanStack Query 5 (ADR-0007).
 - API-Zugriff nur über den aus `api/openapi.yaml` generierten Client (`openapi-typescript` + `openapi-fetch`).
 - Das Build-Ergebnis `web/dist` wird von `make build` nach `internal/webui/dist/` kopiert und von dort ins Go-Binary eingebettet (`//go:embed all:dist`). Im Repository liegt dort nur `.gitkeep`. Fehlt der Build, liefert `/` eine kurze Textseite „Web-Oberfläche nicht gebaut".
 - Ansichten in M1:
@@ -110,7 +110,7 @@ Festgelegt in ADR-0008:
 - Das WASM (zxing-wasm) wird selbst gehostet und vom Service Worker vorab gecacht.
 - Formate: `ean_13`, `ean_8`, `upc_a`. UPC-E wird nicht unterstützt (7.1).
 - Der Kamera-Stream bleibt offen, solange die Scanner-Ansicht offen ist. Bei `visibilitychange` auf `hidden` werden die Tracks gestoppt.
-- Derselbe Code wird innerhalb von 2 s nur einmal verarbeitet.
+- Derselbe Code wird nur einmal verarbeitet, solange er im Bild bleibt; erst nach 2 s ohne ihn zählt er wieder (gleitendes Fenster).
 - Rückmeldung: farbige Fläche und Ton über Web Audio. `navigator.audioSession.type = "playback"` wird gesetzt, falls verfügbar.
 
 ### 4.4 Handler-Kette und Fehler-Muster
@@ -380,7 +380,7 @@ Danach wird mit `target = 0` gebucht.
 - **Keine Anmeldung in M1** (ADR-0013). Wer die Web-Oberfläche oder die API erreicht, darf alles. Schutz bietet allein das Netz: nur im Heimnetz erreichbar, später von unterwegs nur per VPN.
 - **Schutz vor fremden Webseiten:** keine CORS-Header, Bodies nur als `application/json`. Damit können Webseiten, die jemand im Heimnetz aufruft, keine Buchungen auslösen.
 - **Nachrüsten:** Eine Anmeldung lässt sich später ohne Änderung der Endpunkte ergänzen, entweder vorgelagert am Reverse Proxy (Forward-Auth) oder per OIDC in StashBert.
-- **Sicherheits-Header** für alle Antworten der Web-Oberfläche. Inline-Skripte in `index.html` (SvelteKit erzeugt welche) werden erlaubt, indem `internal/webui` beim Start den SHA-256 jedes Inline-`<script>` der eingebetteten `index.html` berechnet und als `'sha256-…'` an `script-src` anhängt. `'unsafe-inline'` für Skripte ist nicht erlaubt.
+- **Sicherheits-Header** für alle Antworten der Web-Oberfläche. Inline-Skripte in `index.html` (Vite erzeugt keine, die Regel sichert spätere Änderungen ab) werden erlaubt, indem `internal/webui` beim Start den SHA-256 jedes Inline-`<script>` der eingebetteten `index.html` berechnet und als `'sha256-…'` an `script-src` anhängt. `'unsafe-inline'` für Skripte ist nicht erlaubt.
   - `Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; script-src 'self' 'wasm-unsafe-eval' <Hashes der Inline-Skripte>; style-src 'self' 'unsafe-inline'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'`
   - `X-Content-Type-Options: nosniff`
   - `Referrer-Policy: same-origin`

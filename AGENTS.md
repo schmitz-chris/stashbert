@@ -77,7 +77,7 @@ Diese Befehle gibt es ab Task P0-1:
 | SQL-Code | sqlc v1.31.1 als Go-Tool: `go tool sqlc` |
 | Migrationen | goose v3 (v3.28.0), eingebettet |
 | Logging | `log/slog`, JSON auf stdout |
-| Frontend | TypeScript, Vite, Tailwind CSS 4 (CSS-first, **keine** `tailwind.config.js`). Framework nach ADR-0007; bis zur Entscheidung keine Framework-Annahmen im Hauptprojekt |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4 (CSS-first, **keine** `tailwind.config.js`). Details im Abschnitt „Frontend-Regeln" (ADR-0007) |
 | API-Client (Frontend) | `openapi-typescript` + `openapi-fetch` |
 | Barcode (Frontend) | `barcode-detector` v3, Import **nur** `barcode-detector/ponyfill`; WASM selbst gehostet |
 
@@ -96,15 +96,11 @@ Diese Befehle gibt es ab Task P0-1:
 - `github.com/google/uuid`
 - `golang.org/x/time` (nur `rate`)
 
-**Frontend (npm):**
+**Frontend (npm), abschließende Liste (ADR-0007):**
 
-- `vite`, `typescript`
-- `tailwindcss` mit `@tailwindcss/vite`
-- `openapi-typescript`, `openapi-fetch`
-- `barcode-detector` (bringt `zxing-wasm` als eigene, gepinnte Abhängigkeit mit; `zxing-wasm` **nicht** direkt installieren)
-- `vite-plugin-pwa` bzw. die in P0-6 festgelegte offizielle PWA-Integration des Frameworks (bei SvelteKit `@vite-pwa/sveltekit`)
-- das Framework nach ADR-0007 mit seinen offiziellen Vite-Plugins
-- die im jeweiligen Task genannten Test- und Lint-Werkzeuge
+- Laufzeit: `react`, `react-dom`, `react-router` (Hauptversion **7**, nicht 8), `@tanstack/react-query` (5), `openapi-fetch`, `barcode-detector` (bringt `zxing-wasm` als eigene, gepinnte Abhängigkeit mit; `zxing-wasm` **nicht** direkt installieren)
+- Build: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`, `tailwindcss`, `@tailwindcss/vite`, `openapi-typescript`, `vite-plugin-pwa` (samt der Peer-Abhängigkeiten, die npm dafür selbst installiert)
+- Test und Lint: `vitest`, `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `globals` (die Lint-Pakete der Vite-Vorlage `react-ts`)
 
 Alles andere braucht einen ausdrücklichen Task oder ein ADR.
 
@@ -158,6 +154,59 @@ docs/                          Architektur, ADRs, Plan, Recherche
 - Logik, die testbar sein soll (Filter, Zuordnungen, Reducer), steht in reinen Funktionen außerhalb der Komponenten.
 - API-Zugriff nur über den generierten Client, kein direktes `fetch` auf `/api`.
 - Mobile first, Touch-Ziele mindestens 44 × 44 px.
+
+## Frontend-Regeln (React)
+
+Gilt für alles in `web/`. Festgelegt in ADR-0007.
+
+**Aufbau:**
+
+```
+web/src/main.tsx               Einstieg: QueryClientProvider und RouterProvider
+web/src/router.tsx             Routentabelle (createBrowserRouter), exportiert auch `routes`
+web/src/routes/<ansicht>.tsx   eine Datei pro Ansicht (vorrat, scan, einkauf, produkt)
+web/src/components/            wiederverwendbare Komponenten (z. B. Dialog, Navigationsleiste)
+web/src/lib/api/               generierter Client (schema.d.ts), client.ts, queries.ts
+web/src/lib/scanner/           framework-unabhängiges Scanner-Modul (aus poc/scanner-react)
+web/src/lib/*.ts               reine Funktionen mit *.test.ts daneben
+```
+
+**React:**
+
+- Nur Funktionskomponenten und Hooks. Keine Klassenkomponenten.
+- `useEffect` nur zum Abgleich mit Systemen außerhalb von React (Kamera, Timer, Event-Listener), immer mit Aufräumfunktion. Abgeleitete Werte werden beim Rendern berechnet, nicht per Effekt in State kopiert.
+- Kein vorsorgliches `useMemo`/`useCallback`; nur, wo ein Hook oder eine Messung es verlangt.
+- Zustand lokal mit `useState` oder `useReducer` (Reducer als reine Funktion in `lib/`). Keine globale Zustandsbibliothek; geteilte Serverdaten liegen im Query-Cache.
+- TypeScript strict, kein `any`, keine `@ts-ignore`.
+
+**Routing (React Router 7):**
+
+- Imports nur aus `react-router`, nie aus `react-router-dom`.
+- Data-Modus: `createBrowserRouter` und `RouterProvider`. Keine `loader`, keine `action`, kein Framework-Modus, keine dateibasierte Routenerzeugung.
+- Navigation mit `<Link>`, `<NavLink>` und `useNavigate`, Pfadparameter mit `useParams`.
+
+**Daten (TanStack Query 5):**
+
+- Lesen mit `useQuery`, Schreiben mit `useMutation`; beide rufen ausschließlich den generierten Client `api` aus `lib/api/client.ts` auf.
+- Query-Keys und Query-Optionen stehen zentral in `lib/api/queries.ts`.
+- Nach einer Mutation wird der Cache aus der Antwort aktualisiert (`setQueryData`), wenn die Antwort das Objekt enthält, sonst per `invalidateQueries`.
+- Fehler als Problem Details: `problemCode(error)` aus `lib/api/client.ts` auswerten, keine Texte aus `detail` parsen.
+
+**Oberfläche:**
+
+- Keine Komponentenbibliothek. Tailwind-Klassen direkt im JSX.
+- Dialoge mit dem nativen `<dialog>` (`showModal()`), gekapselt in `components/Dialog.tsx`. Nie `window.confirm`, `alert` oder `prompt`.
+- Safe-Area-Abstände über `env(safe-area-inset-*)`.
+
+**Kamera** (bewährt im Test auf iPhone 15 und 16 Pro):
+
+- Standard ist die Standard-Rückkamera (`facingMode: "environment"`, ideal 1280 × 720), keine automatische Objektivwahl. Sie reicht auch auf dem 16 Pro aus der Nähe.
+- Eine manuell gewählte Kamera wird in `localStorage` gespeichert. Licht und Zoom nur anzeigen, wenn das Gerät sie kann.
+
+**Tests und Lint:**
+
+- Vitest für reine Funktionen (`*.test.ts`). Keine Komponententests in M1.
+- ESLint mit der Flat-Konfiguration der Vite-Vorlage; die Regeln von `eslint-plugin-react-hooks` sind Fehler, nicht Warnungen.
 
 **Sprache und Stil:**
 

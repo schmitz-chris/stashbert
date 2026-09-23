@@ -54,7 +54,7 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
 
 ### P0-1: Repository-Grundgerüst
 
-- **Status:** wartet auf Nutzer
+- **Status:** erledigt
 - **Abhängig von:** keine
 - **Referenzen:** AGENTS.md (Befehle, Struktur), ADR-0002
 - **Umfang:**
@@ -161,7 +161,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### P0-5: Test auf den iPhones
 
-- **Status:** offen
+- **Status:** erledigt (verkürzt: Rückmeldung des Nutzers statt vollständigem Protokoll, siehe `docs/poc/p0-protokoll.md` 8.2)
 - **Wer:** Nutzer
 - **Abhängig von:** P0-4
 - **Umfang:** Die Tests aus `docs/poc/p0-protokoll.md` durchführen und das Protokoll ausfüllen.
@@ -169,7 +169,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### P0-6: Frontend-Entscheidung festhalten
 
-- **Status:** offen
+- **Status:** erledigt (React)
 - **Wer:** Agent mit Nutzer
 - **Abhängig von:** P0-5
 - **Referenzen:** ADR-0007, `docs/poc/p0-protokoll.md`, architecture.md 8 (CSP)
@@ -812,7 +812,14 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ## Phase 1b: Frontend
 
-Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Gemeinsame Regeln: AGENTS.md (Abschnitte Frontend und Frontend-Regeln).
+Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Frontend und Frontend-Regeln).
+
+**React-Angaben aus P0-6** (gelten für alle F-Tasks):
+
+- Framework: React 19 mit Vite, angelegt mit `npm create vite@latest web -- --template react-ts`.
+- Ordner und Dateien nach AGENTS.md, Frontend-Regeln: Routentabelle in `web/src/router.tsx`, Ansichten in `web/src/routes/`, reine Funktionen in `web/src/lib/`.
+- Router React Router 7 im Data-Modus, Daten mit TanStack Query 5, keine Komponentenbibliothek, Dialoge mit `<dialog>`.
+- Vite legt Assets unter `/assets/` ab und erzeugt keine Inline-Skripte; `internal/webui` (B29) braucht keine Anpassung.
 
 ### F01: Frontend-Projekt anlegen
 
@@ -820,12 +827,12 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Abhängig von:** P0-6, B29
 - **Referenzen:** ADR-0007, AGENTS.md, architecture.md 8 (CSP)
 - **Umfang:**
-  - **Projekt in `web/`** mit dem offiziellen Anlege-Werkzeug des gewählten Frameworks (Details aus P0-6): TypeScript strict, Tailwind CSS 4 über `@tailwindcss/vite`, Vitest und die Lint-Einrichtung der offiziellen Vorlage.
-  - **npm-Skripte:** `dev`, `build` (Ausgabe `web/dist`), `check` (Typprüfung), `lint`, `test`.
+  - **Projekt in `web/`** mit `npm create vite@latest web -- --template react-ts` (Vorlage behalten, auch ihre ESLint-Konfiguration; die Regeln von `eslint-plugin-react-hooks` auf Fehler stellen): TypeScript strict, Tailwind CSS 4 über `@tailwindcss/vite`, Vitest.
+  - **npm-Skripte:** `dev`, `build` (Ausgabe `web/dist`), `check` (`tsc -b`), `lint` (`eslint .`), `test` (`vitest run`).
   - **Vite-Dev-Proxy:** `/api` wird an `http://localhost:8080` weitergeleitet.
   - **`make check`** ruft zusätzlich `npm ci`, `npm run check`, `npm run lint` und `npm test` in `web/` auf, sofern `web/package.json` existiert.
   - **CI:** Node 24 mit `actions/setup-node` einrichten (Version vorher nachschlagen). Reihenfolge: `setup-node`, `make check` (enthält `npm ci`), danach die Generierungsprüfung.
-  - **Nur falls P0-6 andere Asset-Pfade als `/assets/` oder `/_app/immutable/` festgehalten hat:** die Cache-Pfade in `internal/webui` ergänzen. Die CSP-Hashes erledigt B29 bereits.
+  - `internal/webui` bleibt unverändert: Vite nutzt `/assets/`, und die CSP-Hashes erledigt B29.
 - **Nicht im Umfang:** Ansichten, API-Client.
 - **Abnahmekriterien:**
   1. `make build` erzeugt ein Binary, das unter `/` die Startseite der Vorlage ausliefert.
@@ -860,11 +867,12 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
     - `/` leitet auf `/vorrat` weiter
     - `/vorrat`, `/scan`, `/einkauf`
     - `/produkt/:id`
-  - Untere Navigationsleiste mit Vorrat, Scan (mittig, größer) und Einkauf, nur auf den ersten drei Routen. Safe-Area-Abstände für das iPhone.
-  - Alle Ansichten sind Platzhalter mit Überschrift.
+  - **React:** Routentabelle als exportiertes Array `routes` in `web/src/router.tsx`, daraus `createBrowserRouter(routes)`. Die Weiterleitung mit `<Navigate to="/vorrat" replace />`. Eine Layout-Route mit `<Outlet />` trägt die Navigationsleiste. `main.tsx` setzt `QueryClientProvider` und `RouterProvider`.
+  - Untere Navigationsleiste mit Vorrat, Scan (mittig, größer) und Einkauf (`NavLink`), nur auf den ersten drei Routen. Safe-Area-Abstände für das iPhone.
+  - Alle Ansichten sind Platzhalter mit Überschrift, je eine Datei in `web/src/routes/`.
 - **Nicht im Umfang:** Inhalte der Ansichten, Anmeldung (ADR-0013).
 - **Abnahmekriterien:**
-  1. Ein Vitest-Test prüft die Zuordnung von Pfad zu Ansicht (reine Funktion oder Router-Konfiguration).
+  1. Ein Vitest-Test prüft die Zuordnung von Pfad zu Ansicht mit `matchRoutes(routes, pfad)` aus `react-router`.
   2. `make check` ist grün.
 
 ### F04: entfällt
@@ -944,7 +952,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Status:** offen
 - **Abhängig von:** F01
 - **Referenzen:** ADR-0008, architecture.md 4.3, `docs/poc/p0-protokoll.md`, Code der gewählten POC-Variante
-- **Umfang:** framework-unabhängiges TypeScript in `web/src/lib/scanner/`, übernommen aus der gewählten POC-Variante:
+- **Umfang:** framework-unabhängiges TypeScript in `web/src/lib/scanner/`, übernommen aus `poc/scanner-react/src/scanner/` (dort schon mit Tonmustern und gleitendem Fenster):
   - `camera.ts`: Start und Stopp, Gerätewahl (gespeichert), Licht, Zoom.
   - `decoder.ts`: Ponyfill, Formate `ean_13`, `ean_8`, `upc_a`, und `prepareZXingModule` mit `locateFile` auf `/zxing_reader.wasm`. Der Aufruf erfolgt beim Laden des Moduls, **vor** dem ersten `new BarcodeDetector()`.
   - `loop.ts`: Leseschleife mit Streifen und höchstens einem laufenden Decode.
@@ -1069,7 +1077,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Abhängig von:** F12, F07, F13a
 - **Referenzen:** research.md 7.5, architecture.md 4.3
 - **Umfang:**
-  - **Service Worker** mit `vite-plugin-pwa` bzw. der in P0-6 festgelegten Integration (bei SvelteKit `@vite-pwa/sveltekit`), Strategie `generateSW`:
+  - **Service Worker** mit `vite-plugin-pwa`, Strategie `generateSW`, `registerType: "autoUpdate"` und `injectRegister: "script"` (externe `registerSW.js`, kein Inline-Skript wegen der CSP):
     - Precache aller Build-Dateien inklusive `zxing_reader.wasm` (in `globPatterns` enthalten; das Standardlimit von 2 MiB reicht).
     - `navigateFallbackDenylist: [/^\/api\//]`. `/api/` wird nie gecacht.
   - **Manifest:** Name und Kurzname „StashBert", `display: standalone`, `start_url: /`, `scope: /`, `theme_color: #15803d`, Icons aus F13a.

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Stand | 23.09.2026 |
-| Status | Vorlage aus P0-4, auszufüllen in P0-5 |
+| Status | verkürzt ausgefüllt in P0-5, Ergebnis in 8.2 |
 | Varianten | S: `poc/scanner-svelte/` (Port 8081), R: `poc/scanner-react/` (Port 8082) |
 | Geräte | iPhone 15, iPhone 16 Pro |
 | Grundlagen | [plan.md](../plan.md) (P0-4, P0-5, Spezifikation der Scanner-Testseite), [ADR-0007](../adr/0007-frontend-ab-vergleich.md), [research.md](../research.md) Kapitel 7 und 22 (POC-1 bis POC-3) |
@@ -607,7 +607,7 @@ Je Kriterium 1 bis 5 Punkte, 5 ist am besten. Die Kriterien stammen aus ADR-0007
 
 | Ergebnis | |
 |---|---|
-| Gewählte Variante | |
-| Begründung | |
+| Gewählte Variante | R (React), entschieden vom Nutzer am 23.09.2026 |
+| Begründung | Beide Varianten liefen auf dem iPhone (Standardkamera des 16 Pro reicht aus der Nähe, Kamera-Rückfrage nur einmal). React brauchte keine Nacharbeit bis zum grünen Build und hat das meiste Trainingsmaterial. Der React-Prototyp wurde zusätzlich ans Backend angeschlossen; Rückmeldung des Nutzers: „das Scannen fühlt sich gut an". Die Punktetabelle oben und die Abschnitte 4 bis 7 wurden nicht einzeln ausgefüllt. |
 
 Bei Gleichstand gilt React (ADR-0007).

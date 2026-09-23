@@ -1,6 +1,6 @@
 # ADR-0007: Frontend als SPA, Framework per A/B-Vergleich
 
-- Status: vorgeschlagen (Entscheidung in Plan-Task P0-6)
+- Status: angenommen (React, P0-6)
 - Datum: 2026-09-23
 
 ## Kontext
@@ -23,10 +23,30 @@
   4. Wie fühlt es sich an?
 - **Unentschieden:** Dann gilt React.
 
+## Ergebnis (P0-6)
+
+**Gewählt: Variante R, React 19 mit Vite.**
+
+- **Funktion:** Beide Varianten liefen auf dem iPhone (HTTPS mit selbst signiertem Zertifikat, Standardkamera des 16 Pro reicht auch aus der Nähe, Kamera-Rückfrage nur einmal).
+- **Nacharbeit:** React brauchte keine Korrekturschleife bis zum grünen Build, Svelte eine (Svelte-Autofixer).
+- **Praxis:** Der React-Prototyp wurde zusätzlich ans Backend angeschlossen und bucht per Scan. Der Nutzer hat den Ablauf auf dem iPhone getestet: „das Scannen fühlt sich gut an".
+- **Agenten:** React hat das meiste Trainingsmaterial; das war das Hauptkriterium.
+- Der Nutzer hat sich für React entschieden. Einen detaillierten Vergleich der Erkennung (P0-5) gab es nicht; er war für die Entscheidung nicht nötig.
+
+**Bibliotheken** (exakte Liste in `AGENTS.md`, Abschnitt Frontend-Regeln):
+
+- **Router:** React Router 7 (`react-router`) im Data-Modus mit `createBrowserRouter`, ohne Loader und Actions. Version 8 ist seit Juni 2026 erschienen und für Agenten noch zu neu; 7 wird weiter gepflegt.
+- **Daten:** TanStack Query 5 mit dem generierten `openapi-fetch`-Client.
+- **Komponenten:** keine Komponentenbibliothek. Tailwind direkt und native Elemente (`<dialog>`). Die wenigen Ansichten rechtfertigen den Einrichtungsaufwand von shadcn/ui nicht; das bleibt eine spätere Option.
+- **Tests und Lint:** Vitest für reine Funktionen; ESLint wie in der Vite-Vorlage `react-ts`.
+- **PWA:** `vite-plugin-pwa`.
+- **Nicht gewählt:** TanStack Router (weniger Trainingsmaterial, Codegenerierung für dateibasierte Routen), globale Zustandsbibliotheken (Redux, Zustand), React Compiler (später möglich).
+
 ## Konsequenzen
 
-- Die Frontend-Tasks im Plan sind bis zur Entscheidung framework-neutral formuliert.
-- Nach der Entscheidung wird dieses ADR auf „angenommen" gesetzt. `AGENTS.md` bekommt dann die framework-spezifischen Regeln, z. B. „nur Svelte-5-Runes".
+- `AGENTS.md` enthält die Frontend-Regeln für React und die npm-Liste.
+- Die F-Tasks im Plan nennen React; das Scanner-Modul (F07) wird aus `poc/scanner-react/` übernommen.
+- Vite legt Assets unter `/assets/` ab und erzeugt keine Inline-Skripte. Die Einbettung aus B29 passt ohne Änderung.
 
 ## Alternativen
 
