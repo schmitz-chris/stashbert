@@ -117,6 +117,20 @@ func Finalize(r Result, code string) Result {
 	return r
 }
 
+// Origin returns the origin of an Open Food Facts product type
+// (architecture.md 7.2, step 3). An empty or unknown type is openfoodfacts.
+func Origin(productType string) string {
+	switch productType {
+	case "beauty":
+		return "openbeautyfacts"
+	case "petfood":
+		return "openpetfoodfacts"
+	case "product":
+		return "openproductsfacts"
+	}
+	return "openfoodfacts"
+}
+
 func (c *Client) fetch(ctx context.Context, code string) (Result, error) {
 	u := c.baseURL + "/api/v3.6/product/" + url.PathEscape(code) + "?" + query
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)

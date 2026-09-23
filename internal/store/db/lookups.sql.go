@@ -9,6 +9,20 @@ import (
 	"context"
 )
 
+const firstProductBarcode = `-- name: FirstProductBarcode :one
+SELECT code FROM barcodes
+WHERE product_id = ?
+ORDER BY code
+LIMIT 1
+`
+
+func (q *Queries) FirstProductBarcode(ctx context.Context, productID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, firstProductBarcode, productID)
+	var code string
+	err := row.Scan(&code)
+	return code, err
+}
+
 const getLookup = `-- name: GetLookup :one
 SELECT code, source, found, payload, fetched_at FROM lookups
 WHERE code = ? AND source = ?
@@ -30,6 +44,68 @@ func (q *Queries) GetLookup(ctx context.Context, arg GetLookupParams) (Lookup, e
 		&i.FetchedAt,
 	)
 	return i, err
+}
+
+const listPendingProducts = `-- name: ListPendingProducts :many
+SELECT id FROM products
+WHERE lookup_state = 'pending'
+ORDER BY created_at, id
+LIMIT ?
+`
+
+func (q *Queries) ListPendingProducts(ctx context.Context, limit int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingProducts, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateProductLookup = `-- name: UpdateProductLookup :exec
+UPDATE products
+SET name = ?, brand = ?, package_size = ?, origin = ?, image_source_url = ?,
+    lookup_state = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateProductLookupParams struct {
+	Name           string
+	Brand          *string
+	PackageSize    *string
+	Origin         string
+	ImageSourceUrl *string
+	LookupState    string
+	UpdatedAt      string
+	ID             string
+}
+
+func (q *Queries) UpdateProductLookup(ctx context.Context, arg UpdateProductLookupParams) error {
+	_, err := q.db.ExecContext(ctx, updateProductLookup,
+		arg.Name,
+		arg.Brand,
+		arg.PackageSize,
+		arg.Origin,
+		arg.ImageSourceUrl,
+		arg.LookupState,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
 }
 
 const upsertLookup = `-- name: UpsertLookup :exec

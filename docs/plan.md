@@ -625,7 +625,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B21: Hintergrund-Nachladen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B20
 - **Referenzen:** architecture.md 7.3
 - **Umfang:**

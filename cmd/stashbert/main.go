@@ -65,6 +65,9 @@ func run() error {
 		off = lookup.NewClient("https://world.openfoodfacts.org",
 			"StashBert/"+version+" ("+cfg.OFFContact+")", &http.Client{}, offLimiter)
 	}
+	// Looks up pending products every 60 s with the same client and limiter
+	// (architecture.md, 7.3).
+	go lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second)
 
 	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off})
 	if err != nil {

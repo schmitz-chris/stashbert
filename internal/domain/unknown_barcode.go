@@ -22,9 +22,6 @@ import (
 const warningPlaceholderCreated = "placeholder_created"
 
 const (
-	// lookupSource is the source of the lookups cache; M1 only has Open Food
-	// Facts (architecture.md 5, lookups).
-	lookupSource = "off"
 	// lookupTimeout is the time budget of a lookup while booking (architecture.md, 7.2).
 	lookupTimeout = 2500 * time.Millisecond
 	// lookupCacheAge is the age below which a cached lookup is used (architecture.md, 7.2).
@@ -78,7 +75,7 @@ func lookupProduct(ctx context.Context, sqlDB *sql.DB, lookuper Lookuper, code s
 		return placeholderProduct(code, "pending"), nil
 	}
 	p := productFromLookup(r, code)
-	entry, err := lookupCacheEntry(r, code, time.Now())
+	entry, err := lookup.CacheEntry(r, code, time.Now())
 	if err != nil {
 		return scannedProduct{}, err
 	}
@@ -89,7 +86,7 @@ func lookupProduct(ctx context.Context, sqlDB *sql.DB, lookuper Lookuper, code s
 // cachedLookup returns the cached lookup result of code if it was fetched
 // less than lookupCacheAge before now. A negative entry results in Found false.
 func cachedLookup(ctx context.Context, q *db.Queries, code string, now time.Time) (lookup.Result, bool, error) {
-	row, err := q.GetLookup(ctx, db.GetLookupParams{Code: code, Source: lookupSource})
+	row, err := q.GetLookup(ctx, db.GetLookupParams{Code: code, Source: lookup.CacheSource})
 	if errors.Is(err, sql.ErrNoRows) {
 		return lookup.Result{}, false, nil
 	}
@@ -116,27 +113,6 @@ func cachedLookup(ctx context.Context, q *db.Queries, code string, now time.Time
 	return r, true, nil
 }
 
-// lookupCacheEntry returns the cache entry of the lookup result r of code,
-// fetched at fetchedAt. The payload of a found result is r as JSON; a result
-// that was not found has no payload.
-func lookupCacheEntry(r lookup.Result, code string, fetchedAt time.Time) (db.UpsertLookupParams, error) {
-	entry := db.UpsertLookupParams{
-		Code:      code,
-		Source:    lookupSource,
-		FetchedAt: store.FormatTime(fetchedAt),
-	}
-	if !r.Found {
-		return entry, nil
-	}
-	payload, err := json.Marshal(r)
-	if err != nil {
-		return db.UpsertLookupParams{}, fmt.Errorf("cache lookup of %s: %w", code, err)
-	}
-	entry.Found = 1
-	entry.Payload = new(string(payload))
-	return entry, nil
-}
-
 // productFromLookup returns the product to create from the lookup result r of
 // code (architecture.md 7.2, steps 3 and 4). A result that was not found
 // results in a placeholder with lookup state not_found. A found one is
@@ -151,7 +127,7 @@ func productFromLookup(r lookup.Result, code string) scannedProduct {
 		name:           r.Name,
 		brand:          textOrNil(r.Brand),
 		packageSize:    textOrNil(r.PackageSize),
-		origin:         lookupOrigin(r.ProductType),
+		origin:         lookup.Origin(r.ProductType),
 		lookupState:    "done",
 		imageSourceURL: textOrNil(r.ImageURL),
 	}
@@ -165,20 +141,6 @@ func placeholderProduct(code, lookupState string) scannedProduct {
 		origin:      "placeholder",
 		lookupState: lookupState,
 	}
-}
-
-// lookupOrigin returns the origin of an Open Food Facts product type
-// (architecture.md 7.2, step 3). An empty or unknown type is openfoodfacts.
-func lookupOrigin(productType string) string {
-	switch productType {
-	case "beauty":
-		return "openbeautyfacts"
-	case "petfood":
-		return "openpetfoodfacts"
-	case "product":
-		return "openproductsfacts"
-	}
-	return "openfoodfacts"
 }
 
 // textOrNil returns nil for an empty s and a pointer to s otherwise.
