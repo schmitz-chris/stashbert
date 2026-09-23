@@ -80,7 +80,12 @@ func run() error {
 	// Loads product images every 60 s into DATA_DIR/images
 	// (architecture.md, 7.3).
 	imageDir := filepath.Join(cfg.DataDir, "images")
-	images := lookup.NewImageFetcher(db, &http.Client{}, imageDir, lookup.DefaultImageHosts, logger)
+	// The image servers of Open Food Facts sometimes need more than the
+	// default 10 s for the TLS handshake. The fetcher still limits each image
+	// to 30 s in total.
+	imageTransport := http.DefaultTransport.(*http.Transport).Clone()
+	imageTransport.TLSHandshakeTimeout = 30 * time.Second
+	images := lookup.NewImageFetcher(db, &http.Client{Transport: imageTransport}, imageDir, lookup.DefaultImageHosts, logger)
 	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
 	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
 	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
