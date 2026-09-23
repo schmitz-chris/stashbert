@@ -859,7 +859,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F03: App-Rahmen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F02
 - **Referenzen:** architecture.md 4.2
 - **Umfang:**
