@@ -881,7 +881,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F05: Vorrat
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F03, B16b, B22b
 - **Referenzen:** architecture.md 1, 6.2, 6.3
 - **Umfang:**
