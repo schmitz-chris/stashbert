@@ -747,7 +747,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B27: Spec ausliefern
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B07r
 - **Referenzen:** architecture.md 6.2 (Zusatz unter der Tabelle)
 - **Umfang:**

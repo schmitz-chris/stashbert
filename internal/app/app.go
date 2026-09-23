@@ -9,6 +9,7 @@ import (
 
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
+	apispec "github.com/schmitz-chris/stashbert/api"
 	"github.com/schmitz-chris/stashbert/internal/api"
 	"github.com/schmitz-chris/stashbert/internal/config"
 	"github.com/schmitz-chris/stashbert/internal/domain"
@@ -47,6 +48,8 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 
 // newChain wraps the generated API handler, from outside to inside:
 // Recover, Logging, StripPrefix("/api/v1"), request validator.
+// GET /api/v1/openapi.yaml passes Recover and Logging but bypasses the
+// validator, because the route is not part of the spec (architecture.md, 6.2).
 func newChain(logger *slog.Logger, apiHandler http.Handler) (http.Handler, error) {
 	spec, err := api.GetSpec()
 	if err != nil {
@@ -60,6 +63,16 @@ func newChain(logger *slog.Logger, apiHandler http.Handler) (http.Handler, error
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", validator(apiHandler)))
+	// The more specific pattern wins over /api/v1/ for GET and HEAD; other
+	// methods on this path still reach the validator.
+	mux.HandleFunc("GET /api/v1/openapi.yaml", serveSpec)
 
 	return httpx.Recover(logger, httpx.Logging(logger, mux)), nil
+}
+
+// serveSpec writes the embedded api/openapi.yaml.
+func serveSpec(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml")
+	// The status is already sent, so a failed write cannot be reported to the client.
+	_, _ = w.Write(apispec.OpenAPI)
 }

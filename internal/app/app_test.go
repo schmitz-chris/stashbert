@@ -50,7 +50,8 @@ func newAppWithImages(t *testing.T, pub events.Publisher, imageDir string) (http
 }
 
 // newAppWithDeps returns the handler from app.NewHandler with d and its
-// migrated database in t.TempDir(). It sets Logger, Version and DB of d.
+// migrated database in t.TempDir(). It sets Version and DB of d, and Logger
+// to a discarding logger if d.Logger is nil.
 func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -67,7 +68,10 @@ func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	d.Logger, d.Version, d.DB = slog.New(slog.DiscardHandler), "dev", db
+	if d.Logger == nil {
+		d.Logger = slog.New(slog.DiscardHandler)
+	}
+	d.Version, d.DB = "dev", db
 	h, err := app.NewHandler(cfg, d)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
