@@ -45,7 +45,7 @@ export function ResultCard({
     <section aria-labelledby={nameId} className="rounded-xl bg-white p-3 shadow">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <h2 id={nameId} className="truncate font-semibold">
+          <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
             {view.title}
           </h2>
           {view.review && (
