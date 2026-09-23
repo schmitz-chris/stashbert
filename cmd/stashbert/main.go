@@ -19,6 +19,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/schmitz-chris/stashbert/internal/app"
+	"github.com/schmitz-chris/stashbert/internal/backup"
 	"github.com/schmitz-chris/stashbert/internal/config"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
@@ -49,14 +50,14 @@ func run() error {
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
-	db, err := store.Open(ctx, filepath.Join(cfg.DataDir, "stashbert.db"))
+	// Before pending migrations of an existing database, a copy is written
+	// to DATA_DIR/backups (architecture.md, 9.3).
+	backupDir := filepath.Join(cfg.DataDir, "backups")
+	db, err := app.OpenAndMigrate(ctx, filepath.Join(cfg.DataDir, "stashbert.db"), backupDir, store.Migrations, time.Now())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
-		return err
-	}
 
 	// All requests to Open Food Facts share one limiter: one token every 6 s,
 	// burst 1 (architecture.md, 7.3).
@@ -81,6 +82,9 @@ func run() error {
 	imageDir := filepath.Join(cfg.DataDir, "images")
 	images := lookup.NewImageFetcher(db, &http.Client{}, imageDir, lookup.DefaultImageHosts, logger)
 	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
+	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
+	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
+	jobs.Go(func() { backup.Start(ctx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
 
 	handler, err := app.NewHandler(cfg, app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off, ImageDir: imageDir,

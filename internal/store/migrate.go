@@ -33,3 +33,18 @@ func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	}
 	return nil
 }
+
+// HasPending reports whether Migrate would apply migrations from fsys to db.
+// Like Migrate, it creates the goose version table if db has none. db stays open.
+func HasPending(ctx context.Context, db *sql.DB, fsys fs.FS) (bool, error) {
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, fsys)
+	if err != nil {
+		return false, fmt.Errorf("create migration provider: %w", err)
+	}
+	// provider.Close would close db, which belongs to the caller.
+	pending, err := provider.HasPending(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check pending migrations: %w", err)
+	}
+	return pending, nil
+}

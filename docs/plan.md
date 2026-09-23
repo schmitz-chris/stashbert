@@ -760,7 +760,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B28: Backups
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B04
 - **Referenzen:** architecture.md 9.3, ADR-0005
 - **Umfang:**
