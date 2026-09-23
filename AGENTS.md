@@ -134,7 +134,7 @@ docs/                          Architektur, ADRs, Plan, Recherche
 **Go:**
 
 - Standardbibliothek zuerst.
-- Fehler mit `fmt.Errorf("…: %w", err)` einpacken. Kein `panic` außer in `main` beim Start.
+- Fehler mit `fmt.Errorf("…: %w", err)` einpacken. Kein `panic` außer in `main` beim Start. Einzige Ausnahme: IDs werden überall mit `uuid.Must(uuid.NewV7()).String()` erzeugt (der Zufallsleser von Go liefert keinen Fehler).
 - `context.Context` als erster Parameter bei allem, was I/O macht. Ausnahme: Test-Helfer nehmen `t *testing.T` zuerst.
 - Kein globaler Zustand außer in `main`. Abhängigkeiten werden per Konstruktor übergeben.
 - Zeit immer UTC, gespeichert im festen Format `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). IDs sind UUIDv7 als String in Kleinschreibung.
