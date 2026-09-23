@@ -3,9 +3,12 @@ import type { Movement } from "./movements";
 import type { Product } from "./products";
 import {
   cardDuration,
+  cardView,
   formatStockChange,
   hiddenCard,
   resultCardReducer,
+  targetChoices,
+  type CardBooking,
   type ResultCardAction,
   type ResultCardState,
 } from "./resultCard";
@@ -74,7 +77,7 @@ describe("resultCardReducer", () => {
     expect(cardDuration).toBe(10_000);
     expect(shown).toEqual({
       status: "running",
-      booking: { result: first, kind: "add" },
+      booking: { result: first, kind: "add", merged: false },
       hideAt: 11_000,
     });
   });
@@ -97,7 +100,7 @@ describe("resultCardReducer", () => {
     });
     expect(replaced).toEqual({
       status: "running",
-      booking: { result: second, kind: "consume" },
+      booking: { result: second, kind: "consume", merged: false },
       hideAt: 19_000,
     });
     expect(run(replaced, { type: "tick", now: 11_000 })).toBe(replaced);
@@ -112,7 +115,7 @@ describe("resultCardReducer", () => {
     );
     expect(again).toEqual({
       status: "running",
-      booking: { result: second, kind: "add" },
+      booking: { result: second, kind: "add", merged: false },
       hideAt: 22_000,
     });
   });
@@ -121,7 +124,7 @@ describe("resultCardReducer", () => {
     const paused = run(shown, { type: "pause", now: 4000 });
     expect(paused).toEqual({
       status: "paused",
-      booking: { result: first, kind: "add" },
+      booking: { result: first, kind: "add", merged: false },
       remaining: 7000,
     });
     expect(run(paused, { type: "tick", now: 60_000 })).toBe(paused);
@@ -135,7 +138,7 @@ describe("resultCardReducer", () => {
     );
     expect(resumed).toEqual({
       status: "running",
-      booking: { result: first, kind: "add" },
+      booking: { result: first, kind: "add", merged: false },
       hideAt: 57_000,
     });
     expect(run(resumed, { type: "tick", now: 56_999 })).toBe(resumed);
@@ -163,7 +166,7 @@ describe("resultCardReducer", () => {
     );
     expect(replaced).toEqual({
       status: "running",
-      booking: { result: second, kind: "add" },
+      booking: { result: second, kind: "add", merged: false },
       hideAt: 15_000,
     });
   });
@@ -194,6 +197,187 @@ describe("resultCardReducer", () => {
 
   it("keeps the card of another booking on hide", () => {
     expect(run(shown, { type: "hide", movementId: second.movement.id })).toBe(shown);
+  });
+});
+
+// A booking that created a placeholder, and the product it was merged into.
+const created: MovementResult = {
+  movement: movement({ id: "01a0ce63-0000-7000-8000-000000000003", delta: 1, stock_after: 1 }),
+  product: {
+    ...product,
+    id: "01a0ce63-0000-7000-8000-00000000000a",
+    name: "Neues Produkt 2000000000008",
+    stock: 1,
+    target: 0,
+    missing: 0,
+    needs_review: true,
+    origin: "placeholder",
+    barcodes: [{ code: "2000000000008", units: 1 }],
+  },
+  product_created: true,
+  warnings: ["placeholder_created"],
+  message: "Neu: Neues Produkt 2000000000008 0 → 1",
+};
+const mergeTarget: Product = {
+  ...product,
+  id: "01a0ce63-0000-7000-8000-00000000000b",
+  name: "Nudeln",
+  stock: 7,
+  target: 4,
+};
+
+// The card of the new product, shown at time 1000.
+const shownNew = run(hiddenCard, { type: "show", result: created, kind: "add", now: 1000 });
+
+describe("resultCardReducer with a new product", () => {
+  const changed = { ...created.product, target: 3 };
+
+  it("shows the changed product and keeps the time", () => {
+    const updated = run(shownNew, { type: "update", product: changed }, { type: "tick", now: 10_999 });
+    expect(updated).toEqual({
+      status: "running",
+      booking: { result: { ...created, product: changed }, kind: "add", merged: false },
+      hideAt: 11_000,
+    });
+    expect(run(updated, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
+  });
+
+  it("updates a paused card and keeps it paused", () => {
+    const paused = run(shownNew, { type: "pause", now: 4000 });
+    expect(run(paused, { type: "update", product: changed })).toEqual({
+      status: "paused",
+      booking: { result: { ...created, product: changed }, kind: "add", merged: false },
+      remaining: 7000,
+    });
+  });
+
+  it("ignores an update of another product", () => {
+    expect(run(shownNew, { type: "update", product: mergeTarget })).toBe(shownNew);
+  });
+
+  it("shows the target after a merge, with the booking, and keeps the time", () => {
+    const merged = run(
+      shownNew,
+      { type: "pause", now: 4000 },
+      { type: "merge", sourceId: created.product.id, target: mergeTarget },
+      { type: "resume", now: 20_000 },
+    );
+    expect(merged).toEqual({
+      status: "running",
+      booking: {
+        result: {
+          ...created,
+          movement: { ...created.movement, product_id: mergeTarget.id },
+          product: mergeTarget,
+          product_created: false,
+        },
+        kind: "add",
+        merged: true,
+      },
+      hideAt: 27_000,
+    });
+  });
+
+  it("keeps the booking for [Rückgängig] and books [+1] on the target after a merge", () => {
+    const merged = run(shownNew, {
+      type: "merge",
+      sourceId: created.product.id,
+      target: mergeTarget,
+    });
+    expect(merged).toMatchObject({ status: "running", hideAt: 11_000 });
+    if (merged.status === "hidden") {
+      throw new Error("card hidden");
+    }
+    expect(merged.booking.result.movement.id).toBe(created.movement.id);
+    expect(merged.booking.result.product.id).toBe(mergeTarget.id);
+    expect(run(merged, { type: "hide", movementId: created.movement.id })).toEqual(hiddenCard);
+  });
+
+  it("ignores a merge of another product", () => {
+    expect(run(shownNew, { type: "merge", sourceId: mergeTarget.id, target: product })).toBe(
+      shownNew,
+    );
+  });
+
+  it("ignores update and merge while hidden", () => {
+    expect(run(hiddenCard, { type: "update", product: changed })).toBe(hiddenCard);
+    expect(
+      run(hiddenCard, { type: "merge", sourceId: created.product.id, target: mergeTarget }),
+    ).toBe(hiddenCard);
+  });
+
+  it("shows a new booking unmerged", () => {
+    const merged = run(shownNew, {
+      type: "merge",
+      sourceId: created.product.id,
+      target: mergeTarget,
+    });
+    expect(run(merged, { type: "show", result: first, kind: "add", now: 5000 })).toEqual({
+      status: "running",
+      booking: { result: first, kind: "add", merged: false },
+      hideAt: 15_000,
+    });
+  });
+});
+
+describe("cardView", () => {
+  function booking(result: MovementResult, merged = false): CardBooking {
+    return { result, kind: "add", merged };
+  }
+
+  it("shows the name and the stock change of a known product", () => {
+    expect(cardView(booking(first))).toEqual({
+      title: "Kidneybohnen",
+      stock: "3 → 4",
+      isNew: false,
+      review: false,
+    });
+  });
+
+  it("does not ask to review a known product", () => {
+    const known = { ...first, product: { ...product, needs_review: true } };
+    expect(cardView(booking(known))).toMatchObject({ isNew: false, review: false });
+  });
+
+  it("shows a new product with Neu: and asks to review it", () => {
+    expect(cardView(booking(created))).toEqual({
+      title: "Neu: Neues Produkt 2000000000008",
+      stock: "0 → 1",
+      isNew: true,
+      review: true,
+    });
+  });
+
+  it("does not ask to review a new product without needs_review", () => {
+    const found = { ...created, product: { ...created.product, needs_review: false } };
+    expect(cardView(booking(found))).toMatchObject({
+      title: "Neu: Neues Produkt 2000000000008",
+      isNew: true,
+      review: false,
+    });
+  });
+
+  it("shows the target with its stock after a merge", () => {
+    const merged = run(shownNew, {
+      type: "merge",
+      sourceId: created.product.id,
+      target: mergeTarget,
+    });
+    if (merged.status === "hidden") {
+      throw new Error("card hidden");
+    }
+    expect(cardView(merged.booking)).toEqual({
+      title: "Nudeln",
+      stock: "Bestand: 7",
+      isNew: false,
+      review: false,
+    });
+  });
+});
+
+describe("targetChoices", () => {
+  it("offers 1, 2, 3, 5 and 10", () => {
+    expect(targetChoices).toEqual([1, 2, 3, 5, 10]);
   });
 });
 

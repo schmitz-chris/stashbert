@@ -1019,7 +1019,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F10: Neues Produkt: Soll-Schnellauswahl und Zusammenführen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F09, F06c
 - **Referenzen:** architecture.md 6.3, 6.5 (Merge und `needs_review`)
 - **Umfang:**

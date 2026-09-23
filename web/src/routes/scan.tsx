@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
+import { MergeDialog } from "../components/MergeDialog";
 import { ResultCard } from "../components/ResultCard";
 import { useScanner } from "../hooks/useScanner";
 import {
@@ -9,6 +10,7 @@ import {
   reversalMutation,
   scanMovementMutation,
 } from "../lib/api/queries";
+import type { Product } from "../lib/products";
 import { hiddenCard, resultCardReducer } from "../lib/resultCard";
 import {
   cameraErrorText,
@@ -75,6 +77,8 @@ export function ScanPage() {
   const [soundReady, setSoundReady] = useState(isSoundUnlocked);
   const [shown, setShown] = useState<Shown | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The new product of the card while its merge dialog is open.
+  const [mergeSource, setMergeSource] = useState<Product | null>(null);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
 
   function show(feedback: Feedback) {
@@ -89,8 +93,12 @@ export function ScanPage() {
   }
 
   // Books every accepted code in the mode that is set when it is read.
+  // While the merge dialog lies over the camera, codes are ignored.
   const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
     useScanner((code) => {
+      if (mergeSource !== null) {
+        return;
+      }
       const kind = mode;
       book({ barcode: code, kind }).then(
         (result) => showBooking(result, kind),
@@ -115,6 +123,25 @@ export function ScanPage() {
       },
       (error: unknown) => show(undoFeedbackFor({ ok: false, error })),
     );
+  }
+
+  // "Stattdessen zu vorhandenem Produkt": the card waits while the dialog
+  // is open.
+  function openMerge(product: Product) {
+    dispatchCard({ type: "pause", now: Date.now() });
+    setMergeSource(product);
+  }
+
+  function closeMerge() {
+    setMergeSource(null);
+    dispatchCard({ type: "resume", now: Date.now() });
+  }
+
+  // After the merge the card shows the target, which the booking on the
+  // card belongs to now.
+  function merged(target: Product, source: Product) {
+    dispatchCard({ type: "merge", sourceId: source.id, target });
+    closeMerge();
   }
 
   // While the card runs, reports the time to the reducer, which hides the
@@ -255,10 +282,13 @@ export function ScanPage() {
       </p>
       {card.status !== "hidden" && (
         <ResultCard
+          key={card.booking.result.movement.id}
           booking={card.booking}
           disabled={repeat.isPending || reversal.isPending}
           onPlusOne={() => plusOne(card.booking.result.product.id, card.booking.kind)}
           onUndo={() => undo(card.booking.result.movement.id)}
+          onProductChange={(product) => dispatchCard({ type: "update", product })}
+          onMerge={() => openMerge(card.booking.result.product)}
         />
       )}
       {!soundReady && (
@@ -267,6 +297,11 @@ export function ScanPage() {
         </button>
       )}
 
+      <MergeDialog
+        source={mergeSource}
+        onClose={closeMerge}
+        onMerged={merged}
+      />
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
         <CameraSettings
           track={track}
