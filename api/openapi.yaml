@@ -117,7 +117,7 @@ paths:
                 $ref: "#/components/schemas/Problem"
     delete:
       operationId: deleteProduct
-      summary: Produkt mit Barcodes und Buchungen löschen
+      summary: Produkt mit Barcodes, Buchungen und Bild löschen
       description: "Fehler-code: not_found (404)."
       responses:
         "204":
@@ -178,6 +178,34 @@ paths:
       responses:
         "204":
           description: Der Barcode ist entfernt.
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /products/{id}/image:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getProductImage
+      summary: Produktbild
+      description: "Fehler-code: not_found (404), auch wenn das Produkt kein Bild hat oder die Bilddatei fehlt."
+      responses:
+        "200":
+          description: Das Bild als JPEG, PNG oder WebP.
+          headers:
+            Cache-Control:
+              description: Immer private, max-age=86400.
+              required: true
+              schema:
+                type: string
+          content:
+            image/*: {}
         default:
           description: Fehler nach RFC 9457.
           content:

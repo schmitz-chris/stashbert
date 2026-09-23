@@ -668,7 +668,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B22b: Bild-Endpunkt und Löschen der Bilddatei
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B22a
 - **Referenzen:** architecture.md 6.2 (`getProductImage`)
 - **Umfang:**

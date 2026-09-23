@@ -82,6 +82,47 @@ func UpdateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, id 
 	return p, nil
 }
 
+// DeleteProduct deletes the product with id in one transaction; the foreign
+// keys delete its barcodes and movements. After the commit it removes the
+// image file of the product from imageDir, if the product has one, and
+// publishes shopping.changed with missing_after 0 to pub if the product had
+// missing > 0 (architecture.md, 6.6). An unknown id results in 404 not_found.
+func DeleteProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imageDir, id string) error {
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete product: begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	q := db.New(tx)
+
+	cur, err := q.GetProduct(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return httpx.NotFound("Produkt nicht gefunden")
+	}
+	if err != nil {
+		return fmt.Errorf("delete product %s: %w", id, err)
+	}
+	if _, err := q.DeleteProduct(ctx, id); err != nil {
+		return fmt.Errorf("delete product %s: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete product %s: commit: %w", id, err)
+	}
+
+	if cur.ImageFile != nil {
+		removeImage(imageDir, *cur.ImageFile)
+	}
+	if missing := Missing(cur.Stock, cur.Target, cur.MinStock); missing > 0 {
+		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
+			ProductID:     cur.ID,
+			Name:          cur.Name,
+			MissingBefore: missing,
+			MissingAfter:  0,
+		}))
+	}
+	return nil
+}
+
 // applyPatch returns the stored product cur with patch applied, as parameters
 // for db.UpdateProduct without UpdatedAt. It checks the patched values like
 // CreateProduct and min_stock against the patched target.

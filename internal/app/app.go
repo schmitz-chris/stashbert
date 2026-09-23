@@ -25,11 +25,16 @@ type Deps struct {
 	Publisher events.Publisher
 	// Lookuper looks up unknown barcodes booked with add (architecture.md, 7.2).
 	Lookuper domain.Lookuper
+	// ImageDir is the directory of the product image files, DATA_DIR/images
+	// (architecture.md, 7.3).
+	ImageDir string
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
-	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper})
+	server := api.NewServer(api.ServerDeps{
+		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
+	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
 		ResponseErrorHandlerFunc: responseErrorHandler(d.Logger),

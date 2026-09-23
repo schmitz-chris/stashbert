@@ -15,6 +15,8 @@ type ServerDeps struct {
 	Publisher events.Publisher
 	// Lookuper looks up unknown barcodes booked with add.
 	Lookuper domain.Lookuper
+	// ImageDir is the directory of the product image files.
+	ImageDir string
 }
 
 // Server implements StrictServerInterface.

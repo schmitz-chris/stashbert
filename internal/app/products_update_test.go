@@ -6,7 +6,9 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -245,7 +247,8 @@ func TestDeleteProduct(t *testing.T) {
 }
 
 func TestDeleteProductUnknownID(t *testing.T) {
-	h, db := newApp(t)
+	var recorder events.Recorder
+	h, db := newAppWithPublisher(t, &recorder)
 	insertProducts(t, db)
 
 	rec := deleteProduct(h, "unbekannt")
@@ -253,5 +256,68 @@ func TestDeleteProductUnknownID(t *testing.T) {
 	checkProblemCode(t, rec, http.StatusNotFound, "not_found")
 	if n := countRows(t, db, "products"); n != 4 {
 		t.Errorf("products = %d, want 4", n)
+	}
+	checkShoppingChanged(t, recorder.Events(), nil)
+}
+
+func TestDeleteProductRemovesImageFile(t *testing.T) {
+	imageDir := t.TempDir()
+	h, db := newAppWithImages(t, events.Nop{}, imageDir)
+	insertProducts(t, db)
+	// p2 has the image file p2.jpg (see insertProducts) and p4 gets p4.webp.
+	// The file of p3 is missing and p1 has no image file.
+	setImageFile(t, db, "p4", "p4.webp")
+	setImageFile(t, db, "p3", "p3.png")
+	writeFile(t, imageDir, "p2.jpg", []byte("jpg"))
+	writeFile(t, imageDir, "p4.webp", []byte("webp"))
+
+	for _, id := range []string{"p2", "p3", "p1"} {
+		if rec := deleteProduct(h, id); rec.Code != http.StatusNoContent {
+			t.Errorf("delete %s: status = %d, want %d, body %s", id, rec.Code, http.StatusNoContent, rec.Body.String())
+		}
+	}
+
+	// Only p4 and its file are left.
+	if n := countRows(t, db, "products"); n != 1 {
+		t.Errorf("products = %d, want 1", n)
+	}
+	entries, err := os.ReadDir(imageDir)
+	if err != nil {
+		t.Fatalf("read image dir: %v", err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{"p4.webp"}) {
+		t.Errorf("image files = %v, want [p4.webp]", names)
+	}
+}
+
+func TestDeleteProductPublishesShoppingChanged(t *testing.T) {
+	// See insertProducts: p2 has stock 2, target 5 and no min_stock (missing 3),
+	// p3 has stock 0, target 4 and min_stock 1 (missing 4), p4 has stock 2,
+	// target 4 and min_stock 1 (missing 0) and p1 has target 0.
+	tests := []struct {
+		id       string
+		shopping *events.ShoppingChangedData
+	}{
+		{"p2", &events.ShoppingChangedData{ProductID: "p2", Name: "kidneybohnen", MissingBefore: 3, MissingAfter: 0}},
+		{"p3", &events.ShoppingChangedData{ProductID: "p3", Name: "Kidneybohnen", MissingBefore: 4, MissingAfter: 0}},
+		{"p4", nil},
+		{"p1", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+
+			if rec := deleteProduct(h, tt.id); rec.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want %d, body %s", rec.Code, http.StatusNoContent, rec.Body.String())
+			}
+
+			checkShoppingChanged(t, recorder.Events(), tt.shopping)
+		})
 	}
 }

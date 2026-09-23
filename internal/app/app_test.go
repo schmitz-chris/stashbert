@@ -20,8 +20,9 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
-// newApp returns the handler from app.NewHandler with events.Nop and its
-// migrated database in t.TempDir().
+// newApp returns the handler from app.NewHandler with events.Nop, its
+// migrated database in t.TempDir() and an empty image directory in
+// t.TempDir().
 func newApp(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 	return newAppWithPublisher(t, events.Nop{})
@@ -38,6 +39,20 @@ func newAppWithPublisher(t *testing.T, pub events.Publisher) (http.Handler, *sql
 // barcodes with l.
 func newAppWithLookuper(t *testing.T, pub events.Publisher, l domain.Lookuper) (http.Handler, *sql.DB) {
 	t.Helper()
+	return newAppWithDeps(t, app.Deps{Publisher: pub, Lookuper: l, ImageDir: t.TempDir()})
+}
+
+// newAppWithImages is like newAppWithPublisher but uses imageDir as the
+// directory of the product images.
+func newAppWithImages(t *testing.T, pub events.Publisher, imageDir string) (http.Handler, *sql.DB) {
+	t.Helper()
+	return newAppWithDeps(t, app.Deps{Publisher: pub, Lookuper: lookup.NewDisabledClient(), ImageDir: imageDir})
+}
+
+// newAppWithDeps returns the handler from app.NewHandler with d and its
+// migrated database in t.TempDir(). It sets Logger, Version and DB of d.
+func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "stashbert.db"))
@@ -52,9 +67,8 @@ func newAppWithLookuper(t *testing.T, pub events.Publisher, l domain.Lookuper) (
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	h, err := app.NewHandler(cfg, app.Deps{
-		Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db, Publisher: pub, Lookuper: l,
-	})
+	d.Logger, d.Version, d.DB = slog.New(slog.DiscardHandler), "dev", db
+	h, err := app.NewHandler(cfg, d)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

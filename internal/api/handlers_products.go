@@ -112,16 +112,27 @@ func (s *Server) UpdateProduct(ctx context.Context, request UpdateProductRequest
 	return UpdateProduct200JSONResponse(productResponse(p)), nil
 }
 
-// DeleteProduct deletes a product. The foreign keys delete its barcodes and movements.
+// DeleteProduct deletes a product with its barcodes, movements and image file.
 func (s *Server) DeleteProduct(ctx context.Context, request DeleteProductRequestObject) (DeleteProductResponseObject, error) {
-	n, err := s.queries.DeleteProduct(ctx, request.Id)
-	if err != nil {
-		return nil, fmt.Errorf("delete product %s: %w", request.Id, err)
-	}
-	if n == 0 {
-		return nil, httpx.NotFound("Produkt nicht gefunden")
+	if err := domain.DeleteProduct(ctx, s.deps.DB, s.deps.Publisher, s.deps.ImageDir, request.Id); err != nil {
+		return nil, err
 	}
 	return DeleteProduct204Response{}, nil
+}
+
+// GetProductImage returns the image file of a product.
+func (s *Server) GetProductImage(ctx context.Context, request GetProductImageRequestObject) (GetProductImageResponseObject, error) {
+	img, err := domain.OpenProductImage(ctx, s.deps.DB, s.deps.ImageDir, request.Id)
+	if err != nil {
+		return nil, err
+	}
+	// The generated response closes the file after writing it.
+	return GetProductImage200ImageResponse{
+		Body:          img.File,
+		Headers:       GetProductImage200ResponseHeaders{CacheControl: "private, max-age=86400"},
+		ContentType:   img.ContentType,
+		ContentLength: img.Size,
+	}, nil
 }
 
 // AddBarcode assigns a barcode to a product and returns it normalized.

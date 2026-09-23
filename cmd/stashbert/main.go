@@ -78,11 +78,13 @@ func run() error {
 	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second) })
 	// Loads product images every 60 s into DATA_DIR/images
 	// (architecture.md, 7.3).
-	images := lookup.NewImageFetcher(db, &http.Client{}, filepath.Join(cfg.DataDir, "images"),
-		lookup.DefaultImageHosts, logger)
+	imageDir := filepath.Join(cfg.DataDir, "images")
+	images := lookup.NewImageFetcher(db, &http.Client{}, imageDir, lookup.DefaultImageHosts, logger)
 	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
 
-	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off})
+	handler, err := app.NewHandler(cfg, app.Deps{
+		Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off, ImageDir: imageDir,
+	})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
 	}
