@@ -30,7 +30,7 @@ Lies vor jeder Arbeit in dieser Reihenfolge:
    4. testen.
    Die Übersicht in `docs/architecture.md`, Kapitel 6, ist die Vorgabe für die Spec.
 5. **Generierte Dateien nie von Hand ändern.** Das betrifft `internal/api/gen.go`, den sqlc-Code in `internal/store/db/` und `web/src/lib/api/schema.d.ts`. Sie werden eingecheckt.
-6. **Bibliotheks-APIs nicht aus dem Gedächtnis.** Schlage sie in der aktuellen Doku nach (Context7, offizielle Doku oder `llms.txt`), passend zur Version in `go.mod` bzw. `web/package.json`.
+6. **Bibliotheks-APIs nicht aus dem Gedächtnis.** Schlage sie in der aktuellen Doku nach (Context7, offizielle Doku oder `llms.txt`), passend zur Version in `go.mod` bzw. `web/package.json`. Die Quellen der gepinnten Version sind die genaueste Referenz: Go-Module unter `$(go env GOMODCACHE)/<modul>@<version>`, npm-Pakete unter `node_modules/`. Context7 zeigt oft den neuesten Stand statt der gepinnten Version.
 7. **Tests gehören zum Task.** Jedes Abnahmekriterium ist durch einen automatischen Test abgedeckt, sofern der Task nichts anderes sagt. Go-Tests nur mit der Standardbibliothek (`testing`, `net/http/httptest`), kein testify.
 8. **Fertig heißt:** `make check` ist grün und alle automatischen Abnahmekriterien sind erfüllt. Gibt es Kriterien mit „(Nutzer)", setzt du den Status auf `wartet auf Nutzer`, sonst auf `erledigt`. Dann genau ein Commit. Die mit „(Nutzer)" markierten Prüfungen führst du nicht selbst durch und behauptest sie nicht.
 9. **Zusammenbau nur an einer Stelle.** Die Handler-Kette entsteht ausschließlich in `internal/app.NewHandler`. `cmd/stashbert/main.go` verdrahtet nur. Fehler aus Handlern folgen dem Muster in `docs/architecture.md`, 4.4.

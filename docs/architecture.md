@@ -129,7 +129,7 @@ Kette für `/api/v1/` von außen nach innen:
 5. Request-Validator (`nethttp-middleware`, umschließt den gesamten generierten Mux)
 6. generierter std-http-Handler mit Strict-Handler
 
-Die Anmeldung prüft eine **Strict-Middleware** (`StrictMiddlewareFunc`) anhand einer festen Liste öffentlicher `operationId`s. So liefert eine unbekannte Route 404, auch ohne Cookie.
+Die Anmeldung prüft eine **Strict-Middleware** (`StrictMiddlewareFunc`) anhand einer festen Liste öffentlicher Operationen. So liefert eine unbekannte Route 404, auch ohne Cookie. Achtung: oapi-codegen übergibt der Strict-Middleware die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
 
 **Fehler-Muster (verbindlich für alle Handler):**
 

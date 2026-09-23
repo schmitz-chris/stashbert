@@ -204,7 +204,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
   - `internal/api/oapi-codegen.yaml`: Paket `api`, Ausgabe `gen.go`, `generate` mit `std-http-server`, `strict-server`, `models` und `embedded-spec`, dazu `output-options: nullable-type: true`.
   - `internal/api/generate.go` mit `//go:generate go tool oapi-codegen -config oapi-codegen.yaml ../../api/openapi.yaml`.
   - Tool-Abhängigkeit: `go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0`.
-  - CI: **nach** `make check` ein zusätzlicher Schritt `make generate && git diff --exit-code`.
+  - CI: **nach** `make check` ein zusätzlicher Schritt `make generate && git diff --exit-code && test -z "$(git status --porcelain)"` (erkennt auch neue, nicht eingecheckte generierte Dateien).
 - **Nicht im Umfang:** Handler, Server, weitere Endpunkte.
 - **Abnahmekriterien:**
   1. `make generate` erzeugt `internal/api/gen.go` mit `StrictServerInterface` und der Methode `GetHealth`.
@@ -379,7 +379,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 - **Abhängig von:** B08a
 - **Referenzen:** architecture.md 4.4, 8
 - **Umfang:**
-  - **Strict-Middleware `auth.Middleware`** mit einer festen Liste öffentlicher `operationId`s: `getHealth`, `getSetup`, `createSetup`, `createSession`. Für alle anderen:
+  - **Strict-Middleware `auth.Middleware`** mit einer festen Liste öffentlicher Operationen. oapi-codegen übergibt der Strict-Middleware die **Go-Namen** der Operationen, nicht die `operationId` aus der Spec. Die Liste lautet deshalb `GetHealth`, `GetSetup`, `CreateSetup`, `CreateSession`. Für alle anderen:
     - Fehlendes, unbekanntes oder abgelaufenes Cookie ergibt 401 `unauthorized`.
     - Die Sitzung kommt in den Kontext, Zugriff über `auth.SessionFromContext(ctx)`.
   - `getSession` und `deleteSession` nutzen jetzt den Kontext statt eigener Cookie-Logik.
@@ -390,7 +390,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
   1. Eine in der DB abgelaufene Sitzung liefert 401.
   2. Eine Sitzung mit `last_seen_at` vor 2 Stunden wird verlängert, und die Antwort enthält `Set-Cookie`.
   3. `GET /api/v1/unbekannt` ohne Cookie liefert weiterhin 404.
-  4. `GET /api/v1/health` ohne Cookie liefert 200.
+  4. `GET /api/v1/health`, `GET /api/v1/setup`, `POST /api/v1/setup` und `POST /api/v1/session` sind ohne Cookie erreichbar (kein 401).
   5. `make check` ist grün.
 
 ### B09: Login-Bremse und Origin-Prüfung
