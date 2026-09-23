@@ -715,7 +715,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B25: Produkte zusammenführen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B22b, B24
 - **Referenzen:** architecture.md 6.5 (Merge), 6.2 (`mergeProduct`), 6.6
 - **Umfang:**

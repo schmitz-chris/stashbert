@@ -120,6 +120,16 @@ func (s *Server) DeleteProduct(ctx context.Context, request DeleteProductRequest
 	return DeleteProduct204Response{}, nil
 }
 
+// MergeProduct merges a product into the target product, deletes it and
+// returns the target.
+func (s *Server) MergeProduct(ctx context.Context, request MergeProductRequestObject) (MergeProductResponseObject, error) {
+	p, err := domain.MergeProduct(ctx, s.deps.DB, s.deps.Publisher, s.deps.ImageDir, request.Id, request.Body.TargetProductId)
+	if err != nil {
+		return nil, err
+	}
+	return MergeProduct200JSONResponse(productResponse(p)), nil
+}
+
 // GetProductImage returns the image file of a product.
 func (s *Server) GetProductImage(ctx context.Context, request GetProductImageRequestObject) (GetProductImageResponseObject, error) {
 	img, err := domain.OpenProductImage(ctx, s.deps.DB, s.deps.ImageDir, request.Id)

@@ -109,18 +109,26 @@ func DeleteProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, ima
 		return fmt.Errorf("delete product %s: commit: %w", id, err)
 	}
 
-	if cur.ImageFile != nil {
-		removeImage(imageDir, *cur.ImageFile)
+	productDeleted(ctx, pub, imageDir, cur)
+	return nil
+}
+
+// productDeleted finishes the deletion of the stored product p after the
+// commit: it removes the image file of p from imageDir, if p has one, and
+// publishes shopping.changed with missing_after 0 to pub if p had missing > 0
+// (architecture.md, 6.6).
+func productDeleted(ctx context.Context, pub events.Publisher, imageDir string, p db.Product) {
+	if p.ImageFile != nil {
+		removeImage(imageDir, *p.ImageFile)
 	}
-	if missing := Missing(cur.Stock, cur.Target, cur.MinStock); missing > 0 {
+	if missing := Missing(p.Stock, p.Target, p.MinStock); missing > 0 {
 		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
-			ProductID:     cur.ID,
-			Name:          cur.Name,
+			ProductID:     p.ID,
+			Name:          p.Name,
 			MissingBefore: missing,
 			MissingAfter:  0,
 		}))
 	}
-	return nil
 }
 
 // applyPatch returns the stored product cur with patch applied, as parameters

@@ -184,6 +184,44 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /products/{id}/merge:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID des Produkts, das in das Zielprodukt überführt und danach gelöscht wird.
+        schema:
+          type: string
+    post:
+      operationId: mergeProduct
+      summary: Produkt in ein anderes Produkt überführen
+      description: >-
+        Barcodes und Buchungen des Produkts id gehen auf das Zielprodukt über.
+        Hat das Produkt id Bestand, bekommt das Ziel eine Buchung mit kind
+        merge und delta gleich diesem Bestand; ohne Bestand bleibt das Ziel
+        unverändert. Danach wird das Produkt id mit seinem Bild gelöscht. Die
+        übrigen Felder des Ziels bleiben unverändert. Fehler-code:
+        invalid_request (400, auch wenn Ziel und Quelle gleich sind),
+        not_found (404).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductMerge"
+      responses:
+        "200":
+          description: Das Zielprodukt mit seinen Barcodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /products/{id}/image:
     parameters:
       - name: id
@@ -541,6 +579,14 @@ components:
         note:
           type: [string, "null"]
           description: Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null.
+    ProductMerge:
+      type: object
+      required:
+        - target_product_id
+      properties:
+        target_product_id:
+          type: string
+          description: ID des Zielprodukts. Muss sich von der ID der Quelle unterscheiden.
     MovementCreate:
       type: object
       description: >-

@@ -44,3 +44,8 @@ WHERE id = ?;
 -- name: DeleteProductBarcode :execrows
 DELETE FROM barcodes
 WHERE code = ? AND product_id = ?;
+
+-- name: MoveProductBarcodes :exec
+UPDATE barcodes
+SET product_id = sqlc.arg(target_id)
+WHERE product_id = sqlc.arg(source_id);

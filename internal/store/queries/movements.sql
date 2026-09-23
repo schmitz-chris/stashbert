@@ -43,3 +43,8 @@ SELECT * FROM movements
 WHERE product_id = ? AND id < ?
 ORDER BY id DESC
 LIMIT ?;
+
+-- name: MoveProductMovements :exec
+UPDATE movements
+SET product_id = sqlc.arg(target_id)
+WHERE product_id = sqlc.arg(source_id);

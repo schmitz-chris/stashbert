@@ -294,6 +294,22 @@ func (q *Queries) ListProductMovementsBefore(ctx context.Context, arg ListProduc
 	return items, nil
 }
 
+const moveProductMovements = `-- name: MoveProductMovements :exec
+UPDATE movements
+SET product_id = ?1
+WHERE product_id = ?2
+`
+
+type MoveProductMovementsParams struct {
+	TargetID string
+	SourceID string
+}
+
+func (q *Queries) MoveProductMovements(ctx context.Context, arg MoveProductMovementsParams) error {
+	_, err := q.db.ExecContext(ctx, moveProductMovements, arg.TargetID, arg.SourceID)
+	return err
+}
+
 const updateProductStock = `-- name: UpdateProductStock :one
 UPDATE products
 SET stock = ?, updated_at = ?
