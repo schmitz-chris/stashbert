@@ -670,12 +670,13 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 - **Referenzen:** architecture.md 6.2 (`getProductImage`)
 - **Umfang:**
   - Spec und Handler `GET /products/{id}/image`: Antwort 200 mit Content-Type `image/*`, Bild-Bytes und `Cache-Control: private, max-age=86400`, sonst 404.
-  - `deleteProduct` löscht nach dem Commit zusätzlich die Bilddatei, falls vorhanden.
+  - `deleteProduct` löscht nach dem Commit zusätzlich die Bilddatei, falls vorhanden, und löst `shopping.changed` mit `missing_after = 0` aus, wenn das Produkt vorher `missing > 0` hatte (architecture.md 6.6).
 - **Nicht im Umfang:** Upload.
 - **Abnahmekriterien (Tests):**
   1. Das Bild wird mit richtigem Content-Type geliefert; ohne Bild 404.
   2. Löschen entfernt die Datei.
-  3. `make check` ist grün.
+  3. Löschen eines Produkts mit `missing > 0` löst `shopping.changed` aus, ohne fehlende Menge kein Ereignis.
+  4. `make check` ist grün.
 
 ### B23: Buchungsliste
 

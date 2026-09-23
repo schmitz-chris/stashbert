@@ -317,7 +317,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `stock.consumed` | `TypeStockConsumed` | Buchung `consume` | wie `stock.added` |
 | `stock.adjusted` | `TypeStockAdjusted` | Buchung `inventory`, `reversal` oder `merge` | wie `stock.added` |
 | `product.empty` | `TypeProductEmpty` | Bestand wechselt von > 0 auf 0 | `product_id`, `name` |
-| `shopping.changed` | `TypeShoppingChanged` | `missing` ändert sich | `product_id`, `name`, `missing_before`, `missing_after` |
+| `shopping.changed` | `TypeShoppingChanged` | `missing` ändert sich, auch beim Löschen oder Zusammenführen eines Produkts mit `missing > 0` (dann `missing_after = 0`) | `product_id`, `name`, `missing_before`, `missing_after` |
 
 Ereignisse werden erst **nach** dem Commit ausgelöst, in dieser Reihenfolge: `product.created`, Buchungsereignis, `product.empty`, `shopping.changed`. Die Buchungsereignisse gibt es nur, wenn `delta ≠ 0`.
 
