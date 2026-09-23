@@ -10,10 +10,10 @@ import (
 // The generated strict server interface must offer GetHealth with this signature.
 var _ func(api.StrictServerInterface, context.Context, api.GetHealthRequestObject) (api.GetHealthResponseObject, error) = api.StrictServerInterface.GetHealth
 
-func TestGetSwaggerLoadsEmbeddedSpec(t *testing.T) {
-	spec, err := api.GetSwagger()
+func TestGetSpecLoadsEmbeddedSpec(t *testing.T) {
+	spec, err := api.GetSpec()
 	if err != nil {
-		t.Fatalf("GetSwagger: %v", err)
+		t.Fatalf("GetSpec: %v", err)
 	}
 
 	if want := "3.1.0"; spec.OpenAPI != want {

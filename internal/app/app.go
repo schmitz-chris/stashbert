@@ -35,7 +35,7 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 // newChain wraps the generated API handler, from outside to inside:
 // Recover, Logging, StripPrefix("/api/v1"), request validator.
 func newChain(logger *slog.Logger, apiHandler http.Handler) (http.Handler, error) {
-	spec, err := api.GetSwagger()
+	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
 	}

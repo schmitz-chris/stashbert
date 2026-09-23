@@ -208,7 +208,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 - **Nicht im Umfang:** Handler, Server, weitere Endpunkte.
 - **Abnahmekriterien:**
   1. `make generate` erzeugt `internal/api/gen.go` mit `StrictServerInterface` und der Methode `GetHealth`.
-  2. Ein Test lädt `api.GetSwagger()` ohne Fehler.
+  2. Ein Test lädt `api.GetSpec()` ohne Fehler.
   3. `make check` ist grün.
 
 ### B02: Konfiguration, Zusammenbau und Health
@@ -250,7 +250,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
     - Allgemeiner Konstruktor `NewError(status int, code, detail string) *Error`, der `Title` aus `http.StatusText(status)` setzt. Dazu die Kurzformen `BadRequest(detail)` (400 `invalid_request`) und `NotFound(detail)` (404 `not_found`).
     - Alle anderen Fälle nutzen `NewError`, z. B. `NewError(401, "invalid_credentials", …)` oder `NewError(404, "unknown_barcode", …)`. Spätere Tasks ändern `internal/httpx/problem.go` nicht.
   - **Handler-Kette in `internal/app`:** exakt nach architecture.md 4.4, ohne die Origin-Prüfung (die kommt in B09).
-    - Validator mit `nethttp-middleware`: `OapiRequestValidatorWithOptions` mit `ErrorHandlerWithOpts`. Die Spec aus `api.GetSwagger()`, vorher `Servers = nil` setzen.
+    - Validator mit `nethttp-middleware`: `OapiRequestValidatorWithOptions` mit `ErrorHandlerWithOpts`. Die Spec aus `api.GetSpec()`, vorher `Servers = nil` setzen.
     - `errors.Is(err, routers.ErrMethodNotAllowed)` ergibt 405 `method_not_allowed`, eine fehlende Route 404 `not_found`, sonst 400 `invalid_request` mit der Meldung als `detail`.
   - **Strict-Handler-Optionen:**
     - `RequestErrorHandlerFunc` ergibt 400 `invalid_request`.
