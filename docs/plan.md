@@ -114,7 +114,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### P0-2: Scanner-Testseite, Variante S (Svelte)
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** P0-1
 - **Referenzen:** Spezifikation oben, ADR-0007, ADR-0008
 - **Vorbereitung (Nutzer):** das offizielle Svelte-Plugin in Claude Code einrichten: `/plugin marketplace add sveltejs/ai-tools`, dann das Plugin `svelte` installieren.

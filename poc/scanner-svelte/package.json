@@ -1,0 +1,30 @@
+{
+	"name": "scanner-svelte",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"copy:wasm": "node scripts/copy-wasm.js",
+		"gen:beep": "node scripts/gen-beep.js",
+		"gen:icon": "node scripts/gen-icon.js",
+		"predev": "npm run copy:wasm && npm run gen:beep",
+		"dev": "vite dev",
+		"prebuild": "npm run copy:wasm && npm run gen:beep",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/vite": "^4.3.0",
+		"svelte": "^5.56.1",
+		"tailwindcss": "^4.3.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"barcode-detector": "^3.2.2"
+	}
+}
