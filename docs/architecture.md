@@ -360,6 +360,7 @@ Danach wird mit `target = 0` gebucht.
 - **Nachladen:**
   - Alle 60 s werden Produkte mit `lookup_state = pending` erneut nachgeschlagen.
   - Bei einem Treffer wird `lookup_state` **immer** auf `done` gesetzt. `name`, `brand`, `package_size`, `origin` und `image_source_url` werden **nur übernommen, wenn `needs_review` noch `true` ist**.
+  - Nicht gefunden ergibt `not_found`, andere Fehler lassen `pending` stehen. Ein Produkt ohne Barcode (alle entfernt) bekommt `none`. Ohne `OFF_CONTACT` endet jeder Lauf sofort.
   - Gemeinsamer Rate-Limiter für alle OFF-Anfragen: höchstens 10 pro Minute (`golang.org/x/time/rate`, 1 Token alle 6 s, Burst 1). Er wird dem Client übergeben und gilt pro `Lookup`-Aufruf, nicht pro HTTP-Anfrage (Redirects zählen nicht extra).
   - **Vorrang für Scans:** Interaktive Lookups warten mit `Wait(ctx)` innerhalb des Budgets von 2,5 s. Das Nachladen im Hintergrund nimmt nur mit `Allow()` einen Token und beendet den Lauf, wenn keiner frei ist. Timeout pro Nachlade-Anfrage: 10 s.
   - **Gewollte Folgen:**

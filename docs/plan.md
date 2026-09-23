@@ -629,20 +629,23 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 - **Abhängig von:** B20
 - **Referenzen:** architecture.md 7.3
 - **Umfang:**
-  - `internal/lookup/enricher.go`: `RunOnce(ctx)` und `Start(ctx, interval)`.
+  - `internal/lookup/enricher.go`: `NewEnricher(db *sql.DB, src TryLookuper, logger *slog.Logger) *Enricher`, `RunOnce(ctx)` und `Start(ctx, interval)`. `Start` blockiert bis zum Ende von `ctx` und ruft `RunOnce` bei jedem Tick eines `time.Ticker` auf (der erste Lauf nach einem Intervall).
   - Die Quelle wird über das Interface `lookup.TryLookuper { TryLookup(ctx context.Context, code string) (Result, error) }` injiziert.
-  - Pro Lauf höchstens 20 Produkte mit `lookup_state = pending`, älteste `created_at` zuerst. Nachgeschlagen wird der erste Barcode (nach Code sortiert) mit `TryLookup` und 10 s Timeout. `ErrRateLimited` beendet den Lauf.
-  - **Treffer:** `lookup_state = done`; ist `needs_review` noch `true`, zusätzlich `name`, `brand`, `package_size`, `origin` und `image_source_url` (aufbereitet mit `lookup.Finalize`). Den Cache schreiben.
-  - **404:** `lookup_state = not_found`. Andere Fehler: unverändert lassen.
-  - `main` startet den Job mit 60 s Intervall.
+  - Die Zuordnung `product_type` zu `origin` zieht als exportierte Funktion `lookup.Origin` aus `internal/domain` in `internal/lookup` um (sonst entsteht ein Import-Zyklus); `internal/domain` nutzt sie.
+  - Pro Lauf höchstens 20 Produkte mit `lookup_state = pending`, älteste `created_at` zuerst. Nachgeschlagen wird der erste Barcode (nach Code sortiert) mit `TryLookup` und 10 s Timeout. `ErrRateLimited` und `ErrDisabled` beenden den Lauf. Ein Produkt ohne Barcode bekommt `lookup_state = none`.
+  - **Treffer:** `lookup_state = done`; ist `needs_review` noch `true`, zusätzlich `name`, `brand`, `package_size`, `origin` und `image_source_url` (aufbereitet mit `lookup.Finalize`, leere Texte werden NULL). Den Cache schreiben wie in B20.
+  - **404:** `lookup_state = not_found` und negativer Cache-Eintrag. Andere Fehler: unverändert lassen und mit `warn` loggen.
+  - Jede Änderung setzt `updated_at` (architecture.md 5). Ereignisse gibt es keine (6.6 nennt keine für das Nachladen).
+  - `main` startet den Job mit 60 s Intervall und dem Client aus B20 (gemeinsamer Limiter).
 - **Nicht im Umfang:** Bilder.
 - **Abnahmekriterien (Tests mit Fake und `RunOnce`):**
   1. Bei `needs_review = true` werden die Felder übernommen.
   2. Bei `needs_review = false` nur `lookup_state = done`.
   3. Nicht gefunden setzt `not_found`.
   4. Ein Fehler lässt den Zustand `pending`.
-  5. `ErrRateLimited` beendet den Lauf nach dem ersten Produkt.
-  6. `make check` ist grün.
+  5. `ErrRateLimited` beendet den Lauf nach dem ersten Produkt, `ErrDisabled` ebenso.
+  6. Ein Produkt ohne Barcode bekommt `none` ohne Lookup-Aufruf.
+  7. `make check` ist grün.
 
 ### B22a: Bild-Download
 
