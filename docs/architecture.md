@@ -81,7 +81,7 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
 | `internal/app` | **Zusammenbau (Composition Root):** `NewHandler(cfg config.Config, deps Deps) (http.Handler, error)` baut die komplette Handler-Kette (4.4). Tests der API nutzen genau diese Funktion |
 | `internal/config` | Umgebungsvariablen lesen und prüfen (Tabelle in 9.2) |
 | `internal/api` | generierter Code aus `api/openapi.yaml` (`gen.go`) und die Handler-Implementierung: `type Server struct`, `func NewServer(d ServerDeps) *Server`, Handler-Methoden in `handlers_<bereich>.go` |
-| `internal/httpx` | Middleware: Problem Details, Request-Validierung, Logging, statische Auslieferung |
+| `internal/httpx` | Middleware: Problem Details, Request-Validierung, Logging |
 | `internal/store` | SQLite öffnen, Pragmas, Migrationen (`migrations/`), sqlc-Abfragen (`queries/`) und generierter Code |
 | `internal/domain` | Fachlogik: Produkte, Barcodes, Buchungen, Einkauf, Zusammenführen |
 | `internal/gtin` | Barcode-Normalisierung und Prüfziffer |

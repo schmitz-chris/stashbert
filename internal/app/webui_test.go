@@ -102,3 +102,17 @@ func TestWebUIEmbeddedByDefault(t *testing.T) {
 		t.Error("Content-Security-Policy is missing")
 	}
 }
+
+func TestWebUIOnlyAnswersReads(t *testing.T) {
+	var logs bytes.Buffer
+	h := newAppWithWebUI(t, &logs)
+
+	rec := post(h, "/vorrat", `{}`)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /vorrat: status = %d, want 405", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Errorf("POST /vorrat: body = %q, want no HTML", rec.Body.String())
+	}
+}
