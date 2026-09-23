@@ -16,8 +16,11 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/nullable"
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for HealthStatus.
@@ -33,6 +36,69 @@ func (e HealthStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Defines values for ProductLookupState.
+const (
+	Done     ProductLookupState = "done"
+	None     ProductLookupState = "none"
+	NotFound ProductLookupState = "not_found"
+	Pending  ProductLookupState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the ProductLookupState enum.
+func (e ProductLookupState) Valid() bool {
+	switch e {
+	case Done:
+		return true
+	case None:
+		return true
+	case NotFound:
+		return true
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProductOrigin.
+const (
+	Manual            ProductOrigin = "manual"
+	Openbeautyfacts   ProductOrigin = "openbeautyfacts"
+	Openfoodfacts     ProductOrigin = "openfoodfacts"
+	Openpetfoodfacts  ProductOrigin = "openpetfoodfacts"
+	Openproductsfacts ProductOrigin = "openproductsfacts"
+	Placeholder       ProductOrigin = "placeholder"
+)
+
+// Valid indicates whether the value is a known member of the ProductOrigin enum.
+func (e ProductOrigin) Valid() bool {
+	switch e {
+	case Manual:
+		return true
+	case Openbeautyfacts:
+		return true
+	case Openfoodfacts:
+		return true
+	case Openpetfoodfacts:
+		return true
+	case Openproductsfacts:
+		return true
+	case Placeholder:
+		return true
+	default:
+		return false
+	}
+}
+
+// Barcode defines model for Barcode.
+type Barcode struct {
+	// Code Normalisierter Barcode.
+	Code string `json:"code"`
+
+	// Units Stückzahl, die ein Scan dieses Barcodes bucht.
+	Units int `json:"units"`
 }
 
 // Health defines model for Health.
@@ -53,11 +119,57 @@ type Problem struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// Product defines model for Product.
+type Product struct {
+	// Barcodes Barcodes, sortiert nach Code.
+	Barcodes    []Barcode                 `json:"barcodes"`
+	Brand       nullable.Nullable[string] `json:"brand"`
+	CreatedAt   time.Time                 `json:"created_at"`
+	HasImage    bool                      `json:"has_image"`
+	Id          string                    `json:"id"`
+	LookupState ProductLookupState        `json:"lookup_state"`
+
+	// MinStock Mindestbestand. Ohne Wert gilt der Sollbestand als Schwelle.
+	MinStock nullable.Nullable[int] `json:"min_stock"`
+
+	// Missing Fehlmenge für die Einkaufsliste. Nur lesen, wird berechnet.
+	Missing     int                       `json:"missing"`
+	Name        string                    `json:"name"`
+	NeedsReview bool                      `json:"needs_review"`
+	Note        nullable.Nullable[string] `json:"note"`
+	Origin      ProductOrigin             `json:"origin"`
+	PackageSize nullable.Nullable[string] `json:"package_size"`
+
+	// Stock Bestand. Nur lesen, er ändert sich nur durch Buchungen.
+	Stock int `json:"stock"`
+
+	// Target Sollbestand.
+	Target    int       `json:"target"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ProductLookupState defines model for Product.LookupState.
+type ProductLookupState string
+
+// ProductOrigin defines model for Product.Origin.
+type ProductOrigin string
+
+// ProductList defines model for ProductList.
+type ProductList struct {
+	Items []Product `json:"items"`
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
+	// ListProducts Alle Produkte, sortiert nach Name
+	// (GET /products)
+	ListProducts(w http.ResponseWriter, r *http.Request)
+	// GetProduct Ein Produkt
+	// (GET /products/{id})
+	GetProduct(w http.ResponseWriter, r *http.Request, id string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -74,6 +186,46 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProducts operation middleware
+func (siw *ServerInterfaceWrapper) ListProducts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProducts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProduct operation middleware
+func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProduct(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -204,6 +356,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health", wrapper.GetHealth)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products", wrapper.ListProducts)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products/{id}", wrapper.GetProduct)
 
 	return m
 }
@@ -246,11 +400,94 @@ func (response GetHealthdefaultApplicationProblemPlusJSONResponse) VisitGetHealt
 	return err
 }
 
+type ListProductsRequestObject struct {
+}
+
+type ListProductsResponseObject interface {
+	VisitListProductsResponse(w http.ResponseWriter) error
+}
+
+type ListProducts200JSONResponse ProductList
+
+func (response ListProducts200JSONResponse) VisitListProductsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProductsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListProductsdefaultApplicationProblemPlusJSONResponse) VisitListProductsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProductRequestObject struct {
+	Id string `json:"id"`
+}
+
+type GetProductResponseObject interface {
+	VisitGetProductResponse(w http.ResponseWriter) error
+}
+
+type GetProduct200JSONResponse Product
+
+func (response GetProduct200JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProductdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetProductdefaultApplicationProblemPlusJSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Status des Servers
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// ListProducts Alle Produkte, sortiert nach Name
+	// (GET /products)
+	ListProducts(ctx context.Context, request ListProductsRequestObject) (ListProductsResponseObject, error)
+	// GetProduct Ein Produkt
+	// (GET /products/{id})
+	GetProduct(ctx context.Context, request GetProductRequestObject) (GetProductResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -316,18 +553,79 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListProducts operation middleware
+func (sh *strictHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
+	var request ListProductsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProducts(ctx, request.(ListProductsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProducts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProductsResponseObject); ok {
+		if err := validResponse.VisitListProductsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProduct operation middleware
+func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, id string) {
+	var request GetProductRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProduct(ctx, request.(GetProductRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProduct")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProductResponseObject); ok {
+		if err := validResponse.VisitGetProductResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"b6+2fw0A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

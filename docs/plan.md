@@ -417,7 +417,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B13a: Produkte lesen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B06, B07r, B11
 - **Referenzen:** architecture.md 6.2 (`listProducts`, `getProduct`), 6.5
 - **Umfang:**

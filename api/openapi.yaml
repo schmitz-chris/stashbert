@@ -22,6 +22,47 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /products:
+    get:
+      operationId: listProducts
+      summary: Alle Produkte, sortiert nach Name
+      responses:
+        "200":
+          description: Alle Produkte mit ihren Barcodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getProduct
+      summary: Ein Produkt
+      description: "Fehler-code: not_found (404)."
+      responses:
+        "200":
+          description: Das Produkt mit seinen Barcodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:
@@ -54,3 +95,97 @@ components:
             - ok
         version:
           type: string
+    Barcode:
+      type: object
+      required:
+        - code
+        - units
+      properties:
+        code:
+          type: string
+          description: Normalisierter Barcode.
+        units:
+          type: integer
+          description: Stückzahl, die ein Scan dieses Barcodes bucht.
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - brand
+        - package_size
+        - note
+        - stock
+        - target
+        - min_stock
+        - missing
+        - needs_review
+        - origin
+        - lookup_state
+        - has_image
+        - barcodes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        brand:
+          type: [string, "null"]
+        package_size:
+          type: [string, "null"]
+        note:
+          type: [string, "null"]
+        stock:
+          type: integer
+          description: Bestand. Nur lesen, er ändert sich nur durch Buchungen.
+        target:
+          type: integer
+          description: Sollbestand.
+        min_stock:
+          type: [integer, "null"]
+          description: Mindestbestand. Ohne Wert gilt der Sollbestand als Schwelle.
+        missing:
+          type: integer
+          description: Fehlmenge für die Einkaufsliste. Nur lesen, wird berechnet.
+        needs_review:
+          type: boolean
+        origin:
+          type: string
+          enum:
+            - openfoodfacts
+            - openbeautyfacts
+            - openpetfoodfacts
+            - openproductsfacts
+            - manual
+            - placeholder
+        lookup_state:
+          type: string
+          enum:
+            - none
+            - pending
+            - done
+            - not_found
+        has_image:
+          type: boolean
+        barcodes:
+          type: array
+          description: Barcodes, sortiert nach Code.
+          items:
+            $ref: "#/components/schemas/Barcode"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProductList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
