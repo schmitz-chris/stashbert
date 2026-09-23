@@ -6,7 +6,7 @@ generate:
 	go generate ./...
 
 check:
-	@unformatted="$$(gofmt -l .)" || exit 1; \
+	@unformatted="$$(gofmt -l $$(go list -f '{{.Dir}}' ./...))" || exit 1; \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt: unformatted files:"; \
 		echo "$$unformatted"; \

@@ -62,7 +62,7 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
   - `cmd/stashbert/main.go`: gibt `stashbert <version>` aus und endet mit Exit-Code 0. `version` ist eine Paketvariable mit Standardwert `dev`, die per `-ldflags "-X main.version=…"` gesetzt werden kann.
   - `Makefile` mit den Zielen aus AGENTS.md (nur GNU Make 3.81):
     - `generate`: `go generate ./...`
-    - `check`: `gofmt -l .` muss leer sein, dann `go vet ./...` und `go test ./...`
+    - `check`: `gofmt -l` über die Paketverzeichnisse aus `go list -f '{{.Dir}}' ./...` muss leer sein (nicht `gofmt -l .`, das würde `node_modules` durchsuchen), dann `go vet ./...` und `go test ./...`
     - `test`: `go test ./...`
     - `run`: `DATA_DIR=./.data COOKIE_SECURE=false go run ./cmd/stashbert`
     - `build`: `go build -o bin/stashbert -ldflags "-X main.version=$(git describe --tags --always --dirty)" ./cmd/stashbert`
@@ -72,7 +72,7 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
     - `internal/webui/dist/*`, `!internal/webui/dist/.gitkeep`
     - `poc/*/node_modules/`, `poc/*/dist/`, `poc/*/build/`, `poc/*/public/zxing_reader.wasm`, `poc/*/public/beep.wav`
     - `**/.svelte-kit/`
-  - `.github/workflows/ci.yml`: bei Push und Pull Request Go 1.27 einrichten und `make check` ausführen. Die aktuellen Hauptversionen von `actions/checkout` und `actions/setup-go` vorher nachschlagen.
+  - `.github/workflows/ci.yml`: bei Push und Pull Request Go 1.27 einrichten und `make check` ausführen, mit `permissions: contents: read`. Die aktuellen Hauptversionen von `actions/checkout` und `actions/setup-go` vorher nachschlagen.
 - **Nicht im Umfang:** HTTP-Server, Abhängigkeiten, Frontend, Dockerfile.
 - **Abnahmekriterien:**
   1. `go run ./cmd/stashbert` gibt `stashbert dev` aus.
