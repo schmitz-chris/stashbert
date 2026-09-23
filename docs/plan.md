@@ -143,7 +143,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### P0-4: Protokollvorlage und Bereitstellungsanleitung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** P0-2, P0-3
 - **Referenzen:** research.md, Kapitel 7 und 22 (POC-1 bis POC-3), ADR-0007
 - **Umfang:** `docs/poc/p0-protokoll.md` mit:
