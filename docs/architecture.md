@@ -199,6 +199,7 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 - Idempotenz: optionaler Header `Idempotency-Key` bei `POST /movements` und `POST /movements/{id}/reversal`.
   - Gleicher Schlüssel mit gleichem Body: keine neue Buchung, sondern 201 mit einer aus der gespeicherten Buchung **rekonstruierten** Antwort (aktuelles Produkt, `product_created: false`, `warnings: []`, `message` aus der Buchung).
   - Gleicher Schlüssel mit anderem Body liefert 422 mit `idempotency_key_mismatch`.
+  - Beide Endpunkte teilen sich die Schlüssel (eine Spalte in `movements`). Beim Storno ist der Hash der über die Buchungs-ID; ein Schlüssel vom einen Endpunkt ergibt am anderen daher 422.
 - Neu angelegte Ressourcen: `201`. Einen `Location`-Header gibt es nur, wenn für die Ressource ein `GET`-Endpunkt existiert (Produkte).
 - `PATCH` nutzt JSON-Merge-Patch-Semantik mit `Content-Type: application/json`: Ein fehlendes Feld bleibt unverändert, `null` löscht ein nullbares Feld. Im Go-Code wird das über `nullable.Nullable` abgebildet (oapi-codegen, Option `nullable-type`).
 - Keine Paginierung bei Produkten (höchstens ca. 1000). Cursor-Paginierung bei Buchungen.
