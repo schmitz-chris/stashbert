@@ -52,7 +52,8 @@ func decodeMovementResult(t *testing.T, rec *httptest.ResponseRecorder) (result,
 }
 
 // checkStoredMovement asserts that the only stored movement equals movement
-// from a response and has no barcode, reversal, idempotency key or hash.
+// from a response, including its barcode, and has no reversal, idempotency
+// key or hash.
 func checkStoredMovement(t *testing.T, db *sql.DB, movement map[string]any) {
 	t.Helper()
 	if n := countRows(t, db, "movements"); n != 1 {
@@ -83,8 +84,15 @@ func checkStoredMovement(t *testing.T, db *sql.DB, movement map[string]any) {
 	if got != want {
 		t.Errorf("stored movement = %s, want %s", got, want)
 	}
-	if barcode != nil || reversesID != nil || key != nil || hash != nil {
-		t.Errorf("barcode, reverses_id, idempotency_key, request_hash = %v, %v, %v, %v, want NULL", barcode, reversesID, key, hash)
+	var storedBarcode any
+	if barcode != nil {
+		storedBarcode = *barcode
+	}
+	if storedBarcode != movement["barcode"] {
+		t.Errorf("stored barcode = %v, want %v", storedBarcode, movement["barcode"])
+	}
+	if reversesID != nil || key != nil || hash != nil {
+		t.Errorf("reverses_id, idempotency_key, request_hash = %v, %v, %v, want NULL", reversesID, key, hash)
 	}
 }
 
@@ -167,6 +175,70 @@ func TestCreateMovement(t *testing.T) {
 			delete(product, "updated_at")
 			if !reflect.DeepEqual(product, want) {
 				t.Errorf("product = %v\n     want %v", product, want)
+			}
+		})
+	}
+}
+
+func TestCreateMovementByBarcode(t *testing.T) {
+	// See insertProducts: p2 "kidneybohnen" has the barcodes 4001686301265
+	// with 1 unit and 0034000470693 with 6 units, p4 "Mehl" has 3017620422003
+	// with 1 unit.
+	tests := []struct {
+		name       string
+		id         string
+		stock      int
+		body       string
+		kind       string
+		delta      int
+		stockAfter int
+		barcode    string
+		warnings   string
+		message    string
+	}{
+		{"add with 6 units", "p2", 2, `{"barcode": "0034000470693", "kind": "add"}`,
+			"add", 6, 8, "0034000470693", `[]`, "kidneybohnen 2 → 8"},
+		{"add quantity 2 with 6 units", "p2", 2, `{"barcode": "0034000470693", "kind": "add", "quantity": 2}`,
+			"add", 12, 14, "0034000470693", `[]`, "kidneybohnen 2 → 14"},
+		{"add with 1 unit", "p2", 2, `{"barcode": "4001686301265", "kind": "add", "quantity": 3}`,
+			"add", 3, 5, "4001686301265", `[]`, "kidneybohnen 2 → 5"},
+		{"consume with 6 units", "p2", 10, `{"barcode": "0034000470693", "kind": "consume"}`,
+			"consume", -6, 4, "0034000470693", `[]`, "kidneybohnen 10 → 4"},
+		{"consume with 1 unit", "p2", 2, `{"barcode": "4001686301265", "kind": "consume"}`,
+			"consume", -1, 1, "4001686301265", `[]`, "kidneybohnen 2 → 1"},
+		{"consume with 6 units more than stock", "p2", 2, `{"barcode": "0034000470693", "kind": "consume"}`,
+			"consume", -2, 0, "0034000470693", `["clamped_to_zero"]`, "kidneybohnen 2 → 0"},
+		{"inventory ignores units", "p2", 2, `{"barcode": "0034000470693", "kind": "inventory", "stock": 3}`,
+			"inventory", 1, 3, "0034000470693", `[]`, "kidneybohnen 2 → 3"},
+		{"inventory ignores units and quantity", "p2", 2, `{"barcode": "0034000470693", "kind": "inventory", "stock": 1, "quantity": 4}`,
+			"inventory", -1, 1, "0034000470693", `[]`, "kidneybohnen 2 → 1"},
+		{"inventory unchanged", "p2", 2, `{"barcode": "0034000470693", "kind": "inventory", "stock": 2}`,
+			"inventory", 0, 2, "0034000470693", `[]`, "kidneybohnen 2 → 2"},
+		{"UPC-A is normalized", "p2", 2, `{"barcode": "034000470693", "kind": "add"}`,
+			"add", 6, 8, "0034000470693", `[]`, "kidneybohnen 2 → 8"},
+		{"GTIN-14 with leading 0 is normalized", "p2", 10, `{"barcode": "00034000470693", "kind": "consume"}`,
+			"consume", -6, 4, "0034000470693", `[]`, "kidneybohnen 10 → 4"},
+		{"barcode of another product", "p4", 2, `{"barcode": "3017620422003", "kind": "add"}`,
+			"add", 1, 3, "3017620422003", `[]`, "Mehl 2 → 3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, db := newApp(t)
+			insertProducts(t, db)
+			setStock(t, db, tt.id, tt.stock)
+
+			rec := post(h, "/api/v1/movements", tt.body)
+
+			result, movement := decodeMovementResult(t, rec)
+			checkFields(t, movement, fmt.Sprintf(`{"product_id": %q, "kind": %q, "delta": %d, "stock_after": %d,
+				"barcode": %q, "reverses_id": null}`, tt.id, tt.kind, tt.delta, tt.stockAfter, tt.barcode))
+			checkFields(t, result, fmt.Sprintf(`{"product_created": false, "warnings": %s, "message": %q}`, tt.warnings, tt.message))
+			checkStoredMovement(t, db, movement)
+
+			product, _ := result["product"].(map[string]any)
+			checkFields(t, product, fmt.Sprintf(`{"id": %q, "stock": %d}`, tt.id, tt.stockAfter))
+			if stored := decodeProduct(t, get(h, "/api/v1/products/"+tt.id)); !reflect.DeepEqual(stored, product) {
+				t.Errorf("stored product = %v\nwant response %v", stored, product)
 			}
 		})
 	}
@@ -266,6 +338,20 @@ func TestCreateMovementPublishesEvents(t *testing.T) {
 		}},
 		{"inventory unchanged", "p2", 2, `{"product_id": "p2", "kind": "inventory", "stock": 2}`, nil},
 		{"inventory unchanged at 0", "p2", 0, `{"product_id": "p2", "kind": "inventory", "stock": 0}`, nil},
+		// Movements by barcode publish the same events; 0034000470693 has 6 units.
+		{"consume by barcode to 0", "p2", 2, `{"barcode": "0034000470693", "kind": "consume"}`, []event{
+			stock(events.TypeStockConsumed, "p2", -2, 0),
+			empty("p2", "kidneybohnen"),
+			shopping("p2", "kidneybohnen", 3, 5),
+		}},
+		{"add by barcode", "p2", 2, `{"barcode": "0034000470693", "kind": "add"}`, []event{
+			stock(events.TypeStockAdded, "p2", 6, 8),
+			shopping("p2", "kidneybohnen", 3, 0),
+		}},
+		{"inventory by barcode", "p4", 2, `{"barcode": "3017620422003", "kind": "inventory", "stock": 5}`, []event{
+			stock(events.TypeStockAdjusted, "p4", 3, 5),
+		}},
+		{"inventory by barcode unchanged", "p2", 2, `{"barcode": "0034000470693", "kind": "inventory", "stock": 2}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -324,7 +410,21 @@ func TestCreateMovementErrors(t *testing.T) {
 		{"quantity overflowing int64", `{"product_id": "p2", "kind": "add", "quantity": 9223372036854775807}`, http.StatusBadRequest, "invalid_request"},
 		{"kind reversal", `{"product_id": "p2", "kind": "reversal"}`, http.StatusBadRequest, "invalid_request"},
 		{"kind missing", `{"product_id": "p2"}`, http.StatusBadRequest, "invalid_request"},
-		{"product_id missing", `{"kind": "add"}`, http.StatusBadRequest, "invalid_request"},
+		{"neither product_id nor barcode", `{"kind": "add"}`, http.StatusBadRequest, "invalid_request"},
+		{"neither product_id nor barcode with inventory", `{"kind": "inventory", "stock": 1}`, http.StatusBadRequest, "invalid_request"},
+		{"product_id and barcode", `{"product_id": "p2", "barcode": "4001686301265", "kind": "add"}`, http.StatusBadRequest, "invalid_request"},
+		{"product_id and invalid barcode", `{"product_id": "p2", "barcode": "123", "kind": "add"}`, http.StatusBadRequest, "invalid_request"},
+		{"barcode null", `{"barcode": null, "kind": "add"}`, http.StatusBadRequest, "invalid_request"},
+		{"barcode with inventory without stock", `{"barcode": "4001686301265", "kind": "inventory"}`, http.StatusBadRequest, "invalid_request"},
+		{"barcode with add with stock", `{"barcode": "4001686301265", "kind": "add", "stock": 3}`, http.StatusBadRequest, "invalid_request"},
+		{"invalid barcode check digit", `{"barcode": "4001686301266", "kind": "add"}`, http.StatusUnprocessableEntity, "invalid_barcode"},
+		{"invalid barcode length", `{"barcode": "40016863012", "kind": "consume"}`, http.StatusUnprocessableEntity, "invalid_barcode"},
+		{"invalid barcode letters", `{"barcode": "400168630126A", "kind": "inventory", "stock": 1}`, http.StatusUnprocessableEntity, "invalid_barcode"},
+		{"empty barcode", `{"barcode": "", "kind": "add"}`, http.StatusUnprocessableEntity, "invalid_barcode"},
+		{"unknown barcode with add", `{"barcode": "4006381333931", "kind": "add"}`, http.StatusNotFound, "unknown_barcode"},
+		{"unknown barcode with consume", `{"barcode": "4006381333931", "kind": "consume"}`, http.StatusNotFound, "unknown_barcode"},
+		{"unknown barcode with inventory", `{"barcode": "4006381333931", "kind": "inventory", "stock": 1}`, http.StatusNotFound, "unknown_barcode"},
+		{"unknown barcode as UPC-A", `{"barcode": "036000291452", "kind": "add"}`, http.StatusNotFound, "unknown_barcode"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

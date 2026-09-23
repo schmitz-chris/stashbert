@@ -188,7 +188,7 @@ paths:
     post:
       operationId: createMovement
       summary: Buchung anlegen
-      description: "Fehler-code: invalid_request (400), not_found (404), stock_already_zero (409)."
+      description: "Fehler-code: invalid_request (400), not_found (404), unknown_barcode (404), stock_already_zero (409), invalid_barcode (422)."
       requestBody:
         required: true
         content:
@@ -413,14 +413,21 @@ components:
     MovementCreate:
       type: object
       description: >-
-        Buchung für ein Produkt. quantity gilt für add und consume, stock ist
-        bei inventory Pflicht und bei add und consume nicht erlaubt.
+        Buchung für ein Produkt, bestimmt über product_id oder barcode. Genau
+        eines der beiden Felder muss gesetzt sein, sonst invalid_request.
+        quantity gilt für add und consume, stock ist bei inventory Pflicht und
+        bei add und consume nicht erlaubt.
       required:
-        - product_id
         - kind
       properties:
         product_id:
           type: string
+        barcode:
+          type: string
+          description: >-
+            EAN-8, UPC-A, EAN-13 oder GTIN-14, wird normalisiert. Die Menge
+            für add und consume ist quantity × units des Barcodes; inventory
+            ignoriert units.
         kind:
           type: string
           enum:

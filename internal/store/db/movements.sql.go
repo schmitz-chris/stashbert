@@ -10,8 +10,8 @@ import (
 )
 
 const insertMovement = `-- name: InsertMovement :one
-INSERT INTO movements (id, product_id, kind, delta, stock_after, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO movements (id, product_id, kind, delta, stock_after, barcode, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at
 `
 
@@ -21,6 +21,7 @@ type InsertMovementParams struct {
 	Kind       string
 	Delta      int64
 	StockAfter int64
+	Barcode    *string
 	CreatedAt  string
 }
 
@@ -31,6 +32,7 @@ func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) 
 		arg.Kind,
 		arg.Delta,
 		arg.StockAfter,
+		arg.Barcode,
 		arg.CreatedAt,
 	)
 	var i Movement

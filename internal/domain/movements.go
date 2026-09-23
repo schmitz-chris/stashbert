@@ -20,12 +20,15 @@ import (
 const warningClampedToZero = "clamped_to_zero"
 
 // NewMovement is a movement to book for a product (architecture.md 6.3,
-// MovementCreate).
+// MovementCreate). Exactly one of ProductID and Barcode must be set.
 type NewMovement struct {
-	ProductID string
+	ProductID *string
+	// Barcode is a barcode of the product as entered, not yet normalized.
+	Barcode *string
 	// Kind is add, consume or inventory.
 	Kind string
-	// Quantity is the amount for add and consume.
+	// Quantity is the amount for add and consume. Booked by barcode, each
+	// unit of Quantity books the units of the barcode.
 	Quantity int64
 	// Stock is the new stock for inventory. It must be nil for add and consume.
 	Stock *int64
@@ -53,19 +56,32 @@ type MovementResult struct {
 	Message  string
 }
 
-// Book books in for the product with in.ProductID in one transaction: it
-// reads the product, applies the rules of architecture.md 6.3, inserts the
-// movement and stores the new stock and updated_at at the product. The delta
-// of the movement is the actual change of the stock. After the commit it
-// publishes the events of the movement to pub (see publishMovementEvents).
+// Book books in for the product with in.ProductID or the product of the
+// barcode in.Barcode in one transaction: it reads the product, applies the
+// rules of architecture.md 6.3, inserts the movement and stores the new stock
+// and updated_at at the product. The delta of the movement is the actual
+// change of the stock. Booked by barcode, the amount of add and consume is
+// quantity times the units of the barcode and the movement keeps the
+// normalized barcode. After the commit it publishes the events of the
+// movement to pub (see publishMovementEvents).
 //
 // Invalid input results in an *httpx.Error and nothing is booked: 400
-// invalid_request for inventory without stock or add and consume with stock,
-// 404 not_found for an unknown product and 409 stock_already_zero for
+// invalid_request if not exactly one of product_id and barcode is set, for
+// inventory without stock or add and consume with stock, 422 invalid_barcode
+// for an invalid barcode, 404 not_found for an unknown product, 404
+// unknown_barcode for an unknown barcode and 409 stock_already_zero for
 // consume on a stock of 0.
 func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMovement) (MovementResult, error) {
 	if err := checkNewMovement(in); err != nil {
 		return MovementResult{}, err
+	}
+	var code *string
+	if in.Barcode != nil {
+		normalized, err := normalizeBarcode(*in.Barcode)
+		if err != nil {
+			return MovementResult{}, err
+		}
+		code = &normalized
 	}
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
@@ -75,14 +91,11 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	defer tx.Rollback()
 	q := db.New(tx)
 
-	cur, err := q.GetProduct(ctx, in.ProductID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return MovementResult{}, httpx.NotFound("Produkt nicht gefunden")
-	}
+	cur, units, err := movementProduct(ctx, q, in.ProductID, code)
 	if err != nil {
-		return MovementResult{}, fmt.Errorf("book movement: product %s: %w", in.ProductID, err)
+		return MovementResult{}, err
 	}
-	stockAfter, warnings, err := bookedStock(cur.Stock, in)
+	stockAfter, warnings, err := bookedStock(cur.Stock, in.Quantity*units, in)
 	if err != nil {
 		return MovementResult{}, err
 	}
@@ -94,6 +107,7 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		Kind:       in.Kind,
 		Delta:      stockAfter - cur.Stock,
 		StockAfter: stockAfter,
+		Barcode:    code,
 		CreatedAt:  now,
 	})
 	if err != nil {
@@ -132,9 +146,13 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	}, nil
 }
 
-// checkNewMovement returns a 400 invalid_request error if in.Kind is unknown,
-// inventory has no stock or add or consume has a stock.
+// checkNewMovement returns a 400 invalid_request error if not exactly one of
+// in.ProductID and in.Barcode is set, in.Kind is unknown, inventory has no
+// stock or add or consume has a stock.
 func checkNewMovement(in NewMovement) error {
+	if (in.ProductID == nil) == (in.Barcode == nil) {
+		return httpx.BadRequest("Genau eines von product_id und barcode muss gesetzt sein")
+	}
 	switch in.Kind {
 	case "add", "consume":
 		if in.Stock != nil {
@@ -150,23 +168,56 @@ func checkNewMovement(in NewMovement) error {
 	return nil
 }
 
+// movementProduct returns the product to book on and the units that one unit
+// of quantity books: the product with productID and 1 if code is nil,
+// otherwise the product of the normalized barcode code and its units. An
+// unknown product results in 404 not_found, an unknown barcode in 404
+// unknown_barcode.
+func movementProduct(ctx context.Context, q *db.Queries, productID, code *string) (db.Product, int64, error) {
+	if code == nil {
+		p, err := q.GetProduct(ctx, *productID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.Product{}, 0, httpx.NotFound("Produkt nicht gefunden")
+		}
+		if err != nil {
+			return db.Product{}, 0, fmt.Errorf("book movement: product %s: %w", *productID, err)
+		}
+		return p, 1, nil
+	}
+	b, err := q.GetBarcode(ctx, *code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return db.Product{}, 0, httpx.NewError(http.StatusNotFound, "unknown_barcode",
+			fmt.Sprintf("Barcode %s ist unbekannt", *code))
+	}
+	if err != nil {
+		return db.Product{}, 0, fmt.Errorf("book movement: barcode %s: %w", *code, err)
+	}
+	p, err := q.GetProduct(ctx, b.ProductID)
+	if err != nil {
+		return db.Product{}, 0, fmt.Errorf("book movement: product %s of barcode %s: %w", b.ProductID, *code, err)
+	}
+	return p, b.Units, nil
+}
+
 // bookedStock returns the stock after booking in on stock and the warnings
-// of the booking (architecture.md, 6.3). in must have passed checkNewMovement.
-// consume on a stock of 0 results in 409 stock_already_zero; consume of more
-// than stock results in 0 with the warning clamped_to_zero.
-func bookedStock(stock int64, in NewMovement) (int64, []string, error) {
+// of the booking (architecture.md, 6.3). amount is the amount of add and
+// consume, in.Quantity times the units of the barcode; inventory ignores it.
+// in must have passed checkNewMovement. consume on a stock of 0 results in
+// 409 stock_already_zero; consume of more than stock results in 0 with the
+// warning clamped_to_zero.
+func bookedStock(stock, amount int64, in NewMovement) (int64, []string, error) {
 	warnings := []string{}
 	switch in.Kind {
 	case "add":
-		return stock + in.Quantity, warnings, nil
+		return stock + amount, warnings, nil
 	case "consume":
 		if stock == 0 {
 			return 0, nil, httpx.NewError(http.StatusConflict, "stock_already_zero", "Der Bestand ist schon 0")
 		}
-		if stock < in.Quantity {
+		if stock < amount {
 			return 0, append(warnings, warningClampedToZero), nil
 		}
-		return stock - in.Quantity, warnings, nil
+		return stock - amount, warnings, nil
 	}
 	// inventory
 	return *in.Stock, warnings, nil

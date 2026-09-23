@@ -40,6 +40,23 @@ func (q *Queries) DeleteProductBarcode(ctx context.Context, arg DeleteProductBar
 	return result.RowsAffected()
 }
 
+const getBarcode = `-- name: GetBarcode :one
+SELECT code, product_id, units, created_at FROM barcodes
+WHERE code = ?
+`
+
+func (q *Queries) GetBarcode(ctx context.Context, code string) (Barcode, error) {
+	row := q.db.QueryRowContext(ctx, getBarcode, code)
+	var i Barcode
+	err := row.Scan(
+		&i.Code,
+		&i.ProductID,
+		&i.Units,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getProduct = `-- name: GetProduct :one
 SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at FROM products
 WHERE id = ?

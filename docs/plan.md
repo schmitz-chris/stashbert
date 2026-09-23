@@ -530,7 +530,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B17: Buchungen per bekanntem Barcode
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B15, B16b
 - **Referenzen:** architecture.md 6.3
 - **Umfang:**

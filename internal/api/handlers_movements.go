@@ -11,6 +11,7 @@ func (s *Server) CreateMovement(ctx context.Context, request CreateMovementReque
 	body := request.Body
 	in := domain.NewMovement{
 		ProductID: body.ProductId,
+		Barcode:   body.Barcode,
 		Kind:      string(body.Kind),
 		Quantity:  1,
 	}

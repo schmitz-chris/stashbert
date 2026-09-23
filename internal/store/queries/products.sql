@@ -15,6 +15,10 @@ SELECT * FROM barcodes
 WHERE product_id = ?
 ORDER BY code;
 
+-- name: GetBarcode :one
+SELECT * FROM barcodes
+WHERE code = ?;
+
 -- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
     origin, lookup_state, needs_review, created_at, updated_at)
