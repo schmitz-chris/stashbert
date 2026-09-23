@@ -299,9 +299,9 @@ function BarcodeSection({ product }: { product: Product }) {
   const add = useMutation(barcodeAddMutation(queryClient));
   const remove = useMutation(barcodeRemoveMutation(queryClient));
   const [code, setCode] = useState("");
-  // invalid is set when the entered code fails normalizeGtin; then no
-  // request is sent.
-  const [invalid, setInvalid] = useState(false);
+  // localHint is set when the entered code fails normalizeGtin or already
+  // belongs to this product; then no request is sent.
+  const [localHint, setLocalHint] = useState<string | null>(null);
   // The code of the barcode whose removal the dialog asks to confirm.
   const [removing, setRemoving] = useState<string | null>(null);
   const headingId = useId();
@@ -310,11 +310,13 @@ function BarcodeSection({ product }: { product: Product }) {
 
   const errorCode = add.isError ? problemCode(add.error) : undefined;
   const codeRejected =
-    invalid ||
+    localHint !== null ||
     errorCode === "invalid_barcode" ||
     errorCode === "barcode_in_use";
   let hint = "";
-  if (invalid || errorCode === "invalid_barcode") {
+  if (localHint !== null) {
+    hint = localHint;
+  } else if (errorCode === "invalid_barcode") {
     hint = "Ungültiger Barcode";
   } else if (errorCode === "barcode_in_use") {
     hint = "Barcode gehört schon zu einem anderen Produkt";
@@ -326,10 +328,17 @@ function BarcodeSection({ product }: { product: Product }) {
     const normalized = normalizeGtin(code.trim());
     if (normalized === null) {
       add.reset();
-      setInvalid(true);
+      setLocalHint("Ungültiger Barcode");
       return;
     }
-    setInvalid(false);
+    // The server answers barcode_in_use here too, which would wrongly
+    // name another product.
+    if (product.barcodes.some((barcode) => barcode.code === normalized)) {
+      add.reset();
+      setLocalHint("Barcode ist diesem Produkt schon zugeordnet");
+      return;
+    }
+    setLocalHint(null);
     add.mutate(
       { productId: product.id, code: normalized },
       { onSuccess: () => setCode("") },
@@ -397,7 +406,7 @@ function BarcodeSection({ product }: { product: Product }) {
             value={code}
             onChange={(event) => {
               setCode(event.target.value);
-              setInvalid(false);
+              setLocalHint(null);
               if (add.isError) {
                 add.reset();
               }
