@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
+import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
 import { ResultCard } from "../components/ResultCard";
 import { useScanner } from "../hooks/useScanner";
@@ -79,6 +80,7 @@ export function ScanPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The new product of the card while its merge dialog is open.
   const [mergeSource, setMergeSource] = useState<Product | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
 
   function show(feedback: Feedback) {
@@ -92,18 +94,23 @@ export function ScanPage() {
     dispatchCard({ type: "show", result, kind, now: Date.now() });
   }
 
-  // Books every accepted code in the mode that is set when it is read.
-  // While the merge dialog lies over the camera, codes are ignored.
+  // Books code in the mode that is set now and reports the result.
+  function bookCode(code: string) {
+    const kind = mode;
+    book({ barcode: code, kind }).then(
+      (result) => showBooking(result, kind),
+      (error: unknown) => show(feedbackFor({ ok: false, error })),
+    );
+  }
+
+  // Books every accepted code. While the merge dialog or the dialog for
+  // typing in a code lies over the camera, codes are ignored.
   const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
     useScanner((code) => {
-      if (mergeSource !== null) {
+      if (mergeSource !== null || manualOpen) {
         return;
       }
-      const kind = mode;
-      book({ barcode: code, kind }).then(
-        (result) => showBooking(result, kind),
-        (error: unknown) => show(feedbackFor({ ok: false, error })),
-      );
+      bookCode(code);
     });
 
   // [+1]: books one more unit of the product on the card, with its kind.
@@ -135,6 +142,24 @@ export function ScanPage() {
   function closeMerge() {
     setMergeSource(null);
     dispatchCard({ type: "resume", now: Date.now() });
+  }
+
+  // "Code eintippen": the card waits while the dialog is open.
+  function openManual() {
+    dispatchCard({ type: "pause", now: Date.now() });
+    setManualOpen(true);
+  }
+
+  function closeManual() {
+    setManualOpen(false);
+    dispatchCard({ type: "resume", now: Date.now() });
+  }
+
+  // A code typed in by hand is booked like a scanned one. The repeat
+  // filter of the scanner does not apply: typing it in is deliberate.
+  function submitManual(code: string) {
+    closeManual();
+    bookCode(code);
   }
 
   // After the merge the card shows the target, which the booking on the
@@ -273,6 +298,13 @@ export function ScanPage() {
           {"\u2699\uFE0E"}
         </button>
       </div>
+      <button
+        type="button"
+        onClick={openManual}
+        className="min-h-11 self-center rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-700"
+      >
+        Code eintippen
+      </button>
 
       <p
         role="status"
@@ -301,6 +333,11 @@ export function ScanPage() {
         source={mergeSource}
         onClose={closeMerge}
         onMerged={merged}
+      />
+      <ManualCodeDialog
+        open={manualOpen}
+        onClose={closeManual}
+        onSubmit={submitManual}
       />
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
         <CameraSettings

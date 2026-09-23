@@ -1034,7 +1034,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F11: Manuelle Eingabe
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F08, F06b
 - **Referenzen:** architecture.md 7.1
 - **Umfang:**
