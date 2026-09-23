@@ -15,6 +15,9 @@ check:
 	fi
 	go vet ./...
 	go test ./...
+	@if [ -f web/package.json ]; then \
+		(cd web && npm ci && npm run check && npm run lint && npm test) || exit 1; \
+	fi
 
 test:
 	go test ./...

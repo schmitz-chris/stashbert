@@ -823,7 +823,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F01: Frontend-Projekt anlegen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** P0-6, B29
 - **Referenzen:** ADR-0007, AGENTS.md, architecture.md 8 (CSP)
 - **Umfang:**
