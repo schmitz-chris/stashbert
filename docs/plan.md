@@ -1047,7 +1047,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F12: Einkauf
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F03, B26
 - **Referenzen:** architecture.md 6.2 (`getShoppingList`)
 - **Umfang:**

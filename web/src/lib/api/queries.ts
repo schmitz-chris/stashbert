@@ -30,6 +30,31 @@ export const productListQuery = queryOptions({
   },
 });
 
+/**
+ * The shopping list: all products with missing > 0, in the order of the
+ * server (sorted by name). With the default staleTime of 0 it is fetched
+ * again whenever a view using it mounts, so opening the shopping view
+ * shows the current list.
+ */
+export const shoppingListQuery = queryOptions({
+  queryKey: ["shopping-list"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET("/shopping-list");
+    if (!response.ok || data === undefined) {
+      throw error ?? new Error(`GET /shopping-list: status ${response.status}`);
+    }
+    return data.items;
+  },
+});
+
+// Marks the cached shopping list as out of date after a change of stock
+// or target, so it is fetched again. Every mutation that changes stock or
+// target of a product (bookings, reversals, stock counts, changes,
+// merges and deletions) calls it.
+function invalidateShoppingList(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: shoppingListQuery.queryKey });
+}
+
 /** A movement of one unit for a product, booked by product_id. */
 export interface ProductMovement {
   productId: string;
@@ -40,9 +65,10 @@ export interface ProductMovement {
  * Books a ProductMovement with POST /movements. A failed booking throws
  * the Problem Details of the response, so problemCode can read its code.
  * On success the product in the cached product list is replaced with
- * product from the response, and the movements of the product are fetched
- * again. On stock_already_zero the cached list is out of date (someone
- * else took the last one), so it is fetched again.
+ * product from the response, and the movements of the product and the
+ * shopping list are fetched again. On stock_already_zero the cached lists
+ * are out of date (someone else took the last one), so the product list
+ * and the shopping list are fetched again.
  */
 export function productMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -62,10 +88,12 @@ export function productMovementMutation(queryClient: QueryClient) {
       void queryClient.invalidateQueries({
         queryKey: productMovementsQuery(productId).queryKey,
       });
+      invalidateShoppingList(queryClient);
     },
     onError: (error) => {
       if (problemCode(error) === "stock_already_zero") {
         void queryClient.invalidateQueries({ queryKey: productListQuery.queryKey });
+        invalidateShoppingList(queryClient);
       }
     },
   });
@@ -90,7 +118,7 @@ const scanTimeout = 10_000;
  * instead of waiting for the network. On success product from the
  * response replaces the cached product and its entry in the product list;
  * if the booking created the product, the list is fetched again. The
- * movements of the product are fetched again.
+ * movements of the product and the shopping list are fetched again.
  */
 export function scanMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -171,8 +199,8 @@ function bookingError(error: unknown, response: Response, request: string): unkn
 
 // Updates the cache after a booking: product from the result replaces the
 // cached product and its entry in the product list; if the booking created
-// the product, the list is fetched again. The movements of the product are
-// fetched again.
+// the product, the list is fetched again. The movements of the product and
+// the shopping list are fetched again.
 function cacheBookingResult(
   queryClient: QueryClient,
   { product, product_created }: MovementResult,
@@ -189,6 +217,7 @@ function cacheBookingResult(
   void queryClient.invalidateQueries({
     queryKey: productMovementsQuery(product.id).queryKey,
   });
+  invalidateShoppingList(queryClient);
 }
 
 /**
@@ -221,7 +250,9 @@ export interface ProductUpdate {
 /**
  * Changes a product with PATCH /products/{id}. A failed change throws the
  * Problem Details of the response. On success the product from the
- * response replaces the cached product and its entry in the product list.
+ * response replaces the cached product and its entry in the product list,
+ * and the shopping list is fetched again (target, name or brand may have
+ * changed).
  */
 export function productUpdateMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -235,7 +266,10 @@ export function productUpdateMutation(queryClient: QueryClient) {
       }
       return data;
     },
-    onSuccess: (product) => setCachedProduct(queryClient, product),
+    onSuccess: (product) => {
+      setCachedProduct(queryClient, product);
+      invalidateShoppingList(queryClient);
+    },
   });
 }
 
@@ -251,7 +285,8 @@ function setCachedProduct(queryClient: QueryClient, product: Product) {
 /**
  * Deletes the product with the given id with DELETE /products/{id}. A
  * failed deletion throws the Problem Details of the response. On success
- * the product is removed from the cached product list.
+ * the product is removed from the cached product list, and the shopping
+ * list is fetched again.
  */
 export function productDeleteMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -268,6 +303,7 @@ export function productDeleteMutation(queryClient: QueryClient) {
       queryClient.setQueryData(productListQuery.queryKey, (products) =>
         products?.filter((product) => product.id !== id),
       );
+      invalidateShoppingList(queryClient);
     },
   });
 }
@@ -388,7 +424,8 @@ export interface ProductInventory {
  * Sets the stock of a product with POST /movements and kind inventory. A
  * failed booking throws the Problem Details of the response. On success
  * product from the response replaces the cached product and its entry in
- * the product list, and the movements of the product are fetched again.
+ * the product list, and the movements of the product and the shopping list
+ * are fetched again.
  */
 export function inventoryMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -406,6 +443,7 @@ export function inventoryMutation(queryClient: QueryClient) {
       void queryClient.invalidateQueries({
         queryKey: productMovementsQuery(productId).queryKey,
       });
+      invalidateShoppingList(queryClient);
     },
   });
 }
@@ -423,6 +461,7 @@ export interface ProductMerge {
  * cached product list, the target from the response replaces the cached
  * target and its entry in the list, and all cached movement lists are
  * fetched again, because the movements of the source moved to the target.
+ * The shopping list is fetched again as well.
  */
 export function productMergeMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -446,6 +485,7 @@ export function productMergeMutation(queryClient: QueryClient) {
       );
       setCachedProduct(queryClient, target);
       void queryClient.invalidateQueries({ queryKey: ["movements"] });
+      invalidateShoppingList(queryClient);
     },
   });
 }
