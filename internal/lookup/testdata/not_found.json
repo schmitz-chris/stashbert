@@ -1,0 +1,1 @@
+{"code":"4009998877669","errors":[{"field":{"id":"code","value":"4009998877669"},"impact":{"id":"failure","lc_name":"Fehlgeschlagen","name":"Failure"},"message":{"id":"product_not_found","lc_name":"","name":""}}],"result":{"id":"product_not_found","lc_name":"Produkt nicht gefunden","name":"Product not found"},"status":"failure","warnings":[]}

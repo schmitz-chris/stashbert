@@ -565,7 +565,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B19: Open-Food-Facts-Client
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B02, B06
 - **Referenzen:** architecture.md 7.2 (Schritte 2 und 3), 7.3 (Limiter)
 - **Umfang:**
