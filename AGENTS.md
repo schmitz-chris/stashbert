@@ -166,6 +166,7 @@ web/src/main.tsx               Einstieg: QueryClientProvider und RouterProvider
 web/src/router.tsx             Routentabelle (createBrowserRouter), exportiert auch `routes`
 web/src/routes/<ansicht>.tsx   eine Datei pro Ansicht (vorrat, scan, einkauf, produkt)
 web/src/components/            wiederverwendbare Komponenten (z. B. Dialog, Navigationsleiste)
+web/src/hooks/                 eigene React-Hooks (z. B. useScanner über lib/scanner)
 web/src/lib/api/               generierter Client (schema.d.ts), client.ts, queries.ts
 web/src/lib/scanner/           framework-unabhängiges Scanner-Modul (aus poc/scanner-react)
 web/src/lib/*.ts               reine Funktionen mit *.test.ts daneben
