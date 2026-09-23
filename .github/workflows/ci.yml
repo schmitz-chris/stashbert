@@ -21,4 +21,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: make check
+      # Builds the web UI (including the PWA check of npm run build) and
+      # the binary that embeds it.
+      - run: make build
       - run: make generate && git diff --exit-code && test -z "$(git status --porcelain)"

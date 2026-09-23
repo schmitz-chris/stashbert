@@ -1074,7 +1074,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F13b: PWA
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F12, F07, F13a
 - **Referenzen:** research.md 7.5, architecture.md 4.3
 - **Umfang:**

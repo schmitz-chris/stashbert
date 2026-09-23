@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "copy:wasm": "node scripts/copy-wasm.mjs",
+    "check:pwa": "node scripts/check-pwa.mjs",
     "predev": "npm run copy:wasm",
     "dev": "vite",
     "prebuild": "npm run copy:wasm",
     "build": "tsc -b && vite build",
+    "postbuild": "npm run check:pwa",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc -b",
@@ -38,6 +40,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.69.0",
     "vite": "^8.3.0",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^5.0.1"
   },
   "overrides": {
