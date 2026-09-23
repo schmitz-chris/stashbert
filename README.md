@@ -15,7 +15,7 @@ StashBert ist ausdrücklich kein Meal Planner, keine Rezept-App und kein ERP.
 
 ## Status
 
-Planungsphase. Es gibt noch keinen Anwendungscode. Nächster Schritt ist Phase 0 des Plans.
+Umsetzung von M1 läuft. Der Stand jedes Tasks steht in [docs/plan.md](docs/plan.md).
 
 | Dokument | Inhalt |
 |---|---|

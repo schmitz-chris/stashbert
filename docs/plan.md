@@ -18,7 +18,7 @@ Dieser Plan steuert die Umsetzung. **Was nicht in einem Task steht, wird nicht g
 6. `make check` muss grün sein.
 7. Status setzen (`erledigt`, oder `wartet auf Nutzer`, wenn Kriterien mit „(Nutzer)" offen sind) und genau einen Commit anlegen: `<Task-ID>: <Beschreibung>`.
 
-Wird ein Task größer als etwa 400 geänderte Zeilen (ohne generierten Code, ohne `poc/`), oder sind Angaben unklar oder widersprüchlich: anhalten und melden, nicht raten und nicht eigenmächtig aufteilen.
+Wird ein Task größer als etwa 400 geänderte Zeilen Produktivcode (ohne Tests, ohne generierten Code, ohne `poc/`), oder sind Angaben unklar oder widersprüchlich: anhalten und melden, nicht raten und nicht eigenmächtig aufteilen.
 
 **Status-Werte:**
 
@@ -75,7 +75,7 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
   - `.github/workflows/ci.yml`: bei Push und Pull Request Go 1.27 einrichten und `make check` ausführen, mit `permissions: contents: read`. Die aktuellen Hauptversionen von `actions/checkout` und `actions/setup-go` vorher nachschlagen.
 - **Nicht im Umfang:** HTTP-Server, Abhängigkeiten, Frontend, Dockerfile.
 - **Abnahmekriterien:**
-  1. `go run ./cmd/stashbert` gibt `stashbert dev` aus.
+  1. `go run ./cmd/stashbert` gibt `stashbert dev` aus. (Seit B02 überholt: `main` startet den Server, die Version steht im Startlog.)
   2. `make check` ist grün.
   3. `make build` erzeugt `bin/stashbert`.
   4. (Nutzer) Nach dem Push läuft die CI grün (`gh run list`).
