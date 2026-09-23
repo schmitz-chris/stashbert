@@ -401,7 +401,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B12: Ereignis-Interface
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** P0-1
 - **Referenzen:** architecture.md 6.6, ADR-0011
 - **Umfang:** `internal/events` mit:
