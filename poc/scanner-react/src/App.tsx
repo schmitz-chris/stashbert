@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
+  bookScan,
+  feedbackFor,
+  loadMode,
+  loadShoppingList,
+  reverseMovement,
+  saveMode,
+} from "./booking";
+import type { Color, Feedback, Kind, Outcome, ShoppingItem } from "./booking";
+import {
   currentZoom,
   hasTorch,
   listCameras,
@@ -13,15 +22,35 @@ import {
 import type { CameraOption, ZoomRange } from "./scanner/camera";
 import { ROI } from "./scanner/decoder";
 import { displayMode, errorMessage } from "./scanner/environment";
-import { AudioFeedback, playAudioElement, primeAudioElement } from "./scanner/feedback";
-import { addToHistory } from "./scanner/hits";
-import type { HistoryEntry } from "./scanner/hits";
+import { AudioFeedback, playAudioElement, primeAudioElement, TONES } from "./scanner/feedback";
 import { Scanner } from "./scanner/scanner";
 
 type Phase = "idle" | "starting" | "running" | "paused";
 
+interface Booking {
+  time: string;
+  code: string;
+  feedback: Feedback;
+}
+
 const FLASH_MS = 300;
+const MESSAGE_MS = 2000;
 const MAX_ERRORS = 5;
+const MAX_BOOKINGS = 10;
+
+const flashClass: Record<Color, string> = {
+  green: "bg-green-500/70",
+  blue: "bg-sky-500/70",
+  yellow: "bg-amber-400/70",
+  red: "bg-red-600/70",
+};
+
+const messageClass: Record<Color, string> = {
+  green: "bg-green-600 text-white",
+  blue: "bg-sky-600 text-white",
+  yellow: "bg-amber-400 text-slate-900",
+  red: "bg-red-600 text-white",
+};
 
 const roiStyle = {
   left: `${ROI.left * 100}%`,
@@ -54,8 +83,14 @@ export default function App() {
   const [useAudioElement, setUseAudioElement] = useState(false);
   const [lastHit, setLastHit] = useState<{ code: string; ms: number } | null>(null);
   const [hitCount, setHitCount] = useState(0);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [flash, setFlash] = useState(false);
+  const [kind, setKind] = useState<Kind>(loadMode);
+  const kindRef = useRef(kind);
+  const messageTimerRef = useRef<number | undefined>(undefined);
+  const [message, setMessage] = useState<Feedback | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [lastMovementId, setLastMovementId] = useState<string | null>(null);
+  const [shopping, setShopping] = useState<ShoppingItem[] | null>(null);
+  const [flash, setFlash] = useState<Color | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [videoSize, setVideoSize] = useState({ width: 16, height: 9 });
 
@@ -67,22 +102,77 @@ export default function App() {
     );
   }
 
-  function handleHit(code: string, ms: number) {
-    setLastHit({ code, ms });
-    setHitCount((count) => count + 1);
-    setHistory((entries) =>
-      addToHistory(entries, { code, time: new Date().toLocaleTimeString("de-DE") }),
-    );
-    setFlash(true);
+  // Shows feedback as flash, sound and a large message for MESSAGE_MS.
+  function showFeedback(code: string, feedback: Feedback) {
+    setFlash(feedback.color);
     window.clearTimeout(flashTimerRef.current);
-    flashTimerRef.current = window.setTimeout(() => setFlash(false), FLASH_MS);
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), FLASH_MS);
+    setMessage(feedback);
+    window.clearTimeout(messageTimerRef.current);
+    messageTimerRef.current = window.setTimeout(() => setMessage(null), MESSAGE_MS);
+    setBookings((entries) =>
+      [{ time: new Date().toLocaleTimeString("de-DE"), code, feedback }, ...entries].slice(
+        0,
+        MAX_BOOKINGS,
+      ),
+    );
     if (useAudioElementRef.current && audioRef.current) {
       playAudioElement(audioRef.current).catch((error: unknown) =>
         addError(`Audio-Element: ${errorMessage(error)}`),
       );
     } else {
-      audioFeedback.beep();
+      audioFeedback.play(TONES[feedback.sound]);
     }
+  }
+
+  function refreshShopping() {
+    loadShoppingList().then(setShopping, (error: unknown) =>
+      addError(`Einkaufsliste: ${errorMessage(error)}`),
+    );
+  }
+
+  function handleOutcome(code: string, outcome: Outcome, feedback: Feedback) {
+    if (outcome.ok) {
+      setLastMovementId(outcome.result.movementId);
+      refreshShopping();
+    } else if (outcome.code !== "unknown_barcode" && outcome.code !== "stock_already_zero") {
+      addError(`${code}: ${outcome.status} ${outcome.code} ${outcome.detail}`);
+    }
+    showFeedback(code, feedback);
+  }
+
+  function handleHit(code: string, ms: number) {
+    setLastHit({ code, ms });
+    setHitCount((count) => count + 1);
+    const bookedKind = kindRef.current;
+    void bookScan(code, bookedKind).then((outcome) =>
+      handleOutcome(code, outcome, feedbackFor(bookedKind, outcome)),
+    );
+  }
+
+  function handleKind(next: Kind) {
+    kindRef.current = next;
+    setKind(next);
+    saveMode(next);
+  }
+
+  function handleUndo() {
+    const id = lastMovementId;
+    if (!id) {
+      return;
+    }
+    setLastMovementId(null);
+    void reverseMovement(id).then((outcome) => {
+      const feedback: Feedback = outcome.ok
+        ? { color: "yellow", sound: "warn", text: `Rückgängig: ${outcome.result.message}` }
+        : feedbackFor(kindRef.current, outcome);
+      if (outcome.ok) {
+        refreshShopping();
+      } else {
+        addError(`Rückgängig: ${outcome.status} ${outcome.code} ${outcome.detail}`);
+      }
+      showFeedback("Storno", feedback);
+    });
   }
 
   function getScanner(): Scanner {
@@ -204,11 +294,14 @@ export default function App() {
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    refreshShopping();
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       scannerRef.current?.stop();
       window.clearTimeout(flashTimerRef.current);
+      window.clearTimeout(messageTimerRef.current);
     };
+    // refreshShopping only uses state setters, so running it once is enough.
   }, []);
 
   const showVideo = phase === "starting" || phase === "running";
@@ -217,7 +310,26 @@ export default function App() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 text-slate-900">
-      <h1 className="text-2xl font-bold">Scanner-Test R</h1>
+      <h1 className="text-2xl font-bold">StashBert Scanner (Test)</h1>
+
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label="Modus">
+        <button
+          type="button"
+          className={`min-h-14 rounded-xl text-lg font-semibold ${kind === "add" ? "bg-green-600 text-white" : "bg-slate-200"}`}
+          aria-pressed={kind === "add"}
+          onClick={() => handleKind("add")}
+        >
+          Einlagern
+        </button>
+        <button
+          type="button"
+          className={`min-h-14 rounded-xl text-lg font-semibold ${kind === "consume" ? "bg-sky-600 text-white" : "bg-slate-200"}`}
+          aria-pressed={kind === "consume"}
+          onClick={() => handleKind("consume")}
+        >
+          Entnehmen
+        </button>
+      </div>
 
       {phase === "idle" && (
         <button type="button" className={bigButton} onClick={handleStart}>
@@ -247,8 +359,23 @@ export default function App() {
           className="pointer-events-none absolute rounded border-2 border-white shadow-[0_0_0_2px_rgb(0_0_0/0.6)]"
           style={roiStyle}
         />
-        {flash && <div className="pointer-events-none absolute inset-0 bg-green-500/70" />}
+        {flash && <div className={`pointer-events-none absolute inset-0 ${flashClass[flash]}`} />}
       </div>
+
+      {message && (
+        <p className={`rounded-xl p-4 text-center text-2xl font-bold ${messageClass[message.color]}`}>
+          {message.text}
+        </p>
+      )}
+      {lastMovementId && (
+        <button
+          type="button"
+          className="min-h-11 rounded-lg bg-slate-200 px-4 font-semibold"
+          onClick={handleUndo}
+        >
+          Letzte Buchung rückgängig
+        </button>
+      )}
 
       <section className="flex flex-col gap-3">
         {cameras.length > 0 && (
@@ -317,14 +444,47 @@ export default function App() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold">Letzte Codes</h2>
-        <ol className="mt-2 flex flex-col gap-1 font-mono">
-          {history.map((entry, index) => (
-            <li key={`${entry.time}-${entry.code}-${index}`}>
-              {entry.time} {entry.code}
+        <h2 className="text-lg font-semibold">Letzte Buchungen</h2>
+        <ol className="mt-2 flex flex-col gap-1">
+          {bookings.map((entry, index) => (
+            <li key={`${entry.time}-${entry.code}-${index}`} className="flex gap-2">
+              <span className={`mt-1.5 size-3 shrink-0 rounded-full ${messageClass[entry.feedback.color]}`} />
+              <span className="tabular-nums">{entry.time}</span>
+              <span className="break-all">{entry.feedback.text}</span>
             </li>
           ))}
         </ol>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Einkaufsliste</h2>
+          <button
+            type="button"
+            className="min-h-11 rounded-lg bg-slate-200 px-4"
+            onClick={refreshShopping}
+          >
+            Neu laden
+          </button>
+        </div>
+        {shopping === null ? (
+          <p className="text-slate-500">Nicht geladen</p>
+        ) : shopping.length === 0 ? (
+          <p className="text-slate-500">Nichts fehlt</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1">
+            {shopping.map((item) => (
+              <li key={item.product_id}>
+                {item.missing} × {item.name}
+                {item.brand ? ` (${item.brand})` : ""}
+                <span className="text-slate-500">
+                  {" "}
+                  · da {item.stock} von {item.target}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="rounded-xl border border-slate-300 p-4 text-sm">

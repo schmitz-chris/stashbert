@@ -13,12 +13,18 @@ const https =
     ? { key: readFileSync(keyFile), cert: readFileSync(certFile) }
     : undefined
 
+// The StashBert Go server (make run). Proxying /api keeps the requests
+// same-origin, so the server needs no CORS headers.
+const proxy = { '/api': 'http://localhost:8080' }
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: { proxy },
   preview: {
     // The reverse proxy reaches the preview under its own hostname.
     allowedHosts: true,
     https,
+    proxy,
   },
 })

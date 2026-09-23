@@ -10,7 +10,7 @@
     "predev": "npm run copy:wasm && npm run gen:beep",
     "dev": "vite",
     "prebuild": "npm run copy:wasm && npm run gen:beep",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b tsconfig.app.json && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
