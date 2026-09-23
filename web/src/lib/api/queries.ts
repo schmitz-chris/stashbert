@@ -4,7 +4,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { replaceProduct, sortByName } from "../products";
-import { api } from "./client";
+import { api, problemCode } from "./client";
 
 /**
  * All products, sorted by name in German order. With the default
@@ -32,7 +32,8 @@ export interface ProductMovement {
  * Books a ProductMovement with POST /movements. A failed booking throws
  * the Problem Details of the response, so problemCode can read its code.
  * On success the product in the cached product list is replaced with
- * product from the response.
+ * product from the response. On stock_already_zero the cached list is out
+ * of date (someone else took the last one), so it is fetched again.
  */
 export function productMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
@@ -49,6 +50,11 @@ export function productMovementMutation(queryClient: QueryClient) {
       queryClient.setQueryData(productListQuery.queryKey, (products) =>
         replaceProduct(products, result.product),
       );
+    },
+    onError: (error) => {
+      if (problemCode(error) === "stock_already_zero") {
+        void queryClient.invalidateQueries({ queryKey: productListQuery.queryKey });
+      }
     },
   });
 }
