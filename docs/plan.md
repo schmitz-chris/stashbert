@@ -909,6 +909,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 - **Referenzen:** architecture.md 6.2, 6.5
 - **Umfang:**
   - `GET /products/{id}`.
+  - **Zurück:** oben ein Link „Zurück" zu `/vorrat` (die Seite hat keine Navigationsleiste; in der installierten App gibt es keinen Browser-Zurück-Knopf).
   - **Formular:** Name, Marke, Packungsgröße, Soll (Zahl mit Schritt 1), Notiz. „Speichern" sendet `PATCH`, nur mit den geänderten Feldern. Das Diff berechnet die reine Funktion `diffPatch(original, form)`.
   - **„Passt so"**: nur bei `needs_review`. Sendet `PATCH` mit dem unveränderten `name` und setzt damit `needs_review` zurück.
   - **Löschen** mit eigenem Bestätigungsdialog (kein `window.confirm`), danach `/vorrat`.
