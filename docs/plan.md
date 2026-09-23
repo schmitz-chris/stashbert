@@ -293,7 +293,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B05: sqlc einrichten
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B04
 - **Referenzen:** ADR-0005
 - **Umfang:**

@@ -4,6 +4,7 @@
 
 generate:
 	go generate ./...
+	go tool sqlc generate
 
 check:
 	@unformatted="$$(gofmt -l $$(go list -f '{{.Dir}}' ./...))" || exit 1; \
