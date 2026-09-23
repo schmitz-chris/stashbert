@@ -26,4 +26,13 @@ export default defineConfig([
       ]),
     ),
   },
+  {
+    // Node scripts and their tests. They are plain JavaScript because the
+    // project has no Node typings for tsc.
+    files: ['scripts/**/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

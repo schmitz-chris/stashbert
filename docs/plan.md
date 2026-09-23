@@ -950,7 +950,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F07: Scanner-Modul
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F01
 - **Referenzen:** ADR-0008, architecture.md 4.3, `docs/poc/p0-protokoll.md`, Code der gewählten POC-Variante
 - **Umfang:** framework-unabhängiges TypeScript in `web/src/lib/scanner/`, übernommen aus `poc/scanner-react/src/scanner/` (dort schon mit Tonmustern und gleitendem Fenster):

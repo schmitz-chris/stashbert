@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "copy:wasm": "node scripts/copy-wasm.mjs",
+    "predev": "npm run copy:wasm",
     "dev": "vite",
+    "prebuild": "npm run copy:wasm",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -14,6 +17,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.2",
+    "barcode-detector": "^3.2.2",
     "openapi-fetch": "^0.17.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
