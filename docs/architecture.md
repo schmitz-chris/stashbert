@@ -192,7 +192,7 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 
 ### 6.1 Allgemeine Regeln
 
-- Basis-Pfad `/api/v1`. JSON-Felder in `snake_case`.
+- Basis-Pfad `/api/v1`. JSON-Felder in `snake_case`. Zeitstempel sind RFC 3339 in UTC (`format: date-time`); die Zahl der Nachkommastellen ist in der API nicht fest, das feste Format gilt nur in der Datenbank.
 - Fehler: RFC 9457, `application/problem+json`, mit den Feldern `type` (`about:blank`), `title`, `status`, `detail`, `code`. Die Liste der `code`-Werte steht in 6.4.
 - Ändernde Aufrufe (`POST`, `PATCH`, `DELETE`) verlangen `Content-Type: application/json`, sofern sie einen Body haben.
 - Keine Anmeldung (ADR-0013). Es werden keine CORS-Header gesetzt; zusammen mit der JSON-Pflicht für Bodies verhindert der Browser, dass fremde Webseiten Buchungen auslösen.
