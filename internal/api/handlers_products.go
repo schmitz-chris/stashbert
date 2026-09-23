@@ -53,6 +53,40 @@ func (s *Server) GetProduct(ctx context.Context, request GetProductRequestObject
 	return GetProduct200JSONResponse(productResponse(p)), nil
 }
 
+// CreateProduct creates a product manually and returns it with its location.
+func (s *Server) CreateProduct(ctx context.Context, request CreateProductRequestObject) (CreateProductResponseObject, error) {
+	body := request.Body
+	in := domain.NewProduct{
+		Name:        body.Name,
+		Brand:       body.Brand,
+		PackageSize: body.PackageSize,
+		Note:        body.Note,
+	}
+	if body.Target != nil {
+		in.Target = int64(*body.Target)
+	}
+	if body.MinStock != nil {
+		in.MinStock = new(int64(*body.MinStock))
+	}
+	if body.Barcodes != nil {
+		for _, b := range *body.Barcodes {
+			units := int64(1)
+			if b.Units != nil {
+				units = int64(*b.Units)
+			}
+			in.Barcodes = append(in.Barcodes, domain.Barcode{Code: b.Code, Units: units})
+		}
+	}
+	p, err := domain.CreateProduct(ctx, s.deps.DB, s.deps.Publisher, in)
+	if err != nil {
+		return nil, err
+	}
+	return CreateProduct201JSONResponse{
+		Body:    productResponse(p),
+		Headers: CreateProduct201ResponseHeaders{Location: "/api/v1/products/" + p.ID},
+	}, nil
+}
+
 // productResponse maps p to the schema Product.
 func productResponse(p domain.Product) Product {
 	barcodes := make([]Barcode, len(p.Barcodes))

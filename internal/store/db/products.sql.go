@@ -37,6 +37,94 @@ func (q *Queries) GetProduct(ctx context.Context, id string) (Product, error) {
 	return i, err
 }
 
+const insertBarcode = `-- name: InsertBarcode :one
+INSERT INTO barcodes (code, product_id, units, created_at)
+VALUES (?, ?, ?, ?)
+RETURNING code, product_id, units, created_at
+`
+
+type InsertBarcodeParams struct {
+	Code      string
+	ProductID string
+	Units     int64
+	CreatedAt string
+}
+
+func (q *Queries) InsertBarcode(ctx context.Context, arg InsertBarcodeParams) (Barcode, error) {
+	row := q.db.QueryRowContext(ctx, insertBarcode,
+		arg.Code,
+		arg.ProductID,
+		arg.Units,
+		arg.CreatedAt,
+	)
+	var i Barcode
+	err := row.Scan(
+		&i.Code,
+		&i.ProductID,
+		&i.Units,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertProduct = `-- name: InsertProduct :one
+INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
+    origin, lookup_state, needs_review, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
+`
+
+type InsertProductParams struct {
+	ID          string
+	Name        string
+	Brand       *string
+	PackageSize *string
+	Target      int64
+	MinStock    *int64
+	Note        *string
+	Origin      string
+	LookupState string
+	NeedsReview int64
+	CreatedAt   string
+	UpdatedAt   string
+}
+
+func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, insertProduct,
+		arg.ID,
+		arg.Name,
+		arg.Brand,
+		arg.PackageSize,
+		arg.Target,
+		arg.MinStock,
+		arg.Note,
+		arg.Origin,
+		arg.LookupState,
+		arg.NeedsReview,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Brand,
+		&i.PackageSize,
+		&i.Stock,
+		&i.Target,
+		&i.MinStock,
+		&i.Note,
+		&i.Origin,
+		&i.LookupState,
+		&i.NeedsReview,
+		&i.ImageSourceUrl,
+		&i.ImageFile,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listBarcodes = `-- name: ListBarcodes :many
 SELECT code, product_id, units, created_at FROM barcodes
 ORDER BY code

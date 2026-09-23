@@ -17,6 +17,7 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -53,7 +54,7 @@ func run() error {
 		return err
 	}
 
-	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db})
+	handler, err := app.NewHandler(cfg, app.Deps{Logger: logger, Version: version, DB: db, Publisher: events.Nop{}})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
 	}

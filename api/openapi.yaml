@@ -39,6 +39,35 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    post:
+      operationId: createProduct
+      summary: Produkt manuell anlegen
+      description: "Fehler-code: invalid_request (400), barcode_in_use (409), invalid_barcode (422)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductCreate"
+      responses:
+        "201":
+          description: Das angelegte Produkt mit seinen Barcodes.
+          headers:
+            Location:
+              description: Pfad des Produkts, /api/v1/products/{id}.
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /products/{id}:
     parameters:
       - name: id
@@ -189,3 +218,47 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Product"
+    BarcodeInput:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: EAN-8, UPC-A, EAN-13 oder GTIN-14. Wird normalisiert gespeichert.
+        units:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Stückzahl, die ein Scan dieses Barcodes bucht.
+    ProductCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Wird getrimmt, danach 1 bis 120 Zeichen.
+        brand:
+          type: string
+          description: Wird getrimmt, danach höchstens 120 Zeichen. Leer wird null.
+        package_size:
+          type: string
+          description: Wird getrimmt, danach höchstens 40 Zeichen. Leer wird null.
+        target:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Sollbestand.
+        min_stock:
+          type: integer
+          minimum: 0
+          description: Mindestbestand, höchstens target.
+        note:
+          type: string
+          description: Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null.
+        barcodes:
+          type: array
+          description: Barcodes des Produkts. Jeder Code darf nur einmal vorkommen.
+          items:
+            $ref: "#/components/schemas/BarcodeInput"

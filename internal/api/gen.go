@@ -101,6 +101,15 @@ type Barcode struct {
 	Units int `json:"units"`
 }
 
+// BarcodeInput defines model for BarcodeInput.
+type BarcodeInput struct {
+	// Code EAN-8, UPC-A, EAN-13 oder GTIN-14. Wird normalisiert gespeichert.
+	Code string `json:"code"`
+
+	// Units Stückzahl, die ein Scan dieses Barcodes bucht.
+	Units *int `json:"units,omitempty"`
+}
+
 // Health defines model for Health.
 type Health struct {
 	Status  HealthStatus `json:"status"`
@@ -154,10 +163,37 @@ type ProductLookupState string
 // ProductOrigin defines model for Product.Origin.
 type ProductOrigin string
 
+// ProductCreate defines model for ProductCreate.
+type ProductCreate struct {
+	// Barcodes Barcodes des Produkts. Jeder Code darf nur einmal vorkommen.
+	Barcodes *[]BarcodeInput `json:"barcodes,omitempty"`
+
+	// Brand Wird getrimmt, danach höchstens 120 Zeichen. Leer wird null.
+	Brand *string `json:"brand,omitempty"`
+
+	// MinStock Mindestbestand, höchstens target.
+	MinStock *int `json:"min_stock,omitempty"`
+
+	// Name Wird getrimmt, danach 1 bis 120 Zeichen.
+	Name string `json:"name"`
+
+	// Note Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null.
+	Note *string `json:"note,omitempty"`
+
+	// PackageSize Wird getrimmt, danach höchstens 40 Zeichen. Leer wird null.
+	PackageSize *string `json:"package_size,omitempty"`
+
+	// Target Sollbestand.
+	Target *int `json:"target,omitempty"`
+}
+
 // ProductList defines model for ProductList.
 type ProductList struct {
 	Items []Product `json:"items"`
 }
+
+// CreateProductJSONRequestBody defines body for CreateProduct for application/json ContentType.
+type CreateProductJSONRequestBody = ProductCreate
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -167,6 +203,9 @@ type ServerInterface interface {
 	// ListProducts Alle Produkte, sortiert nach Name
 	// (GET /products)
 	ListProducts(w http.ResponseWriter, r *http.Request)
+	// CreateProduct Produkt manuell anlegen
+	// (POST /products)
+	CreateProduct(w http.ResponseWriter, r *http.Request)
 	// GetProduct Ein Produkt
 	// (GET /products/{id})
 	GetProduct(w http.ResponseWriter, r *http.Request, id string)
@@ -200,6 +239,20 @@ func (siw *ServerInterfaceWrapper) ListProducts(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProducts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProduct operation middleware
+func (siw *ServerInterfaceWrapper) CreateProduct(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProduct(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -357,6 +410,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products", wrapper.ListProducts)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/products", wrapper.CreateProduct)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/products/{id}", wrapper.GetProduct)
 
 	return m
@@ -438,6 +492,53 @@ func (response ListProductsdefaultApplicationProblemPlusJSONResponse) VisitListP
 	return err
 }
 
+type CreateProductRequestObject struct {
+	Body *CreateProductJSONRequestBody
+}
+
+type CreateProductResponseObject interface {
+	VisitCreateProductResponse(w http.ResponseWriter) error
+}
+
+type CreateProduct201ResponseHeaders struct {
+	Location string
+}
+
+type CreateProduct201JSONResponse struct {
+	Body    Product
+	Headers CreateProduct201ResponseHeaders
+}
+
+func (response CreateProduct201JSONResponse) VisitCreateProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Location", fmt.Sprint(response.Headers.Location))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProductdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateProductdefaultApplicationProblemPlusJSONResponse) VisitCreateProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetProductRequestObject struct {
 	Id string `json:"id"`
 }
@@ -485,6 +586,9 @@ type StrictServerInterface interface {
 	// ListProducts Alle Produkte, sortiert nach Name
 	// (GET /products)
 	ListProducts(ctx context.Context, request ListProductsRequestObject) (ListProductsResponseObject, error)
+	// CreateProduct Produkt manuell anlegen
+	// (POST /products)
+	CreateProduct(ctx context.Context, request CreateProductRequestObject) (CreateProductResponseObject, error)
 	// GetProduct Ein Produkt
 	// (GET /products/{id})
 	GetProduct(ctx context.Context, request GetProductRequestObject) (GetProductResponseObject, error)
@@ -577,6 +681,37 @@ func (sh *strictHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CreateProduct operation middleware
+func (sh *strictHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
+	var request CreateProductRequestObject
+
+	var body CreateProductJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateProduct(ctx, request.(CreateProductRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateProduct")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateProductResponseObject); ok {
+		if err := validResponse.VisitCreateProductResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetProduct operation middleware
 func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, id string) {
 	var request GetProductRequestObject
@@ -608,24 +743,30 @@ func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, id s
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"1FbBbuM2EP0Vgu2hRbV2tk1RVLfNdrNdoE2D5tBDEBg0Oba4poYqOUyQBP6bfMbe8mMFKcmSZSbpHlq0",
-	"N4kihzPvvXmjey5t3VgEJM/Le+5lBbVIjyfCSasgPjbONuBIQ/rQryrw0umGtEVe8jPramG01+AIHOtO",
-	"z3jB6bYBXnJPTuOabwseUJM/jHBBj5/k5k5UpmBKAwON7EIKjC8efB/Ss2WQFY0iayRYg+PbbcEd/Bm0",
-	"A8XLyzbR/rqr3Xa7/AiSYiI/gzBUHVboSVBIT4ChjqHshl9lKrkG51Py99Nvk1S6iMOJXDrnzi4N1IfI",
-	"nEJlwDEUsmK/n75lPx5//wOrNbG74B8f6M7oSBs7BaNYj3qes4MKFJDQJvtpQGGKc8FJk8kHbBdewqM9",
-	"Xwy4pASfAEUFSYckLTs5HMLVC6Vg3sbtjlro3nbQaII6HfvSwYqX/Iv50ATzrgPmXZChJC6cE7fxfekE",
-	"qqHGy77IgmMwhl9tCy4dCAK1ECnxVewN4iVXguAV6RpybVEJv9C1WI/hW1prQGD8rFUWb2PtJjSLCCSM",
-	"FYsW4y0NoGpzU+0CWlqsbECVFXStceHJys0hqr9qVOBpCZ4Eqhn7rUJgf0Rw19oQU+DYhTWm+86E8exC",
-	"VjdgzMgFLnciGoFVa+/j/Vnd14BrYKvHTy6ZwjuNGxFW3mhPMGNnwTEDHrBgN9optgQHskLI2kPBUdR5",
-	"1SKA8gsH1xpu8vCjJXiec+v0WuOeazSAK2vVSkjyvEjvSxCBbscrDdB0U9OK3vdrtcAgTKTTCAmVNQpc",
-	"lr9GyI1Yw8LruxeyfYLlk57eEbLg2OMDqki117JiGBxTwcmKnQRZBVwD5uEm4dZAGacfdJI/GBr1me0z",
-	"8ReteMd2364TbDpCexx2uY5bYFDmRCA7riftN+7hYjCoPTvYK+4Zw/tF+4zp7azrb3lYF+rQw6ZopWCH",
-	"ycR9Glc2Kal1fH5BwlcnUQtvzj+MBlrJj2avZ0d82ypYNJqX/Lu0FKGnKmU7r3Yjt1NGrE5EXXxQvOTv",
-	"gbqhHDP0jUXfFv7t0VE7x5AA00HRNEbLdHT+0bdDuC38JVi6G1J5+8L8KZoYuGtwzDw+hBXN2hm5EsHQ",
-	"M/c37eT+5vPy6Od9JpHcxJ8l3nyoa+FuWyYoeBb/iNqcfdow783jSZCjtM77Tf8gzmMlZ2p8YwywtGdD",
-	"kH5ndOUAd/95/2Xs93Kf/mecRd/Zo2J+r9V2xEfuwlex6JLt5jP76vjo+OsZLybsvYeevH+Bu2yTCN+X",
-	"nljzoPF/Qts7jX3q7bR0ogYC53l5ec91DBOtqp8dZTtHBqskF6AYpTodQlfpuq4ZY8jgDC/5XDR6fv2a",
-	"b6+2fw0A",
+	"zFffbtu2F34Vgr/fRYsp/pOm2Oq7JGu7DF0WLBsKLAgMWjyWWFOHGnmYIgn8Nn2GXfUuLzaQkmxZVpxk",
+	"a4FeGLAo8vz5znc+Ht3y1BSlQUByfHLLXZpDIeLfI2FTIyH8La0pwZKC+KJZleBSq0pSBvmEnxpbCK2c",
+	"AktgWX16wBNO1yXwCXdkFWZ8mXCPity2hXO6+5wubkSuEyYVMFDIzlOB4cGBa0w6NvNpTi3LCgkysHy5",
+	"TLiFv7yyIPnkogq0cXe52m5mHyClEEht8QRLT4/N8/Xh6d4PCfvj7HjvMGHhafyCGQmWvf395HRvfDBg",
+	"75WVDFt4sAxcCSrNwdJDiMyF18Qn4+Q/o1MoVIUvoq3HINWH0E8gNOXb2DgS5OM/wODigpsFv+zJ7Aqs",
+	"iwncdt91Qqgtrk/0hXNmzUxDsV2VN5BrsAxFmrPf3hyzVwcvv2eFInbj3d0nutEB/IK9AS1Zw8v+am9l",
+	"IIGE0r2v1ih08U04KdL9BquFh/CozidrXO6t0Zk10qc9BJ7VlNiGqyFLwpwJ2y1V0B3X0CiCIh77v4U5",
+	"n/D/DdcyMaw1YlgbWafEhbXiOjzPrEC5zvGiSTLh6LXml8uEpxYEgZyKGPg8dAvxCZeCYI9UAX1tkgs3",
+	"VYXI2vDNjNEgMLxWshdvbczCl9MAJLQZiwaDlxJQVrHJagENTefGo+wldKFw6siki21Uf1EowdEMHAmU",
+	"A/ZrjsDex/5XmljQiHOjdf2eCe3YeZp/BK1bOnmxIlELrEI5F/z38r4AzIDN7z7bKAyvFS6EnzutHMGA",
+	"nXrLNDjAhH0MujQDC2mO0CugCUdR9LMWAaSbWrhS8LEffjQEu2turMoUbqhGCTg3Rs5FSo4n8XkGwtN1",
+	"e6UE6m4qK9K7Zq0Q6IUO5dQihdxoCba3fqVIFyKDqVM3D0R7T5WPmvK2kAXL7j6hDKV2Ks0Zesukt2nO",
+	"jnyae8wA++EmYTOgnrtwzZP+g76UT2yfjr4oyetqN+3awaYuaIPDKtZ2C6yZ2SHIqtad9mv3cLIWqA05",
+	"2Ehuh+AdxyP/RvZY+EUrC3ID9jOE1gzax6Sw81g9UFgIza6MXZiiAHyqKlYzxS5p3AwtzgwZkFVFQQmT",
+	"Iupxfvd3mjsCdGy8P2J/xhkCB+wdgK3aObC1d6R4tE4lbS9VjTemh9EumXhMEmM2U5vx98XbqMcTYXk5",
+	"ehos3fZ/oruDp3lrt3c92I2S3a2+C/dOC8ci7GiQd8r1TAUrFj+KzrWpbSZ35SQa2w4m7FM4N8FPPRLx",
+	"cxIuPwpieXh20pr4Jnw0GA9GfFlJvCgVn/AXcSkUjvIY7TBfzaQ1tiE7EdA8kXzC3wLVU2uI0JUGXZX4",
+	"/mhUDXpIgPGgKEut0nh0+MFVU2qV+EOw1B5iepvl/DHc8mCvwDJ998nPaVANkXX57/VfVqPtd0+LoxmI",
+	"ewLpG4kHsW7OF4Ww11UlyFdyWMXs4oZhc7veC3Kg1lmz6Svi3GZyT46HWkMj5BDnfZVbwNXH0LeM/Ubs",
+	"3UH8NLR2kCvj6L6vnb2Q4oQpvBJayWnoRnDEnh2MRs8TVt+CU4VT7yCsvnqerDbXb9mzg/395wOedMpb",
+	"Xa1N71edDo6OjLz+0qWtXFUgrgWFrIflFq/GX9p5bwMLxwRmoCGjVYEitxwo3CBXwnMQEmwM752pItku",
+	"19lcyI2RI2FDUarh1XjVaMNbJZcD3oUgaaXTHeeW3y61V6AJ9KA1E6ghA9zUlphyS2B2UHz1RRZofNDD",
+	"17dAbbJ+XTG6jzQ7qfLtFuu1wib0akCyogCKpL645SqYCXdv87Uwqb4cHs/Ty+iuvl2CSW81n/C6A/jy",
+	"cvnPAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

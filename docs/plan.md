@@ -437,7 +437,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B13b: Produkte anlegen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B13a, B12
 - **Referenzen:** architecture.md 6.2 (`createProduct`), 6.5, 6.6, ADR-0004
 - **Umfang:**

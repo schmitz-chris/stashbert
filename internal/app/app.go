@@ -11,6 +11,7 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/api"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 )
 
@@ -19,11 +20,13 @@ type Deps struct {
 	Logger  *slog.Logger
 	Version string
 	DB      *sql.DB
+	// Publisher receives the domain events after each commit.
+	Publisher events.Publisher
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
-	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB})
+	server := api.NewServer(api.ServerDeps{Version: d.Version, DB: d.DB, Publisher: d.Publisher})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
 		ResponseErrorHandlerFunc: responseErrorHandler(d.Logger),

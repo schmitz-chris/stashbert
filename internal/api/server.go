@@ -3,13 +3,15 @@ package api
 import (
 	"database/sql"
 
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/store/db"
 )
 
 // ServerDeps holds the dependencies of the API handlers.
 type ServerDeps struct {
-	Version string
-	DB      *sql.DB
+	Version   string
+	DB        *sql.DB
+	Publisher events.Publisher
 }
 
 // Server implements StrictServerInterface.

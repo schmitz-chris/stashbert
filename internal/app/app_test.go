@@ -14,11 +14,19 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
-// newApp returns the handler from app.NewHandler and its migrated database in t.TempDir().
+// newApp returns the handler from app.NewHandler with events.Nop and its
+// migrated database in t.TempDir().
 func newApp(t *testing.T) (http.Handler, *sql.DB) {
+	t.Helper()
+	return newAppWithPublisher(t, events.Nop{})
+}
+
+// newAppWithPublisher is like newApp but publishes the domain events to pub.
+func newAppWithPublisher(t *testing.T, pub events.Publisher) (http.Handler, *sql.DB) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -34,7 +42,7 @@ func newApp(t *testing.T) (http.Handler, *sql.DB) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	h, err := app.NewHandler(cfg, app.Deps{Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db})
+	h, err := app.NewHandler(cfg, app.Deps{Logger: slog.New(slog.DiscardHandler), Version: "dev", DB: db, Publisher: pub})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
