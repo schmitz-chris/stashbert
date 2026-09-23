@@ -110,7 +110,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 11. **Hintergrund:** Bei `visibilitychange` auf `hidden` werden alle Tracks gestoppt. Beim Zurückkehren erscheint ein Button „Tippen zum Fortsetzen", ohne automatischen Neustart.
 12. **Statusbereich:** User-Agent, `display-mode` (`standalone` oder `browser`), Label der gewählten Kamera, Fehlermeldungen.
 13. **Home-Bildschirm:** `manifest.webmanifest` (`display: standalone`, Name „Scanner-Test S" bzw. „Scanner-Test R") und ein `apple-touch-icon` (180 px). Das PNG wird per Node-Skript ohne Zusatzpakete als einfarbige Fläche erzeugt, oder es ist ein beliebiges vorhandenes PNG. Kein Service Worker.
-14. **Auslieferung:** `npm run build`, dann `npm run preview -- --host 0.0.0.0 --port <Port>`, mit `preview.allowedHosts: true` in der Vite-Konfiguration, damit der Reverse Proxy mit eigenem Hostnamen zugreifen darf. Port 8081 für S, 8082 für R.
+14. **Auslieferung:** `npm run build`, dann `npm run preview -- --host 0.0.0.0 --port <Port>`, mit `preview.allowedHosts: true` in der Vite-Konfiguration, damit der Reverse Proxy mit eigenem Hostnamen zugreifen darf. Port 8081 für S, 8082 für R. Optional für Tests ohne Reverse Proxy: Liegen `.cert/key.pem` und `.cert/cert.pem` im Projekt (selbst signiert, per `openssl` erzeugt, von Git ausgeschlossen), liefert die Vorschau HTTPS aus (`preview.https`).
 
 ### P0-2: Scanner-Testseite, Variante S (Svelte)
 

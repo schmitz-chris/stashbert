@@ -16,3 +16,4 @@ poc/*/public/zxing_reader.wasm
 poc/*/public/beep.wav
 
 **/.svelte-kit/
+poc/*/.cert/
