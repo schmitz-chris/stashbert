@@ -698,7 +698,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B24: Storno
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B18, B23
 - **Referenzen:** architecture.md 6.3 (Storno), 6.2 (`reverseMovement`), 6.6
 - **Umfang:**

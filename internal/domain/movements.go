@@ -192,21 +192,9 @@ func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("book movement for product %s: %w", cur.ID, err)
 	}
-	updated, err := q.UpdateProductStock(ctx, db.UpdateProductStockParams{
-		Stock:     stockAfter,
-		UpdatedAt: now,
-		ID:        cur.ID,
-	})
+	p, err := updateStock(ctx, q, cur.ID, stockAfter, now)
 	if err != nil {
-		return MovementResult{}, fmt.Errorf("book movement: update stock of product %s: %w", cur.ID, err)
-	}
-	barcodes, err := q.ListProductBarcodes(ctx, cur.ID)
-	if err != nil {
-		return MovementResult{}, fmt.Errorf("book movement: list barcodes of product %s: %w", cur.ID, err)
-	}
-	p, err := ProductFromDB(updated, barcodes)
-	if err != nil {
-		return MovementResult{}, err
+		return MovementResult{}, fmt.Errorf("book movement: %w", err)
 	}
 	m, err := movementFromDB(row)
 	if err != nil {
@@ -238,19 +226,39 @@ func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	}, nil
 }
 
+// updateStock stores stock and updated_at now at the product with id and
+// returns the changed product with its barcodes.
+func updateStock(ctx context.Context, q *db.Queries, id string, stock int64, now string) (Product, error) {
+	updated, err := q.UpdateProductStock(ctx, db.UpdateProductStockParams{
+		Stock:     stock,
+		UpdatedAt: now,
+		ID:        id,
+	})
+	if err != nil {
+		return Product{}, fmt.Errorf("update stock of product %s: %w", id, err)
+	}
+	barcodes, err := q.ListProductBarcodes(ctx, id)
+	if err != nil {
+		return Product{}, fmt.Errorf("list barcodes of product %s: %w", id, err)
+	}
+	return ProductFromDB(updated, barcodes)
+}
+
 // repeatedMovement looks up the movement stored with the key of idem. If
 // there is none, it returns false. If its request hash equals the one of
 // idem, it returns true and the result reconstructed from the movement
 // (architecture.md, 6.1): the current product, product_created false, no
 // warnings and the message of the movement with the current product name.
-// Another request hash results in 422 idempotency_key_mismatch.
+// Another request hash results in 422 idempotency_key_mismatch. Book and
+// ReverseMovement share the keys, so a key of one of them used for the other
+// results in idempotency_key_mismatch, too.
 func repeatedMovement(ctx context.Context, q *db.Queries, idem Idempotency) (MovementResult, bool, error) {
 	row, err := q.GetMovementByIdempotencyKey(ctx, &idem.Key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return MovementResult{}, false, nil
 	}
 	if err != nil {
-		return MovementResult{}, false, fmt.Errorf("book movement: movement of idempotency key: %w", err)
+		return MovementResult{}, false, fmt.Errorf("repeat movement: movement of idempotency key: %w", err)
 	}
 	if row.RequestHash == nil || *row.RequestHash != idem.RequestHash {
 		return MovementResult{}, false, httpx.NewError(http.StatusUnprocessableEntity, "idempotency_key_mismatch",
@@ -258,11 +266,11 @@ func repeatedMovement(ctx context.Context, q *db.Queries, idem Idempotency) (Mov
 	}
 	cur, err := q.GetProduct(ctx, row.ProductID)
 	if err != nil {
-		return MovementResult{}, false, fmt.Errorf("book movement: product %s of movement %s: %w", row.ProductID, row.ID, err)
+		return MovementResult{}, false, fmt.Errorf("repeat movement: product %s of movement %s: %w", row.ProductID, row.ID, err)
 	}
 	barcodes, err := q.ListProductBarcodes(ctx, cur.ID)
 	if err != nil {
-		return MovementResult{}, false, fmt.Errorf("book movement: list barcodes of product %s: %w", cur.ID, err)
+		return MovementResult{}, false, fmt.Errorf("repeat movement: list barcodes of product %s: %w", cur.ID, err)
 	}
 	p, err := ProductFromDB(cur, barcodes)
 	if err != nil {

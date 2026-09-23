@@ -9,6 +9,29 @@ import (
 	"context"
 )
 
+const getMovement = `-- name: GetMovement :one
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+WHERE id = ?
+`
+
+func (q *Queries) GetMovement(ctx context.Context, id string) (Movement, error) {
+	row := q.db.QueryRowContext(ctx, getMovement, id)
+	var i Movement
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.Kind,
+		&i.Delta,
+		&i.StockAfter,
+		&i.Barcode,
+		&i.ReversesID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getMovementByIdempotencyKey = `-- name: GetMovementByIdempotencyKey :one
 SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
 WHERE idempotency_key = ?
@@ -34,8 +57,8 @@ func (q *Queries) GetMovementByIdempotencyKey(ctx context.Context, idempotencyKe
 
 const insertMovement = `-- name: InsertMovement :one
 INSERT INTO movements (id, product_id, kind, delta, stock_after, barcode,
-    idempotency_key, request_hash, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    reverses_id, idempotency_key, request_hash, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at
 `
 
@@ -46,6 +69,7 @@ type InsertMovementParams struct {
 	Delta          int64
 	StockAfter     int64
 	Barcode        *string
+	ReversesID     *string
 	IdempotencyKey *string
 	RequestHash    *string
 	CreatedAt      string
@@ -59,6 +83,7 @@ func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) 
 		arg.Delta,
 		arg.StockAfter,
 		arg.Barcode,
+		arg.ReversesID,
 		arg.IdempotencyKey,
 		arg.RequestHash,
 		arg.CreatedAt,
@@ -77,6 +102,17 @@ func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) 
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const isMovementReversed = `-- name: IsMovementReversed :one
+SELECT EXISTS (SELECT 1 FROM movements WHERE reverses_id = ?)
+`
+
+func (q *Queries) IsMovementReversed(ctx context.Context, reversesID *string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isMovementReversed, reversesID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listMovements = `-- name: ListMovements :many

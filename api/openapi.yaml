@@ -294,6 +294,51 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /movements/{id}/reversal:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID der Buchung, die storniert wird.
+        schema:
+          type: string
+    post:
+      operationId: reverseMovement
+      summary: Buchung stornieren
+      description: >-
+        Legt eine Buchung mit kind reversal an, die die Änderung der Buchung
+        id zurücknimmt. Würde der Bestand negativ, wird er 0 mit der Warnung
+        clamped_to_zero; delta ist die tatsächliche Änderung. Buchungen der
+        Arten reversal und merge sind nicht stornierbar. Fehler-code:
+        invalid_request (400), not_found (404), already_reversed (409),
+        not_reversible (409), idempotency_key_mismatch (422).
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >-
+            Schlüssel für Wiederholungen. Gleicher Schlüssel für dieselbe
+            Buchung storniert nicht erneut, sondern liefert 201 mit der aus der
+            gespeicherten Stornobuchung rekonstruierten Antwort (aktuelles
+            Produkt, product_created false, warnings leer). Gleicher Schlüssel
+            für eine andere Anfrage ergibt idempotency_key_mismatch.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      responses:
+        "201":
+          description: Die Stornobuchung mit dem geänderten Produkt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovementResult"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:

@@ -38,13 +38,23 @@ func (s *Server) CreateMovement(ctx context.Context, request CreateMovementReque
 	if err != nil {
 		return nil, err
 	}
-	return CreateMovement201JSONResponse{
-		Movement:       movementResponse(r.Movement),
-		Product:        productResponse(r.Product),
-		ProductCreated: r.ProductCreated,
-		Warnings:       r.Warnings,
-		Message:        r.Message,
-	}, nil
+	return CreateMovement201JSONResponse(movementResultResponse(r)), nil
+}
+
+// ReverseMovement reverses a movement and returns the reversal with the
+// changed product. With an Idempotency-Key, a repeated request returns the
+// stored reversal instead of reversing again; the request hash is taken from
+// the id of the reversed movement.
+func (s *Server) ReverseMovement(ctx context.Context, request ReverseMovementRequestObject) (ReverseMovementResponseObject, error) {
+	var idem *domain.Idempotency
+	if key := request.Params.IdempotencyKey; key != nil {
+		idem = &domain.Idempotency{Key: *key, RequestHash: sha256Hex([]byte(request.Id))}
+	}
+	r, err := domain.ReverseMovement(ctx, s.deps.DB, s.deps.Publisher, request.Id, idem)
+	if err != nil {
+		return nil, err
+	}
+	return ReverseMovement201JSONResponse(movementResultResponse(r)), nil
 }
 
 // defaultMovementLimit is the size of a page of movements without the
@@ -81,8 +91,24 @@ func requestHash(body any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("hash request body: %w", err)
 	}
+	return sha256Hex(b), nil
+}
+
+// sha256Hex returns the SHA-256 of b in lower case hex.
+func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
+}
+
+// movementResultResponse maps r to the schema MovementResult.
+func movementResultResponse(r domain.MovementResult) MovementResult {
+	return MovementResult{
+		Movement:       movementResponse(r.Movement),
+		Product:        productResponse(r.Product),
+		ProductCreated: r.ProductCreated,
+		Warnings:       r.Warnings,
+		Message:        r.Message,
+	}
 }
 
 // movementResponse maps m to the schema Movement.
