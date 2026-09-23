@@ -1102,7 +1102,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Referenzen:** architecture.md 7.1
 - **Umfang:**
   - Button „Code eintippen" in der Scanner-Ansicht öffnet ein Feld mit `inputmode="numeric"`.
-  - Prüfung mit `normalizeGtin`. Das Absenden verhält sich wie ein Scan.
+  - Leerzeichen werden vor der Prüfung entfernt; die API selbst akzeptiert nur Ziffern. Prüfung mit `normalizeGtin`. Das Absenden verhält sich wie ein Scan.
 - **Nicht im Umfang:** Suche nach Namen.
 - **Abnahmekriterien:**
   1. Vitest-Test: Eine ungültige Prüfziffer wird vor dem Senden abgelehnt.
