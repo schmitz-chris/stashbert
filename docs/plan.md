@@ -84,18 +84,18 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
 
 Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
-1. **Aufbau:** eine einzige Seite, TypeScript, Tailwind CSS 4, ohne Backend und ohne API-Aufrufe. Der `<title>` ist „Scanner-Test S" bzw. „Scanner-Test R". Abhängigkeiten nur: Framework samt offizieller Adapter und Vite-Plugins, `vite`, `typescript`, `tailwindcss`, `@tailwindcss/vite`, `barcode-detector`. `zxing-wasm` **nicht** direkt installieren.
+1. **Aufbau:** eine einzige Seite, TypeScript, Tailwind CSS 4, ohne Backend und ohne API-Aufrufe. Der `<title>` ist „Scanner-Test S" bzw. „Scanner-Test R". Abhängigkeiten nur: Framework samt offizieller Adapter und Vite-Plugins (bei React zusätzlich `@types/react` und `@types/react-dom`), `vite`, `typescript`, `tailwindcss`, `@tailwindcss/vite`, `barcode-detector`. `zxing-wasm` **nicht** direkt installieren. Lint-Werkzeuge der Vorlage werden entfernt.
 2. **Start:** Ein großer Button „Scannen starten" öffnet erst beim Tippen die Kamera, mit `getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })`. Im selben Tap werden `navigator.audioSession.type = "playback"` (falls vorhanden) gesetzt und ein `AudioContext` erzeugt.
-3. **Kamera-Auswahl:** Eine Auswahlliste „Kamera" zeigt die Einträge aus `enumerateDevices()` mit Typ `videoinput`. Die Auswahl wird in `localStorage` gespeichert und beim nächsten Start verwendet. Beim Wechsel wird der alte Stream gestoppt, bevor ein neuer geöffnet wird.
+3. **Kamera-Auswahl:** Eine Auswahlliste „Kamera" zeigt die Einträge aus `enumerateDevices()` mit Typ `videoinput`. Die Auswahl wird in `localStorage` gespeichert und beim nächsten Start verwendet, dann mit `deviceId: { exact }` statt `facingMode`. Existiert die gespeicherte Kamera nicht mehr, wird die Auswahl gelöscht und mit den Vorgaben aus Punkt 2 gestartet. Beim Wechsel wird der alte Stream gestoppt, bevor ein neuer geöffnet wird.
 4. **Zoom:** Ein Schieberegler „Zoom" erscheint nur, wenn `track.getCapabilities().zoom` existiert, und nutzt dessen min, max und step.
-5. **Licht:** Ein Button „Licht" erscheint nur, wenn `track.getCapabilities().torch` existiert.
+5. **Licht:** Ein Button „Licht" erscheint nur, wenn `track.getCapabilities().torch` `true` ist oder eine Liste mit `true` enthält.
 6. **Dekodierung:**
    - Import aus `barcode-detector/ponyfill`, Formate `ean_13`, `ean_8`, `upc_a`.
    - Ein npm-Skript `copy:wasm` (nur Node, ohne Zusatzpakete) läuft vor `dev` und `build`:
      - Es löst `zxing-wasm` per `createRequire` relativ zu `barcode-detector` auf.
      - Es kopiert dessen `zxing_reader.wasm` nach `public/`.
      - Es vergleicht den SHA-256 der Datei mit dem vom Paket exportierten `ZXING_WASM_SHA256` und bricht bei Abweichung ab.
-   - Eingebunden wird die Datei über `prepareZXingModule` mit `locateFile`. Es gibt keinen Abruf von jsDelivr.
+   - Eingebunden wird die Datei über `prepareZXingModule` mit `locateFile`. Der Aufruf muss **vor** dem ersten `new BarcodeDetector()` erfolgen, weil der Konstruktor das Modul sofort lädt. Es gibt keinen Abruf von jsDelivr.
 7. **Leseschleife:**
    - Höchstens 10 Versuche pro Sekunde, nie zwei gleichzeitig.
    - Dekodiert wird nur ein waagerechter Streifen in der Bildmitte: 80 % der Breite und 30 % der Höhe, als Rahmen über dem Video eingezeichnet.
@@ -105,7 +105,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
    - Eine Liste zeigt die letzten 10 Codes mit Uhrzeit.
 9. **Rückmeldung:**
    - 300 ms grüne Fläche über dem Video und ein Ton mit 880 Hz für 120 ms über Web Audio.
-   - Eine Checkbox „Ton über Audio-Element" spielt stattdessen `public/beep.wav` über ein `<audio>`-Element ab. Die Datei erzeugt ein npm-Skript mit Node ohne Zusatzpakete.
+   - Eine Checkbox „Ton über Audio-Element" spielt stattdessen `public/beep.wav` über ein `<audio>`-Element ab. Die Datei erzeugt ein npm-Skript mit Node ohne Zusatzpakete. Damit iOS das Element später ohne Tippen abspielt, wird es bei jedem Tippen auf Start, Fortsetzen und die Checkbox einmal stumm gestartet und sofort pausiert.
 10. **Wach bleiben:** Während der Scanner läuft, wird ein Screen Wake Lock angefordert, falls verfügbar.
 11. **Hintergrund:** Bei `visibilitychange` auf `hidden` werden alle Tracks gestoppt. Beim Zurückkehren erscheint ein Button „Tippen zum Fortsetzen", ohne automatischen Neustart.
 12. **Statusbereich:** User-Agent, `display-mode` (`standalone` oder `browser`), Label der gewählten Kamera, Fehlermeldungen.
@@ -1018,7 +1018,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Referenzen:** ADR-0008, architecture.md 4.3, `docs/poc/p0-protokoll.md`, Code der gewählten POC-Variante
 - **Umfang:** framework-unabhängiges TypeScript in `web/src/lib/scanner/`, übernommen aus der gewählten POC-Variante:
   - `camera.ts`: Start und Stopp, Gerätewahl (gespeichert), Licht, Zoom.
-  - `decoder.ts`: Ponyfill, Formate `ean_13`, `ean_8`, `upc_a`, und `prepareZXingModule` mit `locateFile` auf `/zxing_reader.wasm`.
+  - `decoder.ts`: Ponyfill, Formate `ean_13`, `ean_8`, `upc_a`, und `prepareZXingModule` mit `locateFile` auf `/zxing_reader.wasm`. Der Aufruf erfolgt beim Laden des Moduls, **vor** dem ersten `new BarcodeDetector()`.
   - `loop.ts`: Leseschleife mit Streifen und höchstens einem laufenden Decode.
   - `dedupe.ts`: rein funktional, 2000 ms.
   - `feedback.ts`: Audio mit `audioSession` und `AudioContext`, freigeschaltet beim Start. Tonmuster als exportierte Tabelle:
