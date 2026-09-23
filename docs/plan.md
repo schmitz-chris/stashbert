@@ -922,7 +922,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F06b: Produktdetail: Barcodes
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F06a, B15
 - **Referenzen:** architecture.md 6.2, 7.1
 - **Umfang:**

@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useState, type ChangeEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Dialog } from "../components/Dialog";
 import { problemCode } from "../lib/api/client";
 import {
+  barcodeAddMutation,
+  barcodeRemoveMutation,
   productDeleteMutation,
   productQuery,
   productUpdateMutation,
 } from "../lib/api/queries";
+import { normalizeGtin } from "../lib/gtin";
 import { diffPatch, toForm, type ProductForm } from "../lib/productForm";
 import type { Product } from "../lib/products";
 import { sourceNote } from "../lib/sourceNote";
@@ -227,6 +230,7 @@ function ProductEditor({ product }: { product: Product }) {
           </p>
         </div>
       </form>
+      <BarcodeSection product={product} />
       {source !== null && (
         <p className="mt-6 text-sm text-stone-500">
           {source.link === null ? (
@@ -287,5 +291,175 @@ function ProductEditor({ product }: { product: Product }) {
         </div>
       </Dialog>
     </>
+  );
+}
+
+function BarcodeSection({ product }: { product: Product }) {
+  const queryClient = useQueryClient();
+  const add = useMutation(barcodeAddMutation(queryClient));
+  const remove = useMutation(barcodeRemoveMutation(queryClient));
+  const [code, setCode] = useState("");
+  // invalid is set when the entered code fails normalizeGtin; then no
+  // request is sent.
+  const [invalid, setInvalid] = useState(false);
+  // The code of the barcode whose removal the dialog asks to confirm.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const headingId = useId();
+  const inputId = useId();
+  const hintId = useId();
+
+  const errorCode = add.isError ? problemCode(add.error) : undefined;
+  const codeRejected =
+    invalid ||
+    errorCode === "invalid_barcode" ||
+    errorCode === "barcode_in_use";
+  let hint = "";
+  if (invalid || errorCode === "invalid_barcode") {
+    hint = "Ungültiger Barcode";
+  } else if (errorCode === "barcode_in_use") {
+    hint = "Barcode gehört schon zu einem anderen Produkt";
+  } else if (add.isError) {
+    hint = "Hinzufügen fehlgeschlagen";
+  }
+
+  function submit() {
+    const normalized = normalizeGtin(code.trim());
+    if (normalized === null) {
+      add.reset();
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    add.mutate(
+      { productId: product.id, code: normalized },
+      { onSuccess: () => setCode("") },
+    );
+  }
+
+  function confirmRemove(removed: string) {
+    remove.mutate(
+      { productId: product.id, code: removed },
+      {
+        onSuccess: () => setRemoving(null),
+        // The barcode is gone already; the product is fetched again.
+        onError: (error) => {
+          if (problemCode(error) === "not_found") {
+            setRemoving(null);
+          }
+        },
+      },
+    );
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="mt-8">
+      <h2 id={headingId} className="text-lg font-semibold">
+        Barcodes
+      </h2>
+      {product.barcodes.length === 0 ? (
+        <p className="mt-2 text-stone-500">Noch keine Barcodes.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+          {product.barcodes.map((barcode) => (
+            <li
+              key={barcode.code}
+              className="flex items-center justify-between gap-3 pl-3"
+            >
+              <span className="font-mono break-all">{barcode.code}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  remove.reset();
+                  setRemoving(barcode.code);
+                }}
+                aria-label={`Barcode ${barcode.code} entfernen`}
+                className="min-h-11 min-w-11 shrink-0 px-3 font-medium text-red-700"
+              >
+                Entfernen
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+        className="mt-4"
+      >
+        <label htmlFor={inputId} className={labelClass}>
+          Barcode hinzufügen
+        </label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id={inputId}
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              setInvalid(false);
+              if (add.isError) {
+                add.reset();
+              }
+            }}
+            inputMode="numeric"
+            autoComplete="off"
+            aria-invalid={codeRejected}
+            aria-describedby={hint !== "" ? hintId : undefined}
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono text-base aria-[invalid=true]:border-red-600"
+          />
+          <button
+            type="submit"
+            disabled={code.trim() === "" || add.isPending}
+            className={`shrink-0 bg-emerald-600 text-white ${buttonClass}`}
+          >
+            Hinzufügen
+          </button>
+        </div>
+        <p
+          id={hintId}
+          role="status"
+          className="mt-1 text-sm font-medium text-red-700"
+        >
+          {hint}
+        </p>
+      </form>
+      <Dialog
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title="Barcode entfernen?"
+      >
+        <p className="mt-2 text-stone-700">
+          Der Barcode <span className="font-mono">{removing}</span> gehört dann
+          nicht mehr zu „{product.name}“.
+        </p>
+        <p role="status" className="mt-2 text-sm font-medium text-red-700">
+          {remove.isError && problemCode(remove.error) !== "not_found"
+            ? "Entfernen fehlgeschlagen"
+            : ""}
+        </p>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setRemoving(null)}
+            className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (removing !== null) {
+                confirmRemove(removing);
+              }
+            }}
+            className={`bg-red-600 text-white ${buttonClass}`}
+          >
+            Entfernen
+          </button>
+        </div>
+      </Dialog>
+    </section>
   );
 }

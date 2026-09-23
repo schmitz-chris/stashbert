@@ -4,6 +4,8 @@ import {
   matches,
   replaceProduct,
   sortByName,
+  withBarcode,
+  withoutBarcode,
   type Product,
 } from "./products";
 
@@ -139,5 +141,57 @@ describe("replaceProduct", () => {
 
   it("returns undefined without a cached list", () => {
     expect(replaceProduct(undefined, product({ id: "a" }))).toBeUndefined();
+  });
+});
+
+describe("withBarcode", () => {
+  const nutella = { code: "3017620422003", units: 1 };
+  const local = { code: "2212345678907", units: 1 };
+  const knorr = { code: "4000400130150", units: 1 };
+
+  it("adds the barcode sorted by code", () => {
+    const original = product({ barcodes: [local, knorr] });
+
+    const result = withBarcode(original, nutella);
+
+    expect(result.barcodes).toEqual([local, nutella, knorr]);
+    expect(original.barcodes).toEqual([local, knorr]);
+  });
+
+  it("adds the first barcode", () => {
+    expect(withBarcode(product({}), nutella).barcodes).toEqual([nutella]);
+  });
+
+  it("replaces a barcode with the same code", () => {
+    const original = product({ barcodes: [nutella, knorr] });
+    const result = withBarcode(original, { code: nutella.code, units: 6 });
+    expect(result.barcodes).toEqual([{ code: nutella.code, units: 6 }, knorr]);
+  });
+
+  it("keeps the other fields", () => {
+    const original = product({ id: "a", name: "Nutella", stock: 2 });
+    expect(withBarcode(original, nutella)).toEqual({
+      ...original,
+      barcodes: [nutella],
+    });
+  });
+});
+
+describe("withoutBarcode", () => {
+  const nutella = { code: "3017620422003", units: 1 };
+  const knorr = { code: "4000400130150", units: 1 };
+
+  it("removes the barcode with the code", () => {
+    const original = product({ barcodes: [nutella, knorr] });
+
+    const result = withoutBarcode(original, nutella.code);
+
+    expect(result).toEqual({ ...original, barcodes: [knorr] });
+    expect(original.barcodes).toEqual([nutella, knorr]);
+  });
+
+  it("keeps the barcodes for an unknown code", () => {
+    const original = product({ barcodes: [nutella] });
+    expect(withoutBarcode(original, "20004002").barcodes).toEqual([nutella]);
   });
 });

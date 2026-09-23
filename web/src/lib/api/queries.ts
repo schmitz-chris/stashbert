@@ -4,7 +4,13 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type { ProductPatch } from "../productForm";
-import { replaceProduct, sortByName } from "../products";
+import {
+  replaceProduct,
+  sortByName,
+  withBarcode,
+  withoutBarcode,
+  type Product,
+} from "../products";
 import { api, problemCode } from "./client";
 
 /**
@@ -133,6 +139,90 @@ export function productDeleteMutation(queryClient: QueryClient) {
       queryClient.setQueryData(productListQuery.queryKey, (products) =>
         products?.filter((product) => product.id !== id),
       );
+    },
+  });
+}
+
+/** A barcode code of the product with productId. */
+export interface ProductBarcode {
+  productId: string;
+  code: string;
+}
+
+// Applies change to the cached product with id and to its entry in the
+// cached product list. Queries without data stay as they are.
+function changeCachedProduct(
+  queryClient: QueryClient,
+  id: string,
+  change: (product: Product) => Product,
+) {
+  queryClient.setQueryData(
+    productQuery(id).queryKey,
+    (product) => product && change(product),
+  );
+  queryClient.setQueryData(productListQuery.queryKey, (products) =>
+    products?.map((product) => (product.id === id ? change(product) : product)),
+  );
+}
+
+/**
+ * Assigns a barcode to a product with POST /products/{id}/barcodes. The
+ * code is sent as given (normalize it with normalizeGtin first), without
+ * units. A failed assignment throws the Problem Details of the response.
+ * On success the barcode from the response is added to the cached product
+ * and to its entry in the product list.
+ */
+export function barcodeAddMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ productId, code }: ProductBarcode) => {
+      const { data, error, response } = await api.POST(
+        "/products/{id}/barcodes",
+        { params: { path: { id: productId } }, body: { code } },
+      );
+      if (!response.ok || data === undefined) {
+        const path = `/products/${productId}/barcodes`;
+        throw error ?? new Error(`POST ${path}: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (barcode, { productId }) => {
+      changeCachedProduct(queryClient, productId, (product) =>
+        withBarcode(product, barcode),
+      );
+    },
+  });
+}
+
+/**
+ * Removes a barcode from a product with DELETE
+ * /products/{id}/barcodes/{code}. A failed removal throws the Problem
+ * Details of the response. On success the barcode is removed from the
+ * cached product and from its entry in the product list. On not_found the
+ * cached product is out of date, so it is fetched again.
+ */
+export function barcodeRemoveMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ productId, code }: ProductBarcode) => {
+      const { error, response } = await api.DELETE(
+        "/products/{id}/barcodes/{code}",
+        { params: { path: { id: productId, code } } },
+      );
+      if (!response.ok) {
+        const path = `/products/${productId}/barcodes/${code}`;
+        throw error ?? new Error(`DELETE ${path}: status ${response.status}`);
+      }
+    },
+    onSuccess: (_data, { productId, code }) => {
+      changeCachedProduct(queryClient, productId, (product) =>
+        withoutBarcode(product, code),
+      );
+    },
+    onError: (error, { productId }) => {
+      if (problemCode(error) === "not_found") {
+        void queryClient.invalidateQueries({
+          queryKey: productQuery(productId).queryKey,
+        });
+      }
     },
   });
 }

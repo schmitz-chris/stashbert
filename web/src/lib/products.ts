@@ -1,6 +1,7 @@
 import type { components } from "./api/schema";
 
 export type Product = components["schemas"]["Product"];
+export type Barcode = components["schemas"]["Barcode"];
 
 /** The filters of the stock list: Alle, Nachkaufen, Leer and Prüfen. */
 export type ProductFilter = "all" | "restock" | "empty" | "review";
@@ -63,4 +64,26 @@ export function replaceProduct(
   product: Product,
 ): Product[] | undefined {
   return products?.map((entry) => (entry.id === product.id ? product : entry));
+}
+
+/**
+ * Returns a copy of product with barcode added to its barcodes. They stay
+ * sorted by code, as the API delivers them; an entry with the same code is
+ * replaced.
+ */
+export function withBarcode(product: Product, barcode: Barcode): Product {
+  const barcodes = product.barcodes.filter(
+    (entry) => entry.code !== barcode.code,
+  );
+  barcodes.push(barcode);
+  barcodes.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+  return { ...product, barcodes };
+}
+
+/** Returns a copy of product without the barcode with code. */
+export function withoutBarcode(product: Product, code: string): Product {
+  return {
+    ...product,
+    barcodes: product.barcodes.filter((entry) => entry.code !== code),
+  };
 }
