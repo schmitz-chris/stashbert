@@ -1060,7 +1060,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F13a: App-Icons
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F01
 - **Referenzen:** keine
 - **Umfang:** Go-Programm `tools/icongen/main.go` (nur Standardbibliothek):
