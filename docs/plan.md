@@ -240,7 +240,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B03: Problem Details, Validierung, Fehlerbehandlung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B02
 - **Referenzen:** architecture.md 4.4, 6.1, 6.4, ADR-0003
 - **Umfang:**

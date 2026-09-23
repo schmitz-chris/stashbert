@@ -2,8 +2,11 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
+
+	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
 	"github.com/schmitz-chris/stashbert/internal/api"
 	"github.com/schmitz-chris/stashbert/internal/config"
@@ -19,10 +22,31 @@ type Deps struct {
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 	server := api.NewServer(api.ServerDeps{Version: d.Version})
-	apiHandler := api.Handler(api.NewStrictHandler(server, nil))
+	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc:  requestErrorHandler,
+		ResponseErrorHandlerFunc: responseErrorHandler(d.Logger),
+	})
+	apiHandler := api.HandlerWithOptions(strictHandler, api.StdHTTPServerOptions{
+		ErrorHandlerFunc: requestErrorHandler,
+	})
+	return newChain(d.Logger, apiHandler)
+}
+
+// newChain wraps the generated API handler, from outside to inside:
+// Recover, Logging, StripPrefix("/api/v1"), request validator.
+func newChain(logger *slog.Logger, apiHandler http.Handler) (http.Handler, error) {
+	spec, err := api.GetSwagger()
+	if err != nil {
+		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
+	}
+	// Without servers the validator matches paths without the /api/v1 prefix and ignores the Host header.
+	spec.Servers = nil
+	validator := nethttpmiddleware.OapiRequestValidatorWithOptions(spec, &nethttpmiddleware.Options{
+		ErrorHandlerWithOpts: validationErrorHandler,
+	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", validator(apiHandler)))
 
-	return httpx.Logging(d.Logger, mux), nil
+	return httpx.Recover(logger, httpx.Logging(logger, mux)), nil
 }
