@@ -213,7 +213,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B02: Konfiguration, Zusammenbau und Health
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B01
 - **Referenzen:** architecture.md 4.1, 4.4, 9.2, AGENTS.md (Regel 9, Konventionen Go)
 - **Umfang:**
