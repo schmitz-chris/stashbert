@@ -974,7 +974,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F08: Scanner-Ansicht: Buchen und Rückmeldung
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F03, F07, B20
 - **Referenzen:** architecture.md 6.3, ADR-0008
 - **Umfang:**

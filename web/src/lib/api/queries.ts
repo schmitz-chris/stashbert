@@ -70,6 +70,62 @@ export function productMovementMutation(queryClient: QueryClient) {
   });
 }
 
+/** A scanned code, booked with the kind of the scan mode. */
+export interface ScanMovement {
+  barcode: string;
+  kind: "add" | "consume";
+}
+
+// How long a scan booking may take before it counts as a network error.
+const scanTimeout = 10_000;
+
+/**
+ * Books a ScanMovement with POST /movements and a new Idempotency-Key. A
+ * failed booking throws the Problem Details of the response; a response
+ * without them (for example a 502 of a reverse proxy) throws an Error
+ * with the field status. Without a response it throws the TypeError of
+ * fetch, or the TimeoutError after scanTimeout. The mutation also runs
+ * while the browser reports being offline, so a scan fails at once
+ * instead of waiting for the network. On success product from the
+ * response replaces the cached product and its entry in the product list;
+ * if the booking created the product, the list is fetched again. The
+ * movements of the product are fetched again.
+ */
+export function scanMovementMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ barcode, kind }: ScanMovement) => {
+      const { data, error, response } = await api.POST("/movements", {
+        params: { header: { "Idempotency-Key": crypto.randomUUID() } },
+        body: { barcode, kind },
+        signal: AbortSignal.timeout(scanTimeout),
+      });
+      if (!response.ok || data === undefined) {
+        if (problemCode(error) !== undefined) {
+          throw error;
+        }
+        const message = `POST /movements: status ${response.status}`;
+        throw Object.assign(new Error(message), { status: response.status });
+      }
+      return data;
+    },
+    networkMode: "always",
+    onSuccess: ({ product, product_created }) => {
+      if (product_created) {
+        queryClient.setQueryData(productQuery(product.id).queryKey, product);
+        void queryClient.invalidateQueries({
+          queryKey: productListQuery.queryKey,
+          exact: true,
+        });
+      } else {
+        setCachedProduct(queryClient, product);
+      }
+      void queryClient.invalidateQueries({
+        queryKey: productMovementsQuery(product.id).queryKey,
+      });
+    },
+  });
+}
+
 /**
  * One product by id. A missing product (404 not_found) is not retried, so
  * the view shows it at once.

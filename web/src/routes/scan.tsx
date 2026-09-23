@@ -1,3 +1,228 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { CameraSettings } from "../components/CameraSettings";
+import { Dialog } from "../components/Dialog";
+import { useScanner } from "../hooks/useScanner";
+import { scanMovementMutation } from "../lib/api/queries";
+import {
+  cameraErrorText,
+  feedbackFor,
+  loadScanMode,
+  saveScanMode,
+  type Feedback,
+  type FeedbackColor,
+  type ScanMode,
+} from "../lib/scan";
+import { ROI } from "../lib/scanner/decoder";
+import { isSoundUnlocked, playSound, unlockSound } from "../lib/sound";
+
+// How long the flash over the camera image and the message stay visible.
+const flashDuration = 300;
+const messageDuration = 2000;
+
+const modes: { mode: ScanMode; label: string; active: string }[] = [
+  { mode: "add", label: "Einlagern", active: "bg-emerald-600 text-white" },
+  { mode: "consume", label: "Entnehmen", active: "bg-sky-600 text-white" },
+];
+
+const flashClass: Record<FeedbackColor, string> = {
+  green: "bg-emerald-500/70",
+  blue: "bg-sky-500/70",
+  yellow: "bg-amber-400/70",
+  red: "bg-red-600/70",
+};
+
+const messageClass: Record<FeedbackColor, string> = {
+  green: "bg-emerald-600 text-white",
+  blue: "bg-sky-600 text-white",
+  yellow: "bg-amber-400 text-stone-900",
+  red: "bg-red-600 text-white",
+};
+
+// The strip the decoder reads (ROI), over the camera image.
+const roiStyle = {
+  left: `${ROI.left * 100}%`,
+  top: `${ROI.top * 100}%`,
+  width: `${ROI.width * 100}%`,
+  height: `${ROI.height * 100}%`,
+};
+
+// Feedback on screen; id tells consecutive feedbacks apart.
+interface Shown {
+  feedback: Feedback;
+  id: number;
+  flash: boolean;
+}
+
 export function ScanPage() {
-  return <h1 className="text-2xl font-semibold">Scannen</h1>;
+  const queryClient = useQueryClient();
+  const { mutateAsync: book } = useMutation(scanMovementMutation(queryClient));
+  const [mode, setMode] = useState(loadScanMode);
+  // False when the view was loaded directly: iOS plays sound only after a tap.
+  const [soundReady, setSoundReady] = useState(isSoundUnlocked);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
+
+  function show(feedback: Feedback) {
+    playSound(feedback.sound);
+    setShown((current) => ({ feedback, id: (current?.id ?? 0) + 1, flash: true }));
+  }
+
+  // Books every accepted code in the mode that is set when it is read.
+  const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
+    useScanner((code) => {
+      const kind = mode;
+      book({ barcode: code, kind }).then(
+        (result) => show(feedbackFor({ ok: true, mode: kind, result })),
+        (error: unknown) => show(feedbackFor({ ok: false, error })),
+      );
+    });
+
+  // Ends the flash and then hides the message of the latest feedback.
+  const shownId = shown?.id;
+  useEffect(() => {
+    if (shownId === undefined) {
+      return;
+    }
+    const flashTimer = setTimeout(
+      () => setShown((current) => current && { ...current, flash: false }),
+      flashDuration,
+    );
+    const messageTimer = setTimeout(() => setShown(null), messageDuration);
+    return () => {
+      clearTimeout(flashTimer);
+      clearTimeout(messageTimer);
+    };
+  }, [shownId]);
+
+  // Every tap in the view unlocks the sound (iOS).
+  function handleTap() {
+    unlockSound();
+    setSoundReady(true);
+  }
+
+  function chooseMode(next: ScanMode) {
+    setMode(next);
+    saveScanMode(next);
+  }
+
+  function handleVideoSize(video: HTMLVideoElement) {
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      setVideoSize({ width: video.videoWidth, height: video.videoHeight });
+    }
+  }
+
+  const { width, height } = videoSize;
+
+  return (
+    <div className="flex flex-col gap-3" onClick={handleTap}>
+      <h1 className="sr-only">Scannen</h1>
+      <div role="group" aria-label="Modus" className="grid grid-cols-2 gap-2">
+        {modes.map(({ mode: value, label, active }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={mode === value}
+            onClick={() => chooseMode(value)}
+            className={`min-h-14 rounded-xl text-lg font-semibold ${mode === value ? active : "bg-stone-200 text-stone-700"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sized to the aspect ratio of the video, so the strip lies where the decoder reads. */}
+      <div
+        className="relative mx-auto overflow-hidden rounded-xl bg-black"
+        style={{
+          width: `min(100%, calc(55dvh * ${width} / ${height}))`,
+          aspectRatio: `${width} / ${height}`,
+        }}
+      >
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          onLoadedMetadata={(event) => handleVideoSize(event.currentTarget)}
+          onResize={(event) => handleVideoSize(event.currentTarget)}
+          className="absolute inset-0 size-full"
+        />
+        {phase === "running" && (
+          <div
+            className="pointer-events-none absolute rounded border-2 border-white shadow-[0_0_0_2px_rgb(0_0_0/0.6)]"
+            style={roiStyle}
+          />
+        )}
+        {shown?.flash && (
+          <div
+            className={`pointer-events-none absolute inset-0 ${flashClass[shown.feedback.color]}`}
+          />
+        )}
+        {phase === "starting" && (
+          <p className="absolute inset-0 flex items-center justify-center p-4 text-center text-white">
+            Kamera wird gestartet …
+          </p>
+        )}
+        {phase === "paused" && (
+          <button
+            type="button"
+            onClick={restart}
+            className="absolute inset-0 p-4 text-xl font-semibold text-white"
+          >
+            Tippen zum Fortsetzen
+          </button>
+        )}
+        {phase === "idle" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center text-white">
+            <p>{cameraErrorText(cameraError)}</p>
+            <button
+              type="button"
+              onClick={restart}
+              className="min-h-11 rounded-lg bg-white px-4 font-medium text-stone-900"
+            >
+              Erneut versuchen
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          aria-label="Kamera-Einstellungen"
+          onClick={() => setSettingsOpen(true)}
+          className="absolute top-2 right-2 flex size-11 items-center justify-center rounded-full bg-black/50 text-2xl text-white"
+        >
+          {"\u2699\uFE0E"}
+        </button>
+      </div>
+
+      <p
+        role="status"
+        className={`flex min-h-16 items-center justify-center rounded-xl px-3 text-center text-2xl font-bold ${shown ? messageClass[shown.feedback.color] : ""}`}
+      >
+        {shown?.feedback.text}
+      </p>
+      {!soundReady && (
+        <button type="button" className="min-h-11 text-sm text-stone-500">
+          Für Ton einmal tippen
+        </button>
+      )}
+
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
+        <CameraSettings
+          track={track}
+          cameras={cameras}
+          onSelectCamera={selectCamera}
+        />
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(false)}
+            className="min-h-11 rounded-lg bg-emerald-600 px-4 font-medium text-white"
+          >
+            Fertig
+          </button>
+        </div>
+      </Dialog>
+    </div>
+  );
 }

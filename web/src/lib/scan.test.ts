@@ -1,0 +1,132 @@
+import { describe, expect, it } from "vitest";
+import type { Product } from "./products";
+import { cameraErrorText, feedbackFor, type MovementResult } from "./scan";
+
+const product: Product = {
+  id: "01a0ce63-0000-7000-8000-000000000000",
+  name: "Kidneybohnen",
+  brand: null,
+  package_size: null,
+  note: null,
+  stock: 2,
+  target: 3,
+  min_stock: null,
+  missing: 1,
+  needs_review: false,
+  origin: "manual",
+  lookup_state: "none",
+  has_image: false,
+  barcodes: [{ code: "4001234567890", units: 1 }],
+  created_at: "2026-09-23T10:00:00.000Z",
+  updated_at: "2026-09-23T10:00:00.000Z",
+};
+
+function result(
+  kind: "add" | "consume",
+  fields: Partial<MovementResult> = {},
+): MovementResult {
+  return {
+    movement: {
+      id: "01a0ce63-0000-7000-8000-000000000001",
+      product_id: product.id,
+      kind,
+      delta: kind === "add" ? 1 : -1,
+      stock_after: product.stock,
+      barcode: "4001234567890",
+      reverses_id: null,
+      created_at: "2026-09-23T10:00:00.000Z",
+    },
+    product,
+    product_created: false,
+    warnings: [],
+    message: kind === "add" ? "Kidneybohnen 1 → 2" : "Kidneybohnen 3 → 2",
+    ...fields,
+  };
+}
+
+function problem(status: number, code: string) {
+  return { type: "about:blank", title: "Fehler", status, detail: "…", code };
+}
+
+// The error scanMovementMutation throws for a response without Problem
+// Details, for example from a reverse proxy.
+function statusError(status: number) {
+  return Object.assign(new Error(`POST /movements: status ${status}`), { status });
+}
+
+describe("feedbackFor", () => {
+  it("shows a booking in add mode green with the add tone", () => {
+    expect(feedbackFor({ ok: true, mode: "add", result: result("add") })).toEqual({
+      color: "green",
+      sound: "add",
+      text: "Kidneybohnen 1 → 2",
+    });
+  });
+
+  it("shows a booking in consume mode blue with the consume tone", () => {
+    expect(
+      feedbackFor({ ok: true, mode: "consume", result: result("consume") }),
+    ).toEqual({ color: "blue", sound: "consume", text: "Kidneybohnen 3 → 2" });
+  });
+
+  it("shows a new product with its message in the mode color", () => {
+    const created = result("add", {
+      product_created: true,
+      message: "Neu: Kidneybohnen 0 → 1",
+    });
+    expect(feedbackFor({ ok: true, mode: "add", result: created })).toEqual({
+      color: "green",
+      sound: "add",
+      text: "Neu: Kidneybohnen 0 → 1",
+    });
+  });
+
+  it.each([
+    ["consume", "clamped_to_zero", "Kidneybohnen 1 → 0"],
+    ["add", "placeholder_created", "Neu: Produkt 4001234567890 0 → 1"],
+  ] as const)(
+    "shows a booking in %s mode with warning %s yellow with the warn tone",
+    (mode, warning, message) => {
+      const booked = result(mode, { warnings: [warning], message });
+      expect(feedbackFor({ ok: true, mode, result: booked })).toEqual({
+        color: "yellow",
+        sound: "warn",
+        text: message,
+      });
+    },
+  );
+
+  it.each([
+    [problem(404, "unknown_barcode"), "red", "error", "Unbekannter Barcode"],
+    [problem(409, "stock_already_zero"), "yellow", "warn", "War schon leer"],
+    [problem(422, "invalid_barcode"), "red", "error", "Ungültiger Barcode"],
+    [problem(422, "idempotency_key_mismatch"), "red", "error", "Ungültiger Barcode"],
+    [new TypeError("Failed to fetch"), "red", "error", "Server nicht erreichbar"],
+    [new DOMException("", "TimeoutError"), "red", "error", "Server nicht erreichbar"],
+    [new DOMException("", "AbortError"), "red", "error", "Server nicht erreichbar"],
+    [statusError(502), "red", "error", "Server nicht erreichbar"],
+    [statusError(503), "red", "error", "Server nicht erreichbar"],
+    [statusError(504), "red", "error", "Server nicht erreichbar"],
+    [problem(500, "internal"), "red", "error", "Buchung fehlgeschlagen"],
+    [statusError(500), "red", "error", "Buchung fehlgeschlagen"],
+    [new Error("unexpected"), "red", "error", "Buchung fehlgeschlagen"],
+  ])("shows the error %o as %s with the %s tone", (error, color, sound, text) => {
+    expect(feedbackFor({ ok: false, error })).toEqual({ color, sound, text });
+  });
+});
+
+describe("cameraErrorText", () => {
+  it.each([
+    ["NotAllowedError", "Kein Zugriff auf die Kamera. Bitte den Kamerazugriff für diese Seite erlauben."],
+    ["NotFoundError", "Keine Kamera gefunden."],
+    ["OverconstrainedError", "Keine Kamera gefunden."],
+    ["NotReadableError", "Die Kamera ist gerade belegt, vielleicht von einer anderen App."],
+    ["AbortError", "Die Kamera konnte nicht gestartet werden."],
+  ])("explains %s", (name, text) => {
+    expect(cameraErrorText(new DOMException("", name))).toBe(text);
+  });
+
+  it("explains an error without a name", () => {
+    expect(cameraErrorText(null)).toBe("Die Kamera konnte nicht gestartet werden.");
+  });
+});

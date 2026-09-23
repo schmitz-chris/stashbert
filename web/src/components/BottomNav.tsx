@@ -1,4 +1,5 @@
 import { NavLink, type NavLinkRenderProps } from "react-router";
+import { unlockSound } from "../lib/sound";
 
 function sideLinkClass({ isActive }: NavLinkRenderProps) {
   const state = isActive
@@ -28,7 +29,8 @@ export function BottomNav() {
           </NavLink>
         </li>
         <li className="flex justify-center">
-          <NavLink to="/scan" className={scanLinkClass}>
+          {/* The tap unlocks the sound of the scan view (iOS). */}
+          <NavLink to="/scan" className={scanLinkClass} onClick={() => unlockSound()}>
             Scan
           </NavLink>
         </li>
