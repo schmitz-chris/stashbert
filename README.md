@@ -9,28 +9,30 @@ StashBert beantwortet vier Fragen:
 3. Wie viel möchte ich normalerweise davon haben?
 4. Was muss nachgekauft werden?
 
-Kernidee: Barcode scannen, Piepton, fertig. Primär bedient über das iPhone als Web-App (PWA), später zusätzlich über einen eigenen ESP32-Hardware-Scanner. Home Assistant und Bring! lassen sich anbinden, sind aber keine Voraussetzung.
+Kernidee: Barcode scannen, Piepton, fertig. Primär bedient über das iPhone als Web-App (PWA). Die API ist so gebaut, dass sich später alles Weitere anschließen lässt: Home Assistant, Bring!, ein ESP32-Hardware-Scanner.
 
 StashBert ist ausdrücklich kein Meal Planner, keine Rezept-App und kein ERP.
 
 ## Status
 
-Planungsphase. Es gibt noch keinen Anwendungscode.
+Planungsphase. Es gibt noch keinen Anwendungscode. Nächster Schritt ist Phase 0 des Plans.
 
-- Architektur und Technologieentscheidungen: [docs/architecture.md](docs/architecture.md)
+| Dokument | Inhalt |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | aktueller, verbindlicher Stand (M1) |
+| [docs/plan.md](docs/plan.md) | kleinteiliger Umsetzungsplan |
+| [docs/adr/](docs/adr/) | Architekturentscheidungen |
+| [docs/research.md](docs/research.md) | Recherche, Fakten und Quellen |
+| [AGENTS.md](AGENTS.md) | Regeln für KI-Agenten |
 
-## Geplanter Stack (Kurzfassung)
+## Stack (Kurzfassung)
 
 | Bereich | Entscheidung |
 |---|---|
-| Frontend | Svelte 5 + Vite als statische SPA/PWA, TypeScript |
-| Barcode | `barcode-detector` (Ponyfill auf Basis von zxing-wasm), WASM selbst gehostet |
-| Backend | Node.js LTS + Hono, TypeScript (native Type Stripping) |
-| Datenbank | SQLite (eine Datei, WAL) |
-| API | REST/JSON unter `/api/v1`, OpenAPI aus Zod-Schemas |
-| Home Assistant | MQTT 5 (Mosquitto) mit HA-Discovery, Outbox mit QoS 1; REST-Summary zusätzlich |
-| Einkaufsliste | StashBert berechnet, Home Assistant überträgt per `todo.*` nach Bring!; Ziel-Liste in StashBert wählbar |
-| Deployment | ein Container, ein HTTP-Port (8080), Docker Compose, ein Volume `/data` |
-| HTTPS | nicht Teil von StashBert, übernimmt der vorgelagerte Reverse Proxy |
-
-Details, Begründungen und Alternativen stehen im Architektur-Dokument.
+| Backend | Go 1.27, Standardbibliothek `net/http` |
+| API | REST/JSON, OpenAPI 3.1 contract-first, Servercode mit oapi-codegen |
+| Datenbank | SQLite (modernc, ohne cgo), sqlc, goose |
+| Frontend | SPA mit TypeScript, Vite, Tailwind CSS 4; Svelte oder React per A/B-Vergleich |
+| Barcode | `barcode-detector` (Ponyfill) mit zxing-wasm, selbst gehostet |
+| Betrieb | ein Binary bzw. Container, ein HTTP-Port; TLS über den eigenen Reverse Proxy |
+| Später | MQTT/Home Assistant, Bring!, ESP32 |
