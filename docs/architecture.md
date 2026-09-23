@@ -343,12 +343,12 @@ Ereignisse werden erst **nach** dem Commit ausgelöst, in dieser Reihenfolge: `p
 3. **Treffer:**
    - `name` = `product_name_de`, sonst `product_name`, sonst `generic_name_de`.
    - `brand` = erster Eintrag aus `brands`.
-   - `package_size` = `quantity`, sonst `product_quantity` + `product_quantity_unit`.
-   - `origin` aus `product_type`: `food` wird `openfoodfacts`, `beauty` wird `openbeautyfacts`, `petfood` wird `openpetfoodfacts`, `product` wird `openproductsfacts`.
+   - `package_size` = `quantity`, sonst `product_quantity` und `product_quantity_unit` mit Leerzeichen dazwischen (`300 ml`).
+   - `origin` aus `product_type`: `food` wird `openfoodfacts`, `beauty` wird `openbeautyfacts`, `petfood` wird `openpetfoodfacts`, `product` wird `openproductsfacts`. Ein leerer oder unbekannter `product_type` wird `openfoodfacts`.
    - `image_source_url` = `image_front_url`, `lookup_state = done`, `needs_review = true`.
    - Ist kein Name vorhanden, ist `name = "Neues Produkt <code>"`.
-   - Werte werden auf die Längen aus Kapitel 5 gekürzt (nach Zeichen, nicht nach Bytes): `name` und `brand` 120, `package_size` 40.
-   - Der Cache-Eintrag hat `source = off` und als `payload` das gemappte Ergebnis.
+   - Werte werden auf die Längen aus Kapitel 5 gekürzt (nach Zeichen, nicht nach Bytes): `name` und `brand` 120, `package_size` 40. Leerzeichen am Ende nach dem Kürzen fallen weg.
+   - Der Cache-Eintrag hat `source = off` und als `payload` das gemappte Ergebnis (`lookup.Result` als JSON mit Feldern in `snake_case`).
 4. **Kein Treffer (404):** Platzhalter mit `name = "Neues Produkt <code>"`, `origin = placeholder`, `lookup_state = not_found`, `needs_review = true`.
 5. **Timeout, 429, 503, Netzfehler oder fehlendes `OFF_CONTACT`:** Platzhalter wie in 4, aber `lookup_state = pending`.
 6. Bei lokalen Codes (7.1) gibt es keinen Lookup: Platzhalter mit `lookup_state = none`.

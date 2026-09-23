@@ -40,14 +40,15 @@ const (
 )
 
 // Result is a mapped lookup result (architecture.md, 7.2, step 3). Values are
-// trimmed but not shortened; Finalize prepares them for storage.
+// trimmed but not shortened; Finalize prepares them for storage. The JSON
+// form is the payload of the lookups cache.
 type Result struct {
-	Found       bool
-	Name        string
-	Brand       string
-	PackageSize string
-	ImageURL    string
-	ProductType string
+	Found       bool   `json:"found"`
+	Name        string `json:"name"`
+	Brand       string `json:"brand"`
+	PackageSize string `json:"package_size"`
+	ImageURL    string `json:"image_url"`
+	ProductType string `json:"product_type"`
 }
 
 // Client queries the Open Food Facts API. It is safe for concurrent use.
@@ -105,14 +106,14 @@ func (c *Client) TryLookup(ctx context.Context, code string) (Result, error) {
 
 // Finalize prepares r for storage: a missing name becomes
 // "Neues Produkt <code>", then Name and Brand are cut to 120 and PackageSize
-// to 40 characters.
+// to 40 characters. Spaces left at the end of a cut value are removed.
 func Finalize(r Result, code string) Result {
 	if strings.TrimSpace(r.Name) == "" {
 		r.Name = placeholderPrefix + code
 	}
-	r.Name = truncate(r.Name, maxNameLength)
-	r.Brand = truncate(r.Brand, maxBrandLength)
-	r.PackageSize = truncate(r.PackageSize, maxPackageSizeLength)
+	r.Name = strings.TrimSpace(truncate(r.Name, maxNameLength))
+	r.Brand = strings.TrimSpace(truncate(r.Brand, maxBrandLength))
+	r.PackageSize = strings.TrimSpace(truncate(r.PackageSize, maxPackageSizeLength))
 	return r
 }
 

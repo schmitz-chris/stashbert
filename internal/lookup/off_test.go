@@ -361,6 +361,15 @@ func TestFinalize(t *testing.T) {
 		}
 	})
 
+	t.Run("removes spaces at the cut", func(t *testing.T) {
+		// A space at position 120 (index 119) ends up at the end of the cut name.
+		name := strings.Repeat("a", 119) + " " + strings.Repeat("b", 10)
+		got := lookup.Finalize(lookup.Result{Found: true, Name: name}, foodCode)
+		if want := strings.Repeat("a", 119); got.Name != want {
+			t.Errorf("Name = %q, want %q", got.Name, want)
+		}
+	})
+
 	for _, tt := range []struct{ title, name string }{{"empty", ""}, {"blank", "   "}} {
 		t.Run("fallback name for "+tt.title, func(t *testing.T) {
 			got := lookup.Finalize(lookup.Result{Found: true, Name: tt.name, Brand: "Haribo"}, foodCode)
