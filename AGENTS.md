@@ -73,9 +73,9 @@ Diese Befehle gibt es ab Task P0-1:
 | API-Vertrag | OpenAPI 3.1 in `api/openapi.yaml` |
 | Servercode | oapi-codegen v2 (`std-http-server`, `strict-server`) als Go-Tool: `go tool oapi-codegen` |
 | Router | `net/http` der Standardbibliothek |
-| Datenbank | SQLite über `modernc.org/sqlite`, Treibername `sqlite` |
+| Datenbank | SQLite über `modernc.org/sqlite` (v1.59.0), Treibername `sqlite` |
 | SQL-Code | sqlc v1.31.1 als Go-Tool: `go tool sqlc` |
-| Migrationen | goose v3, eingebettet |
+| Migrationen | goose v3 (v3.28.0), eingebettet |
 | Logging | `log/slog`, JSON auf stdout |
 | Frontend | TypeScript, Vite, Tailwind CSS 4 (CSS-first, **keine** `tailwind.config.js`). Framework nach ADR-0007; bis zur Entscheidung keine Framework-Annahmen im Hauptprojekt |
 | API-Client (Frontend) | `openapi-typescript` + `openapi-fetch` |
@@ -137,7 +137,7 @@ docs/                          Architektur, ADRs, Plan, Recherche
 
 - Standardbibliothek zuerst.
 - Fehler mit `fmt.Errorf("…: %w", err)` einpacken. Kein `panic` außer in `main` beim Start.
-- `context.Context` als erster Parameter bei allem, was I/O macht.
+- `context.Context` als erster Parameter bei allem, was I/O macht. Ausnahme: Test-Helfer nehmen `t *testing.T` zuerst.
 - Kein globaler Zustand außer in `main`. Abhängigkeiten werden per Konstruktor übergeben.
 - Zeit immer UTC, gespeichert im festen Format `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). IDs sind UUIDv7 als String in Kleinschreibung.
 - SQL nur in `internal/store/queries/*.sql` (sqlc). Ausnahmen: Migrationen, PRAGMA-Abfragen, `VACUUM INTO` in `internal/backup`, direkte Inserts in Tests.

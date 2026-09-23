@@ -146,7 +146,7 @@ Die Anmeldung prüft eine **Strict-Middleware** (`StrictMiddlewareFunc`) anhand 
 
 ## 5. Datenmodell (SQLite, STRICT-Tabellen)
 
-Alle Zeitstempel: TEXT im festen Format RFC 3339 UTC mit Millisekunden, Go-Layout `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). Alle IDs: TEXT, UUIDv7 in Kleinbuchstaben.
+Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Alle Zeitstempel: TEXT im festen Format RFC 3339 UTC mit Millisekunden, Go-Layout `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). Alle IDs: TEXT, UUIDv7 in Kleinbuchstaben.
 
 **`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 nur `password_hash`.
 
