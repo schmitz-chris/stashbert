@@ -131,7 +131,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### P0-3: Scanner-Testseite, Variante R (React)
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** P0-1
 - **Referenzen:** Spezifikation oben, ADR-0007, ADR-0008
 - **Umfang:**
