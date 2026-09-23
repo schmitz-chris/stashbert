@@ -212,6 +212,7 @@ func TestCreateProductErrors(t *testing.T) {
 		{"min_stock greater than target", `{"name": "Mehl", "target": 2, "min_stock": 3}`, http.StatusBadRequest, "invalid_request"},
 		{"min_stock without target", `{"name": "Mehl", "min_stock": 1}`, http.StatusBadRequest, "invalid_request"},
 		{"negative target", `{"name": "Mehl", "target": -1}`, http.StatusBadRequest, "invalid_request"},
+		{"target above maximum", `{"name": "Mehl", "target": 100001}`, http.StatusBadRequest, "invalid_request"},
 		{"units 0", `{"name": "Mehl", "barcodes": [{"code": "3017620422003", "units": 0}]}`, http.StatusBadRequest, "invalid_request"},
 		{"name missing", `{}`, http.StatusBadRequest, "invalid_request"},
 	}

@@ -345,6 +345,7 @@ components:
         units:
           type: integer
           minimum: 1
+          maximum: 1000
           default: 1
           description: Stückzahl, die ein Scan dieses Barcodes bucht.
     ProductCreate:
@@ -364,11 +365,13 @@ components:
         target:
           type: integer
           minimum: 0
+          maximum: 100000
           default: 0
           description: Sollbestand.
         min_stock:
           type: integer
           minimum: 0
+          maximum: 100000
           description: Mindestbestand, höchstens target.
         note:
           type: string
@@ -397,10 +400,12 @@ components:
         target:
           type: integer
           minimum: 0
+          maximum: 100000
           description: Sollbestand.
         min_stock:
           type: [integer, "null"]
           minimum: 0
+          maximum: 100000
           description: Mindestbestand, nach dem Ändern höchstens target.
         note:
           type: [string, "null"]
@@ -425,11 +430,13 @@ components:
         quantity:
           type: integer
           minimum: 1
+          maximum: 1000
           default: 1
           description: Menge für add und consume.
         stock:
           type: integer
           minimum: 0
+          maximum: 100000
           description: Neuer Bestand für inventory.
     Movement:
       type: object

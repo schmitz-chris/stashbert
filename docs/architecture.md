@@ -152,17 +152,17 @@ Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Al
 | `brand` | TEXT | NULL, bis 120 |
 | `package_size` | TEXT | NULL, bis 40 (z. B. „400 g") |
 | `stock` | INTEGER | NOT NULL, ≥ 0, Standard 0 |
-| `target` | INTEGER | NOT NULL, ≥ 0, Standard 0 |
-| `min_stock` | INTEGER | NULL, ≥ 0 und ≤ `target` |
+| `target` | INTEGER | NOT NULL, 0 bis 100000, Standard 0 |
+| `min_stock` | INTEGER | NULL, 0 bis 100000 und ≤ `target` |
 | `note` | TEXT | NULL, bis 500 |
 | `origin` | TEXT | `openfoodfacts`, `openbeautyfacts`, `openpetfoodfacts`, `openproductsfacts`, `manual`, `placeholder` |
 | `lookup_state` | TEXT | `none`, `pending`, `done`, `not_found` |
 | `needs_review` | INTEGER | 0/1 |
 | `image_source_url` | TEXT | NULL, Bild-URL von OFF |
 | `image_file` | TEXT | NULL, Dateiname in `DATA_DIR/images/` |
-| `created_at`, `updated_at` | TEXT | `updated_at` ändert sich bei jeder Änderung der Zeile `products`, also bei Stammdaten (PATCH), Bestand (Buchung, Storno, Zusammenführen) und Nachladen. Barcodes zuordnen oder entfernen ändert es nicht. |
+| `created_at`, `updated_at` | TEXT | `updated_at` ändert sich bei jeder Änderung der Zeile `products`, also bei Stammdaten (PATCH), jeder Buchung (auch `inventory` mit `delta` 0), Storno, Zusammenführen und Nachladen. Barcodes zuordnen oder entfernen ändert es nicht. |
 
-**`barcodes`**: `code` TEXT PK (normalisiert, siehe 7.1), `product_id` FK ON DELETE CASCADE, `units` INTEGER NOT NULL ≥ 1 Standard 1, `created_at`.
+**`barcodes`**: `code` TEXT PK (normalisiert, siehe 7.1), `product_id` FK ON DELETE CASCADE, `units` INTEGER NOT NULL 1 bis 1000, Standard 1, `created_at`.
 
 **`movements`** (nur anhängen; einzige Ausnahme: Zusammenführen hängt Buchungen auf das Zielprodukt um, siehe 6.5):
 
@@ -231,8 +231,9 @@ Zusätzlich, **nicht** in der Spec beschrieben: `GET /api/v1/openapi.yaml` liefe
 Request: `{product_id?, barcode?, kind, quantity?, stock?}`. Genau eines von `product_id` und `barcode` ist gesetzt.
 
 - `kind` ist `add`, `consume` oder `inventory`.
-- `quantity` (≥ 1, Standard 1) gilt für `add` und `consume`.
-- `stock` (≥ 0, Pflicht) gilt für `inventory`.
+- `quantity` (1 bis 1000, Standard 1) gilt für `add` und `consume`.
+- `stock` (0 bis 100000, Pflicht) gilt für `inventory`.
+- Die Obergrenzen stehen als `maximum` in der Spec und schließen Überläufe bei `quantity × units` aus. Überschreitungen ergeben 400 `invalid_request`.
 
 | Fall | Ergebnis |
 |---|---|

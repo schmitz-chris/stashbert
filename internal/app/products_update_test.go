@@ -186,6 +186,7 @@ func TestUpdateProductErrors(t *testing.T) {
 		{"target less than stored min_stock", "p4", `{"target": 0}`, http.StatusBadRequest, "invalid_request"},
 		{"min_stock greater than new target", "p2", `{"target": 3, "min_stock": 4}`, http.StatusBadRequest, "invalid_request"},
 		{"negative target", "p2", `{"target": -1}`, http.StatusBadRequest, "invalid_request"},
+		{"target above maximum", "p2", `{"target": 100001}`, http.StatusBadRequest, "invalid_request"},
 		{"target null", "p2", `{"target": null}`, http.StatusBadRequest, "invalid_request"},
 		{"negative min_stock", "p2", `{"min_stock": -1}`, http.StatusBadRequest, "invalid_request"},
 		{"not an object", "p2", `[]`, http.StatusBadRequest, "invalid_request"},

@@ -83,6 +83,7 @@ func TestAddBarcodeErrors(t *testing.T) {
 		{"in use as UPC-A", "p2", `{"code": "034000470693"}`, http.StatusConflict, "barcode_in_use"},
 		{"unknown product", "unbekannt", `{"code": "4006381333931"}`, http.StatusNotFound, "not_found"},
 		{"units 0", "p3", `{"code": "4006381333931", "units": 0}`, http.StatusBadRequest, "invalid_request"},
+		{"units above maximum", "p3", `{"code": "4006381333931", "units": 1001}`, http.StatusBadRequest, "invalid_request"},
 		{"code missing", "p3", `{"units": 1}`, http.StatusBadRequest, "invalid_request"},
 	}
 	for _, tt := range tests {
