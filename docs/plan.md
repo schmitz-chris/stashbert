@@ -54,7 +54,7 @@ Backend-Tasks können parallel zu P0-2 bis P0-6 laufen. Mehrere B-Tasks gleichze
 
 ### P0-1: Repository-Grundgerüst
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** keine
 - **Referenzen:** AGENTS.md (Befehle, Struktur), ADR-0002
 - **Umfang:**
