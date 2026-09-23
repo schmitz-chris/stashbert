@@ -141,7 +141,8 @@ docs/                          Architektur, ADRs, Plan, Recherche
 - SQL nur in `internal/store/queries/*.sql` (sqlc). Ausnahmen: Migrationen, PRAGMA-Abfragen, `VACUUM INTO` in `internal/backup`, direkte Inserts in Tests.
 - Schreibende Abläufe mit mehreren Statements laufen in einer Transaktion. **Innerhalb einer Transaktion nur über die Transaktion zugreifen** (`queries.WithTx(tx)`), nie über `*sql.DB`.
 - Tests mit Datenbank nutzen eine temporäre Datei in `t.TempDir()`, kein `:memory:` (mehrere Verbindungen). Tests, die blockieren könnten, bekommen einen Kontext mit Deadline.
-- Texteingaben (Namen) werden vor der Längenprüfung getrimmt.
+- Texteingaben werden getrimmt und **danach** in der Fachlogik auf ihre Länge geprüft (Grenzen aus `architecture.md` 5, gezählt in Zeichen). In der Spec stehen für Texte daher kein `minLength`/`maxLength`, nur eine Beschreibung; Zahlenbereiche stehen als `minimum`/`maximum` in der Spec.
+- Die Fachlogik (`internal/domain`) gibt Fachfehler direkt als `*httpx.Error` zurück. Kein eigenes Fehler-Mapping.
 - UNIQUE- und Primärschlüssel-Konflikte werden ausschließlich mit `store.IsUniqueViolation(err)` erkannt (erkennt beide SQLite-Codes).
 - sqlc erzeugt für nullbare Spalten Zeiger (`*string`, `*int64`), nicht `sql.Null*`.
 
