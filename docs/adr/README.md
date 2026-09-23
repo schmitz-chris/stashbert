@@ -12,7 +12,8 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0006](0006-ids-uuidv7.md) | IDs als UUIDv7 | angenommen |
 | [0007](0007-frontend-ab-vergleich.md) | Frontend als SPA, Framework per A/B-Vergleich | vorgeschlagen (Entscheidung in Plan-Task P0-6) |
 | [0008](0008-barcode-scan-browser.md) | Barcode-Scan im Browser mit barcode-detector und zxing-wasm | angenommen |
-| [0009](0009-anmeldung.md) | Anmeldung mit Haushaltspasswort, OIDC später | angenommen |
+| [0009](0009-anmeldung.md) | Anmeldung mit Haushaltspasswort, OIDC später | ersetzt durch ADR-0013 |
 | [0010](0010-betrieb-ein-binary.md) | Betrieb als ein Binary mit einem HTTP-Port | angenommen |
 | [0011](0011-ereignisse-und-integrationen.md) | Interne Domänen-Ereignisse ab M1, Integrationen ab M2 | angenommen |
 | [0012](0012-agentengetriebene-entwicklung.md) | Agentengetriebene Entwicklung mit kleinteiligem Plan | angenommen |
+| [0013](0013-keine-anmeldung-in-m1.md) | Keine Anmeldung in M1 | angenommen |

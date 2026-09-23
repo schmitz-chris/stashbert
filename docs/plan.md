@@ -329,7 +329,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B07: Passwort-Hash und Setup-API
 
-- **Status:** erledigt
+- **Status:** erledigt (durch B07r wieder zurückgebaut, ADR-0013)
 - **Abhängig von:** B03, B05
 - **Referenzen:** architecture.md 4.4, 6.2 (`getSetup`, `createSetup`), 6.5 (Setup-Request), 8, ADR-0009
 - **Umfang:**
@@ -350,81 +350,29 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
   4. Je 400 `invalid_request` bei: Passwort mit 7 Zeichen, 0 Mitgliedern, „Chris" und „chris" in einer Anfrage (danach ist nichts gespeichert), einem Namen nur aus Leerzeichen, `Content-Type: text/plain`.
   5. `make check` ist grün.
 
-### B08a: Anmelden und Abmelden
+### B07r: Anmeldung zurückbauen
 
 - **Status:** offen
 - **Abhängig von:** B07
-- **Referenzen:** architecture.md 6.1, 6.2 (`createSession`, `getSession`, `deleteSession`), 8, ADR-0009
+- **Referenzen:** ADR-0013, architecture.md 5, 6.2, 8, 9.2
 - **Umfang:**
-  - **Spec:**
-    - Security-Scheme `sessionCookie` (apiKey, `in: cookie`, Name `stashbert_session`), global gesetzt.
-    - `security: []` für `getHealth`, `getSetup`, `createSetup` und `createSession`.
-    - Schemas `LoginRequest` (`password`), `Member` (`id`, `name`) und `Session` (`member` als `Member` oder `null`, dazu `expires_at`).
-    - Endpunkte `POST /session` (204 mit dem Header `Set-Cookie` in der Spec), `GET /session` (200) und `DELETE /session` (204).
-  - **Queries** in `internal/store/queries/sessions.sql`: anlegen, per Hash lesen, verlängern, löschen.
-  - **`internal/auth/session.go`:** Token (32 Zufallsbyte, base64url) erzeugen, SHA-256 hex, und das Cookie bauen mit `Name=stashbert_session`, `Path=/`, `HttpOnly`, `SameSite=Lax`, `Secure` aus `COOKIE_SECURE`, `Max-Age=31536000`.
-  - **`createSession`:** Nicht eingerichtet ergibt 409 `not_configured`, falsches Passwort 401 `invalid_credentials`. Bei Erfolg Sitzung anlegen und das Cookie setzen.
-  - **`getSession` und `deleteSession`** lesen das Cookie in dieser Task noch selbst. Ohne gültige Sitzung gibt es 401 `unauthorized`. `deleteSession` löscht die Sitzung und setzt das Cookie mit `Max-Age=0`.
-- **Nicht im Umfang:** Auth-Middleware für andere Endpunkte, Verlängerung, Login-Bremse, Origin.
-- **Abnahmekriterien (Tests):**
-  1. Nach erfolgreichem Login hat das Cookie genau diese Attribute: Name, `Path=/`, `HttpOnly`, `SameSite=Lax`, `Max-Age=31536000`, `Secure` nur bei `COOKIE_SECURE=true`.
-  2. Falsches Passwort liefert 401; eine nicht eingerichtete Instanz liefert 409.
-  3. `GET /session` liefert ohne Cookie 401 und mit Cookie 200 mit `member: null`.
-  4. Nach dem Abmelden liefert `GET /session` 401.
-  5. `make check` ist grün.
-
-### B08b: Auth-Middleware und Verlängerung
-
-- **Status:** offen
-- **Abhängig von:** B08a
-- **Referenzen:** architecture.md 4.4, 8
-- **Umfang:**
-  - **Strict-Middleware `auth.Middleware`** mit einer festen Liste öffentlicher Operationen. oapi-codegen übergibt der Strict-Middleware die **Go-Namen** der Operationen, nicht die `operationId` aus der Spec. Die Liste lautet deshalb `GetHealth`, `GetSetup`, `CreateSetup`, `CreateSession`. Für alle anderen:
-    - Fehlendes, unbekanntes oder abgelaufenes Cookie ergibt 401 `unauthorized`.
-    - Die Sitzung kommt in den Kontext, Zugriff über `auth.SessionFromContext(ctx)`.
-  - `getSession` und `deleteSession` nutzen jetzt den Kontext statt eigener Cookie-Logik.
-  - **Verlängerung:** Ist `last_seen_at` älter als 1 Stunde, werden `last_seen_at` und `expires_at` (jetzt + 365 Tage) aktualisiert und das Cookie neu gesetzt.
-  - Die `AuthenticationFunc` des Validators gibt `nil` zurück.
-- **Nicht im Umfang:** Login-Bremse, Origin, Mitglieder.
-- **Abnahmekriterien (Tests):**
-  1. Eine in der DB abgelaufene Sitzung liefert 401.
-  2. Eine Sitzung mit `last_seen_at` vor 2 Stunden wird verlängert, und die Antwort enthält `Set-Cookie`.
-  3. `GET /api/v1/unbekannt` ohne Cookie liefert weiterhin 404.
-  4. `GET /api/v1/health`, `GET /api/v1/setup`, `POST /api/v1/setup` und `POST /api/v1/session` sind ohne Cookie erreichbar (kein 401).
-  5. `make check` ist grün.
-
-### B09: Login-Bremse und Origin-Prüfung
-
-- **Status:** offen
-- **Abhängig von:** B08b
-- **Referenzen:** architecture.md 4.4, 8
-- **Umfang:**
-  - **In `createSession`:**
-    - Fehlversuche (Antwort 401) werden im Speicher (mit Mutex) in einem gleitenden 60-Sekunden-Fenster gezählt.
-    - Liegen im Fenster 10 Fehlversuche vor, wird jeder weitere Login mit 429 `too_many_attempts` abgelehnt, auch mit richtigem Passwort. Abgelehnte Versuche zählen nicht als Fehlversuche.
-    - Die Uhr wird für Tests injizierbar gemacht.
-  - **Origin-Middleware** in der Kette laut architecture.md 4.4: Ist `PUBLIC_URL` gesetzt und die Methode `POST`, `PUT`, `PATCH` oder `DELETE` und ein `Origin`-Header vorhanden, der nicht `scheme://host[:port]` von `PUBLIC_URL` entspricht, dann 403 `forbidden_origin`.
-- **Nicht im Umfang:** eine Sperre pro IP.
-- **Abnahmekriterien (Tests):**
-  1. 10 Fehlversuche liefern je 401, der 11. Versuch 429; nach Ablauf des Fensters (injizierte Uhr) geht es wieder.
-  2. Mit gesetzter `PUBLIC_URL` liefert ein fremder `Origin` 403, der passende `Origin` und ein fehlender Header werden durchgelassen.
-  3. `make check` ist grün.
-
-### B10: Mitglieder und Mitglied-Auswahl
-
-- **Status:** offen
-- **Abhängig von:** B08b
-- **Referenzen:** architecture.md 6.2 (`listMembers`, `createMember`, `getMember`, `updateSession`)
-- **Umfang:**
-  - Spec und Handler für `GET /members` (`{items}`), `POST /members` (201 mit `Location: /api/v1/members/{id}`), `GET /members/{id}` und `PATCH /session` (`{member_id}`, 200 `Session`).
-  - Namen trimmen, danach 1 bis 40 Zeichen. Ein UNIQUE-Fehler der Datenbank ergibt 409 `name_taken`; keine eigene Duplikatprüfung in Go.
-  - Eine unbekannte `member_id` in `PATCH /session` ergibt 404 `not_found`. `member_id` wird in `sessions` gespeichert.
-- **Nicht im Umfang:** Mitglieder umbenennen oder löschen.
-- **Abnahmekriterien (Tests):**
-  1. Liste, Anlegen und Einzelabruf funktionieren; „chris" neben „Chris" liefert 409.
-  2. `PATCH /session` setzt das Mitglied, danach liefert `GET /session` das Mitglied.
-  3. Eine unbekannte `member_id` liefert 404.
+  - `api/openapi.yaml`: Pfade `/setup` sowie die Schemas `SetupStatus` und `SetupRequest` entfernen, dann `make generate`.
+  - Löschen: `internal/api/handlers_setup.go`, das Paket `internal/auth` samt Tests und die Setup-Tests in `internal/app`.
+  - `internal/store/migrations/0001_init.sql`: Nur die Tabelle `settings` bleibt, `members` und `sessions` entfallen. Die Migration darf geändert werden, weil noch nichts ausgeliefert ist; eine lokale `.data/` muss danach gelöscht werden.
+  - `internal/store/queries/members.sql` und die zugehörigen Tests entfernen, `make generate` (sqlc). `settings.sql` und `store.IsUniqueViolation` bleiben.
+  - `internal/config`: `PUBLIC_URL` und `COOKIE_SECURE` samt Tests entfernen.
+  - `Makefile`, Ziel `run`: `COOKIE_SECURE=false` entfernen.
+  - `go mod tidy`, damit ungenutzte Module wie `golang.org/x/crypto` herausfallen.
+- **Nicht im Umfang:** alles andere, insbesondere kein Umbau von `internal/app` über das Entfernen der Setup-Verdrahtung hinaus.
+- **Abnahmekriterien:**
+  1. `GET /api/v1/setup` liefert 404 `not_found`, `GET /api/v1/health` weiterhin 200 (Tests).
+  2. Nach `Migrate` gibt es außer der goose-Tabelle nur `settings` (Test).
+  3. Im Go-Code und in der Spec kommen `password`, `session` und `member` nicht mehr vor (`grep -rin` über `api`, `cmd`, `internal`, ohne generierte Dateien, ist leer).
   4. `make check` ist grün.
+
+### B08a, B08b, B09, B10: entfallen
+
+- **Status:** entfällt (ADR-0013, keine Anmeldung in M1)
 
 ### B11: Schema für Produkte, Barcodes, Buchungen und Cache
 
@@ -470,7 +418,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 ### B13a: Produkte lesen
 
 - **Status:** offen
-- **Abhängig von:** B06, B08b, B11
+- **Abhängig von:** B06, B07r, B11
 - **Referenzen:** architecture.md 6.2 (`listProducts`, `getProduct`), 6.5
 - **Umfang:**
   - **Spec:** Schemas `Product`, `Barcode` und `ProductList` (`{items}`), Endpunkte `GET /products` und `GET /products/{id}`. Nullbare Felder als `type: [<typ>, "null"]`.
@@ -547,7 +495,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 ### B16a: Buchungen per product_id
 
 - **Status:** offen
-- **Abhängig von:** B10, B14
+- **Abhängig von:** B14
 - **Referenzen:** architecture.md 6.3, 6.5, ADR-0004
 - **Umfang:**
   - **Spec:**
@@ -555,7 +503,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
     - Schemas `Movement` und `MovementResult`.
     - `POST /movements` (`createMovement`) mit 201 ohne `Location`.
   - **Prüfungen:** `inventory` ohne `stock` und `add`/`consume` mit `stock` ergeben 400 `invalid_request`.
-  - **Fachlogik `domain.Book`**, in einer Transaktion: Produkt lesen, Regeln aus 6.3 anwenden (`delta` = tatsächliche Änderung), Buchung (UUIDv7, `member_id` aus der Sitzung) einfügen und Bestand am Produkt aktualisieren.
+  - **Fachlogik `domain.Book`**, in einer Transaktion: Produkt lesen, Regeln aus 6.3 anwenden (`delta` = tatsächliche Änderung), Buchung (UUIDv7) einfügen und Bestand am Produkt aktualisieren.
   - **Antwort:** `warnings` nach 6.3, `message` nach 6.3, z. B. `Kidneybohnen 3 → 2`.
 - **Nicht im Umfang:** Ereignisse (B16b), Barcode, Idempotenz, Liste, Storno.
 - **Abnahmekriterien (Tests):**
@@ -565,9 +513,8 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
   4. Bestand 0 ergibt 409 `stock_already_zero` ohne Buchung.
   5. `inventory` mit gleichem Wert ergibt `delta` 0.
   6. Unbekanntes Produkt ergibt 404.
-  7. `member_id` ist gespeichert.
-  8. `message` hat das richtige Format.
-  9. `make check` ist grün.
+  7. `message` hat das richtige Format.
+  8. `make check` ist grün.
 
 ### B16b: Ereignisse für Buchungen
 
@@ -797,16 +744,15 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 ### B27: Spec ausliefern
 
 - **Status:** offen
-- **Abhängig von:** B08b
+- **Abhängig von:** B07r
 - **Referenzen:** architecture.md 6.2 (Zusatz unter der Tabelle)
 - **Umfang:**
   - `api/embed.go` (Paket `apispec`) mit `//go:embed openapi.yaml`.
-  - In `internal/app` die Route `GET /api/v1/openapi.yaml` **vor** dem generierten Handler registrieren (öffentlich, ohne Validator) mit `Content-Type: application/yaml`.
+  - In `internal/app` die Route `GET /api/v1/openapi.yaml` **vor** dem generierten Handler registrieren (ohne Validator) mit `Content-Type: application/yaml`.
 - **Nicht im Umfang:** Doku-Oberfläche (Scalar, Swagger UI).
 - **Abnahmekriterien:**
   1. Ein Test vergleicht die ausgelieferten Bytes mit der Datei.
-  2. Kein Cookie nötig.
-  3. `make check` ist grün.
+  2. `make check` ist grün.
 
 ### B28: Backups
 
@@ -900,53 +846,31 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
   2. Ein Vitest-Test mit gemocktem `fetch` und `createApiClient("http://test/api/v1")` prüft die URL und `problemCode`.
   3. `make check` ist grün.
 
-### F03: App-Rahmen und Zugangs-Weiche
+### F03: App-Rahmen
 
 - **Status:** offen
-- **Abhängig von:** F02, B10
+- **Abhängig von:** F02
 - **Referenzen:** architecture.md 4.2
 - **Umfang:**
   - **Routen:**
     - `/` leitet auf `/vorrat` weiter
     - `/vorrat`, `/scan`, `/einkauf`
     - `/produkt/:id`
-    - `/einrichtung`, `/anmelden`, `/wer-bist-du`
   - Untere Navigationsleiste mit Vorrat, Scan (mittig, größer) und Einkauf, nur auf den ersten drei Routen. Safe-Area-Abstände für das iPhone.
-  - Weiche beim Start als reine Funktion `decideRoute(setup, sessionStatus, member, requested)`:
-    - nicht eingerichtet: `/einrichtung`
-    - `GET /session` liefert 401: `/anmelden`
-    - `member` ist `null`: `/wer-bist-du`
-    - sonst: `requested`
   - Alle Ansichten sind Platzhalter mit Überschrift.
-- **Nicht im Umfang:** Inhalte der Ansichten.
+- **Nicht im Umfang:** Inhalte der Ansichten, Anmeldung (ADR-0013).
 - **Abnahmekriterien:**
-  1. Vitest-Tests für `decideRoute`.
+  1. Ein Vitest-Test prüft die Zuordnung von Pfad zu Ansicht (reine Funktion oder Router-Konfiguration).
   2. `make check` ist grün.
 
-### F04: Einrichtung, Anmelden, Wer bist du
+### F04: entfällt
 
-- **Status:** offen
-- **Abhängig von:** F03
-- **Referenzen:** architecture.md 6.2, 6.5, 8
-- **Umfang:**
-  - **Einrichtung:** Passwort mit Wiederholung (mindestens 8 Zeichen), 1 bis 10 Namensfelder (hinzufügen, entfernen). Dann `POST /setup`, danach automatisch `POST /session`, dann `/wer-bist-du`.
-  - **Anmelden:** Passwortfeld, `POST /session`, dann Weiche.
-  - **Wer bist du:** Mitglieder als große Buttons. Ein Tap sendet `PATCH /session` und führt zu `/vorrat`. Im Kopf der Vorratsansicht ein kleiner Link mit dem Mitgliedsnamen, der zu `/wer-bist-du` führt.
-  - **Fehlertexte** als reine Funktion `errorText(code)`:
-    - `invalid_credentials`: „Falsches Passwort"
-    - `too_many_attempts`: „Zu viele Versuche, bitte eine Minute warten"
-    - `already_configured`: „Bereits eingerichtet"
-    - sonst: „Unerwarteter Fehler"
-- **Nicht im Umfang:** Passwort ändern, Mitglieder verwalten.
-- **Abnahmekriterien:**
-  1. Vitest-Tests für die Formularprüfung und `errorText`.
-  2. `make check` ist grün.
-  3. (Nutzer) Einrichtung, Login und Mitgliedswahl funktionieren im Browser.
+- **Status:** entfällt (ADR-0013, keine Anmeldung in M1)
 
 ### F05: Vorrat
 
 - **Status:** offen
-- **Abhängig von:** F04, B16b, B22b
+- **Abhängig von:** F03, B16b, B22b
 - **Referenzen:** architecture.md 1, 6.2, 6.3
 - **Umfang:**
   - `GET /products`, sortiert mit `Intl.Collator("de")`.
@@ -1003,7 +927,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 - **Referenzen:** architecture.md 6.2, 6.3, 6.5 (Merge)
 - **Umfang:**
   - **Bestand korrigieren:** Zahlfeld, sendet `POST /movements` mit `inventory`.
-  - **Letzte Buchungen:** `GET /movements?product_id=…&limit=10`, mit Mitgliedsname (Mitglieder einmal über `GET /members`), Zeit und `delta`.
+  - **Letzte Buchungen:** `GET /movements?product_id=…&limit=10`, mit Zeit und `delta`.
   - **Zusammenführen:** Bei `needs_review` gibt es den Button „Mit vorhandenem Produkt zusammenführen". Er öffnet eine Auswahlliste mit Suche (`matches` aus F05, ohne das eigene Produkt). Die Auswahl sendet `POST /products/{id}/merge` und öffnet danach das Zielprodukt.
 - **Nicht im Umfang:** Storno aus dem Verlauf.
 - **Abnahmekriterien:**
@@ -1038,7 +962,7 @@ Alle F-Tasks setzen P0-6 voraus. Framework-spezifische Angaben ergänzt P0-6. Ge
 ### F08: Scanner-Ansicht: Buchen und Rückmeldung
 
 - **Status:** offen
-- **Abhängig von:** F03, F04, F07, B20
+- **Abhängig von:** F03, F07, B20
 - **Referenzen:** architecture.md 6.3, ADR-0008
 - **Umfang:**
   - **Modus-Schalter:** „Einlagern | Entnehmen", groß, in `localStorage` gespeichert, Farbe grün bzw. blau.

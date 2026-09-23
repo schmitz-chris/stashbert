@@ -1,6 +1,6 @@
 # ADR-0009: Anmeldung mit Haushaltspasswort, OIDC später
 
-- Status: angenommen
+- Status: ersetzt durch ADR-0013
 - Datum: 2026-09-23
 
 ## Kontext

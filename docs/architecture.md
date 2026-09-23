@@ -24,10 +24,9 @@ StashBert ist ein selbst gehostetes Vorratsinventar für einen Haushalt. Es bean
 - Platzhalter mit einem vorhandenen Produkt zusammenführen
 - Berechnete Einkaufsliste
 - Web-Oberfläche (PWA) mit Scanner, Vorrat, Einkauf und Produktdetail
-- Haushaltspasswort, Auswahl „Wer bist du?" pro Sitzung
 - SQLite, tägliches Backup
 
-**Nicht in M1** (siehe Plan, Abschnitt „Später"): MQTT, Home Assistant, Bring!, API-Tokens, ESP32, Kurzbefehl, OIDC, Kategorien, Lagerorte, MHD, Statistiken, Offline-Buchen, Mehrsprachigkeit.
+**Nicht in M1** (siehe Plan, Abschnitt „Später"): Anmeldung und Benutzer (ADR-0013), MQTT, Home Assistant, Bring!, API-Tokens, ESP32, Kurzbefehl, OIDC, Kategorien, Lagerorte, MHD, Statistiken, Offline-Buchen, Mehrsprachigkeit.
 
 ## 2. Leitplanken
 
@@ -39,7 +38,7 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
 4. **Barcodes als eigene Tabelle**, mehrere pro Produkt.
 5. **Migrationen ab Tag 1** mit goose (ADR-0005).
 6. **Domänen-Ereignisse intern ab Tag 1**, zunächst ohne Empfänger (ADR-0011).
-7. **Anmeldung als austauschbare Schicht:** Die Handler kennen nur „angemeldete Sitzung" (ADR-0009).
+7. **Keine Anmeldung in M1, aber nachrüstbar** (ADR-0013): Die Endpunkte enthalten nichts, was eine spätere Anmeldung am Reverse Proxy oder per OIDC verhindert.
 8. **Keine Mandantenfähigkeit:** Eine Instanz ist ein Haushalt (ADR-0010).
 9. **Zustand nur in `DATA_DIR`, Konfiguration nur über Umgebungsvariablen** (ADR-0010).
 
@@ -82,12 +81,11 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
 | `internal/app` | **Zusammenbau (Composition Root):** `NewHandler(cfg config.Config, deps Deps) (http.Handler, error)` baut die komplette Handler-Kette (4.4). Tests der API nutzen genau diese Funktion |
 | `internal/config` | Umgebungsvariablen lesen und prüfen (Tabelle in 9.2) |
 | `internal/api` | generierter Code aus `api/openapi.yaml` (`gen.go`) und die Handler-Implementierung: `type Server struct`, `func NewServer(d ServerDeps) *Server`, Handler-Methoden in `handlers_<bereich>.go` |
-| `internal/httpx` | Middleware: Problem Details, Request-Validierung, Auth, Logging, statische Auslieferung |
+| `internal/httpx` | Middleware: Problem Details, Request-Validierung, Logging, statische Auslieferung |
 | `internal/store` | SQLite öffnen, Pragmas, Migrationen (`migrations/`), sqlc-Abfragen (`queries/`) und generierter Code |
 | `internal/domain` | Fachlogik: Produkte, Barcodes, Buchungen, Einkauf, Zusammenführen |
 | `internal/gtin` | Barcode-Normalisierung und Prüfziffer |
 | `internal/lookup` | Open-Food-Facts-Client, Rate-Limiter, Hintergrund-Nachladen, Bild-Download |
-| `internal/auth` | Passwort-Hash, Sitzungen, Mitglieder |
 | `internal/events` | Interface für Domänen-Ereignisse, in M1 eine No-op-Implementierung |
 | `internal/backup` | tägliches Backup und Backup vor Migrationen |
 | `internal/webui` | `go:embed` der gebauten Web-Oberfläche |
@@ -98,9 +96,6 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
 - API-Zugriff nur über den aus `api/openapi.yaml` generierten Client (`openapi-typescript` + `openapi-fetch`).
 - Das Build-Ergebnis `web/dist` wird von `make build` nach `internal/webui/dist/` kopiert und von dort ins Go-Binary eingebettet (`//go:embed all:dist`). Im Repository liegt dort nur `.gitkeep`. Fehlt der Build, liefert `/` eine kurze Textseite „Web-Oberfläche nicht gebaut".
 - Ansichten in M1:
-  - Einrichtung
-  - Anmelden
-  - „Wer bist du?"
   - Vorrat
   - Scanner
   - Einkauf
@@ -124,12 +119,11 @@ Kette für `/api/v1/` von außen nach innen:
 
 1. Recover
 2. Logging
-3. Origin-Prüfung
-4. `http.StripPrefix("/api/v1")`
-5. Request-Validator (`nethttp-middleware`, umschließt den gesamten generierten Mux)
-6. generierter std-http-Handler mit Strict-Handler
+3. `http.StripPrefix("/api/v1")`
+4. Request-Validator (`nethttp-middleware`, umschließt den gesamten generierten Mux)
+5. generierter std-http-Handler mit Strict-Handler
 
-Die Anmeldung prüft eine **Strict-Middleware** (`StrictMiddlewareFunc`) anhand einer festen Liste öffentlicher Operationen. So liefert eine unbekannte Route 404, auch ohne Cookie. Achtung: oapi-codegen übergibt der Strict-Middleware die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
+Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict-Middleware: oapi-codegen übergibt ihr die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
 
 **Fehler-Muster (verbindlich für alle Handler):**
 
@@ -142,25 +136,12 @@ Die Anmeldung prüft eine **Strict-Middleware** (`StrictMiddlewareFunc`) anhand 
   - Der Fehlerwert `routers.ErrMethodNotAllowed` ergibt 405 `method_not_allowed`.
   - Keine passende Route ergibt 404 `not_found`.
   - Alle anderen Validierungsfehler ergeben 400 `invalid_request`.
-  - Die `AuthenticationFunc` gibt `nil` zurück.
 
 ## 5. Datenmodell (SQLite, STRICT-Tabellen)
 
 Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Alle Zeitstempel: TEXT im festen Format RFC 3339 UTC mit Millisekunden, Go-Layout `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). Alle IDs: TEXT, UUIDv7 in Kleinbuchstaben.
 
-**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 nur `password_hash`.
-
-**`members`**: `id` PK, `name` TEXT NOT NULL UNIQUE `COLLATE NOCASE` (1 bis 40 Zeichen, vorher getrimmt), `created_at`.
-
-Doppelte Namen erkennt allein die Datenbank über den UNIQUE-Index. `NOCASE` faltet nur ASCII, „Jörg" und „JÖRG" gelten also als verschieden; das ist akzeptiert.
-
-**`sessions`**:
-
-| Spalte | Typ | Regel |
-|---|---|---|
-| `token_hash` | TEXT PK | SHA-256 des Tokens, hex |
-| `member_id` | TEXT | NULL, FK `members` ON DELETE SET NULL |
-| `created_at`, `last_seen_at`, `expires_at` | TEXT | |
+**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 ohne Einträge; vorgesehen für spätere Einstellungen (z. B. die Ziel-Einkaufsliste in M2).
 
 **`products`**:
 
@@ -193,7 +174,6 @@ Doppelte Namen erkennt allein die Datenbank über den UNIQUE-Index. `NOCASE` fal
 | `delta` | INTEGER | Änderung des Bestands, darf 0 sein (Inventur ohne Änderung) |
 | `stock_after` | INTEGER | ≥ 0 |
 | `barcode` | TEXT | NULL |
-| `member_id` | TEXT | NULL, FK ON DELETE SET NULL |
 | `reverses_id` | TEXT | NULL, UNIQUE, FK auf `movements` |
 | `idempotency_key` | TEXT | NULL, UNIQUE |
 | `request_hash` | TEXT | NULL, SHA-256 des Request-Bodys (für Idempotenz) |
@@ -215,7 +195,7 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 - Basis-Pfad `/api/v1`. JSON-Felder in `snake_case`.
 - Fehler: RFC 9457, `application/problem+json`, mit den Feldern `type` (`about:blank`), `title`, `status`, `detail`, `code`. Die Liste der `code`-Werte steht in 6.4.
 - Ändernde Aufrufe (`POST`, `PATCH`, `DELETE`) verlangen `Content-Type: application/json`, sofern sie einen Body haben.
-- Auth: Session-Cookie `stashbert_session`. Öffentlich sind nur `GET /health`, `GET /setup`, `POST /setup` und `POST /session`.
+- Keine Anmeldung (ADR-0013). Es werden keine CORS-Header gesetzt; zusammen mit der JSON-Pflicht für Bodies verhindert der Browser, dass fremde Webseiten Buchungen auslösen.
 - Idempotenz: optionaler Header `Idempotency-Key` bei `POST /movements` und `POST /movements/{id}/reversal`.
   - Gleicher Schlüssel mit gleichem Body: keine neue Buchung, sondern 201 mit einer aus der gespeicherten Buchung **rekonstruierten** Antwort (aktuelles Produkt, `product_created: false`, `warnings: []`, `message` aus der Buchung).
   - Gleicher Schlüssel mit anderem Body liefert 422 mit `idempotency_key_mismatch`.
@@ -230,15 +210,6 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | Methode und Pfad | `operationId` | Zweck | Erfolg | Fehler-`code` |
 |---|---|---|---|---|
 | `GET /health` | `getHealth` | Status | 200 `{status, version}` | |
-| `GET /setup` | `getSetup` | Ist die Instanz eingerichtet? | 200 `{configured}` | |
-| `POST /setup` | `createSetup` | Passwort und Mitglieder anlegen | 204 | `already_configured` (409), `invalid_request` |
-| `POST /session` | `createSession` | Anmelden mit Passwort | 204 + Cookie | `invalid_credentials` (401), `not_configured` (409), `too_many_attempts` (429) |
-| `GET /session` | `getSession` | aktuelle Sitzung | 200 `Session` | `unauthorized` |
-| `PATCH /session` | `updateSession` | Mitglied wählen `{member_id}` | 200 `Session` | `not_found` |
-| `DELETE /session` | `deleteSession` | Abmelden | 204 | |
-| `GET /members` | `listMembers` | Mitglieder | 200 `{items: Member[]}` | |
-| `POST /members` | `createMember` | Mitglied anlegen `{name}` | 201 `Member` | `name_taken` (409) |
-| `GET /members/{id}` | `getMember` | ein Mitglied | 200 `Member` | `not_found` |
 | `GET /products` | `listProducts` | alle Produkte, sortiert nach Name | 200 `{items: Product[]}` | |
 | `POST /products` | `createProduct` | Produkt manuell anlegen | 201 `Product` | `barcode_in_use` (409), `invalid_barcode` (422) |
 | `GET /products/{id}` | `getProduct` | ein Produkt | 200 `Product` | `not_found` |
@@ -283,14 +254,14 @@ Storno (`POST /movements/{id}/reversal`):
 - Würde der Bestand negativ, wird er 0 mit `warnings: ["clamped_to_zero"]`; `delta` ist dann die tatsächliche Änderung.
 - Buchungen der Arten `reversal` und `merge` sind nicht stornierbar: 409 `not_reversible`.
 
-Jede Buchung speichert `member_id` aus der Sitzung, Produkt und Buchung in **einer** Transaktion. Nach dem Commit wird ein Domänen-Ereignis ausgelöst (ADR-0011).
+Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit wird ein Domänen-Ereignis ausgelöst (ADR-0011).
 
 `MovementResult`:
 
 ```json
 {
   "movement": { "id": "…", "product_id": "…", "kind": "consume", "delta": -1, "stock_after": 2,
-                "barcode": "4001234567890", "member_id": "…", "reverses_id": null, "created_at": "…" },
+                "barcode": "4001234567890", "reverses_id": null, "created_at": "…" },
   "product": { "…": "Product, siehe 6.5" },
   "product_created": false,
   "warnings": [],
@@ -305,22 +276,15 @@ Jede Buchung speichert `member_id` aus der Sitzung, Produkt und Buchung in **ein
 | `code` | Status |
 |---|---|
 | `invalid_request` | 400 |
-| `unauthorized` | 401 |
-| `invalid_credentials` | 401 |
 | `not_found` | 404 |
 | `unknown_barcode` | 404 |
-| `already_configured` | 409 |
-| `not_configured` | 409 |
-| `name_taken` | 409 |
 | `barcode_in_use` | 409 |
 | `stock_already_zero` | 409 |
 | `already_reversed` | 409 |
 | `not_reversible` | 409 |
-| `forbidden_origin` | 403 |
 | `method_not_allowed` | 405 |
 | `invalid_barcode` | 422 |
 | `idempotency_key_mismatch` | 422 |
-| `too_many_attempts` | 429 |
 | `internal` | 500 |
 
 ### 6.5 Schemas (Kurzform)
@@ -337,10 +301,7 @@ Jede Buchung speichert `member_id` aus der Sitzung, Produkt und Buchung in **ein
   - `null` löscht ein nullbares Feld.
   - `needs_review` wird nur dann `false`, wenn der Patch mindestens eines der Felder `name`, `brand` oder `package_size` enthält. Ein Patch nur mit `target` ändert `needs_review` nicht.
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
-- **Session:** `member: Member|null`, `expires_at`
-- **Member:** `id`, `name`
 - **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`
-- **Setup-Request:** `password` (8 bis 128 Zeichen), `members: string[]` (1 bis 10 Namen, je 1 bis 40 Zeichen)
 - **Merge:**
   - Barcodes und Buchungen der Quelle gehen auf das Ziel über.
   - Das Ziel bekommt eine Buchung `kind: merge` mit `delta` = Bestand der Quelle.
@@ -351,7 +312,7 @@ Jede Buchung speichert `member_id` aus der Sitzung, Produkt und Buchung in **ein
 | Typ | Go-Konstante | Wann | `data` |
 |---|---|---|---|
 | `product.created` | `TypeProductCreated` | Produkt angelegt (manuell oder per Scan) | `product_id`, `name`, `origin` |
-| `stock.added` | `TypeStockAdded` | Buchung `add` | `product_id`, `movement_id`, `delta`, `stock_after`, `member_id` |
+| `stock.added` | `TypeStockAdded` | Buchung `add` | `product_id`, `movement_id`, `delta`, `stock_after` |
 | `stock.consumed` | `TypeStockConsumed` | Buchung `consume` | wie `stock.added` |
 | `stock.adjusted` | `TypeStockAdjusted` | Buchung `inventory`, `reversal` oder `merge` | wie `stock.added` |
 | `product.empty` | `TypeProductEmpty` | Bestand wechselt von > 0 auf 0 | `product_id`, `name` |
@@ -409,16 +370,11 @@ Danach wird mit `target = 0` gebucht.
   - Ablage unter `DATA_DIR/images/<product_id>.<ext>`. Nie im Scan-Pfad.
 - **Backup:** siehe 9.3.
 
-## 8. Anmeldung
+## 8. Zugriffsschutz und Sicherheits-Header
 
-- `POST /setup` ist nur möglich, solange kein Passwort existiert. Es legt `password_hash` und die Mitglieder an.
-- **Passwort-Hash:** argon2id, Parameter m = 19 MiB, t = 2, p = 1, Salt 16 Byte. Gespeichert im PHC-Format `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`.
-- **Sitzung:**
-  - Zufälliges Token (32 Byte, base64url) im Cookie `stashbert_session` mit `HttpOnly`, `SameSite=Lax`, `Path=/` und `Secure`, außer bei `COOKIE_SECURE=false`.
-  - In der DB steht nur der SHA-256-Hash.
-  - Gültig 365 Tage: Das Cookie hat `Max-Age=31536000`. Wird die Sitzung verlängert (höchstens einmal pro Stunde), wird das Cookie mit neuem `Max-Age` erneut gesetzt.
-- **Login-Bremse:** höchstens 10 fehlgeschlagene Logins pro Minute und Prozess, danach 429 mit `code: too_many_attempts`.
-- **Origin-Prüfung:** Ist `PUBLIC_URL` gesetzt, werden ändernde Aufrufe mit abweichendem `Origin`-Header mit 403 und `code: forbidden_origin` abgelehnt. Fehlt der Header (z. B. `curl`), wird nicht geprüft.
+- **Keine Anmeldung in M1** (ADR-0013). Wer die Web-Oberfläche oder die API erreicht, darf alles. Schutz bietet allein das Netz: nur im Heimnetz erreichbar, später von unterwegs nur per VPN.
+- **Schutz vor fremden Webseiten:** keine CORS-Header, Bodies nur als `application/json`. Damit können Webseiten, die jemand im Heimnetz aufruft, keine Buchungen auslösen.
+- **Nachrüsten:** Eine Anmeldung lässt sich später ohne Änderung der Endpunkte ergänzen, entweder vorgelagert am Reverse Proxy (Forward-Auth) oder per OIDC in StashBert.
 - **Sicherheits-Header** für alle Antworten der Web-Oberfläche. Inline-Skripte in `index.html` (SvelteKit erzeugt welche) werden erlaubt, indem `internal/webui` beim Start den SHA-256 jedes Inline-`<script>` der eingebetteten `index.html` berechnet und als `'sha256-…'` an `script-src` anhängt. `'unsafe-inline'` für Skripte ist nicht erlaubt.
   - `Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; script-src 'self' 'wasm-unsafe-eval' <Hashes der Inline-Skripte>; style-src 'self' 'unsafe-inline'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'`
   - `X-Content-Type-Options: nosniff`
@@ -443,8 +399,6 @@ Danach wird mit `target = 0` gebucht.
 |---|---|---|
 | `PORT` | `8080` | HTTP-Port |
 | `DATA_DIR` | `/data` | Datenbank, Bilder, Backups |
-| `PUBLIC_URL` | leer | wenn gesetzt: Origin-Prüfung (Kapitel 8) |
-| `COOKIE_SECURE` | `true` | `false` nur für lokale Entwicklung ohne HTTPS |
 | `OFF_CONTACT` | leer | Kontakt für den OFF-User-Agent; leer bedeutet keine OFF-Lookups (nur Platzhalter) |
 | `BACKUP_KEEP` | `14` | Anzahl aufbewahrter täglicher Backups |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |

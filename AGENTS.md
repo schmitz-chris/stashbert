@@ -60,7 +60,7 @@ Diese Befehle gibt es ab Task P0-1:
 | `make generate` | oapi-codegen, sqlc und API-Typen für das Frontend erzeugen |
 | `make check` | Formatierung prüfen (`gofmt`), `go vet`, Go-Tests, Frontend-Prüfungen (sobald `web/` existiert). Die CI prüft zusätzlich, dass die generierten Dateien aktuell sind |
 | `make test` | nur die Tests |
-| `make run` | Server lokal starten (`DATA_DIR=./.data`, `COOKIE_SECURE=false`) |
+| `make run` | Server lokal starten (`DATA_DIR=./.data`) |
 | `make build` | Web-Oberfläche bauen und Go-Binary nach `bin/stashbert` erzeugen |
 
 `make` auf macOS ist GNU Make 3.81. Nutze keine Features neuerer Make-Versionen.
@@ -94,7 +94,6 @@ Diese Befehle gibt es ab Task P0-1:
 - `github.com/pressly/goose/v3`
 - `modernc.org/sqlite`
 - `github.com/google/uuid`
-- `golang.org/x/crypto` (nur `argon2`)
 - `golang.org/x/time` (nur `rate`)
 
 **Frontend (npm):**
@@ -120,7 +119,6 @@ internal/store/                DB öffnen, migrations/, queries/, db/ (sqlc, gen
 internal/domain/               Fachlogik
 internal/gtin/                 Barcode-Normalisierung
 internal/lookup/               Open Food Facts, Hintergrund-Jobs
-internal/auth/                 Passwort, Sitzungen, Mitglieder
 internal/events/               Ereignis-Interface (M1: No-op)
 internal/backup/               Backups
 internal/config/               Umgebungsvariablen
@@ -175,5 +173,5 @@ docs/                          Architektur, ADRs, Plan, Recherche
 ## Sicherheit
 
 - Keine Geheimnisse im Repository. `.env` und `.data/` stehen in `.gitignore`.
-- Passwörter, Tokens und Cookies nie loggen.
+- Tokens und andere Geheimnisse nie loggen. M1 hat keine Anmeldung (ADR-0013); keine Auth-Logik ohne Task einbauen.
 - Bilder nur von den Hosts laden, die in `architecture.md`, 7.3, erlaubt sind.
