@@ -193,7 +193,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B01: OpenAPI-Grundgerüst, Codegenerierung, CI-Prüfung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** P0-1
 - **Referenzen:** ADR-0003, architecture.md 4.4, 6.1, 6.2, 6.4
 - **Umfang:**
