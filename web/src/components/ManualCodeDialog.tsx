@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { checkManualCode } from "../lib/manualCode";
+import type { ScanMode } from "../lib/scan";
 import { Dialog } from "./Dialog";
 
 const buttonClass = "min-h-11 rounded-lg px-4 font-medium";
@@ -7,6 +8,8 @@ const buttonClass = "min-h-11 rounded-lg px-4 font-medium";
 interface ManualCodeDialogProps {
   /** Whether the dialog is shown. */
   open: boolean;
+  /** The current mode of the scan view; it names and colours the button. */
+  mode: ScanMode;
   /** Called when the user closes the dialog without booking. */
   onClose: () => void;
   /** Called with the canonical code of a valid input. */
@@ -18,19 +21,21 @@ interface ManualCodeDialogProps {
  * F11). A valid code is passed to onSubmit; for an invalid one the dialog
  * shows "Ungültiger Barcode" and stays open.
  */
-export function ManualCodeDialog({ open, onClose, onSubmit }: ManualCodeDialogProps) {
+export function ManualCodeDialog({ open, mode, onClose, onSubmit }: ManualCodeDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} title="Code eintippen">
       {/* Mounted only while open, so every opening starts empty. */}
-      {open && <ManualCodeForm onCancel={onClose} onSubmit={onSubmit} />}
+      {open && <ManualCodeForm mode={mode} onCancel={onClose} onSubmit={onSubmit} />}
     </Dialog>
   );
 }
 
 function ManualCodeForm({
+  mode,
   onCancel,
   onSubmit,
 }: {
+  mode: ScanMode;
   onCancel: () => void;
   onSubmit: (code: string) => void;
 }) {
@@ -83,8 +88,11 @@ function ManualCodeForm({
         >
           Abbrechen
         </button>
-        <button type="submit" className={`bg-emerald-600 text-white ${buttonClass}`}>
-          Buchen
+        <button
+          type="submit"
+          className={`${mode === "add" ? "bg-emerald-600" : "bg-sky-600"} text-white ${buttonClass}`}
+        >
+          {mode === "add" ? "Einlagern" : "Entnehmen"}
         </button>
       </div>
     </form>

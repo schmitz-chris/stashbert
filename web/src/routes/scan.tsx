@@ -336,6 +336,7 @@ export function ScanPage() {
       />
       <ManualCodeDialog
         open={manualOpen}
+        mode={mode}
         onClose={closeManual}
         onSubmit={submitManual}
       />
