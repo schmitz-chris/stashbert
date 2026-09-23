@@ -160,7 +160,7 @@ Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Al
 | `needs_review` | INTEGER | 0/1 |
 | `image_source_url` | TEXT | NULL, Bild-URL von OFF |
 | `image_file` | TEXT | NULL, Dateiname in `DATA_DIR/images/` |
-| `created_at`, `updated_at` | TEXT | |
+| `created_at`, `updated_at` | TEXT | `updated_at` ändert sich bei jeder Änderung der Zeile `products`, also bei Stammdaten (PATCH), Bestand (Buchung, Storno, Zusammenführen) und Nachladen. Barcodes zuordnen oder entfernen ändert es nicht. |
 
 **`barcodes`**: `code` TEXT PK (normalisiert, siehe 7.1), `product_id` FK ON DELETE CASCADE, `units` INTEGER NOT NULL ≥ 1 Standard 1, `created_at`.
 
