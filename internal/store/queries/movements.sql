@@ -13,3 +13,26 @@ UPDATE products
 SET stock = ?, updated_at = ?
 WHERE id = ?
 RETURNING *;
+
+-- name: ListMovements :many
+SELECT * FROM movements
+ORDER BY id DESC
+LIMIT ?;
+
+-- name: ListMovementsBefore :many
+SELECT * FROM movements
+WHERE id < ?
+ORDER BY id DESC
+LIMIT ?;
+
+-- name: ListProductMovements :many
+SELECT * FROM movements
+WHERE product_id = ?
+ORDER BY id DESC
+LIMIT ?;
+
+-- name: ListProductMovementsBefore :many
+SELECT * FROM movements
+WHERE product_id = ? AND id < ?
+ORDER BY id DESC
+LIMIT ?;

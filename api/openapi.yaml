@@ -213,6 +213,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
   /movements:
+    get:
+      operationId: listMovements
+      summary: Buchungen, neueste zuerst
+      description: >-
+        Sortiert nach id absteigend, seitenweise über cursor. Ein unbekanntes
+        product_id ergibt eine leere Liste. Fehler-code: invalid_request (400).
+      parameters:
+        - name: product_id
+          in: query
+          required: false
+          description: Nur die Buchungen dieses Produkts.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Höchstzahl der Buchungen auf der Seite.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: >-
+            next_cursor der vorigen Seite, also die id ihres letzten Eintrags.
+            Die Seite enthält nur Buchungen mit kleinerer id. Ein Wert, der
+            keine UUID ist, ergibt invalid_request.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Eine Seite der Buchungen.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovementList"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
     post:
       operationId: createMovement
       summary: Buchung anlegen
@@ -526,6 +570,20 @@ components:
         created_at:
           type: string
           format: date-time
+    MovementList:
+      type: object
+      required:
+        - items
+        - next_cursor
+      properties:
+        items:
+          type: array
+          description: Buchungen, sortiert nach id absteigend.
+          items:
+            $ref: "#/components/schemas/Movement"
+        next_cursor:
+          type: [string, "null"]
+          description: cursor für die nächste Seite, null auf der letzten Seite.
     MovementResult:
       type: object
       required:

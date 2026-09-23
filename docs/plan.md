@@ -683,7 +683,7 @@ Beide Varianten setzen **exakt** diese Punkte um, nicht mehr:
 
 ### B23: Buchungsliste
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B16a
 - **Referenzen:** architecture.md 6.2 (`listMovements`)
 - **Umfang:**

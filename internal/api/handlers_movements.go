@@ -47,6 +47,33 @@ func (s *Server) CreateMovement(ctx context.Context, request CreateMovementReque
 	}, nil
 }
 
+// defaultMovementLimit is the size of a page of movements without the
+// parameter limit (architecture.md 6.2, listMovements).
+const defaultMovementLimit = 50
+
+// ListMovements returns a page of movements, newest first, optionally only
+// those of one product.
+func (s *Server) ListMovements(ctx context.Context, request ListMovementsRequestObject) (ListMovementsResponseObject, error) {
+	params := request.Params
+	in := domain.MovementQuery{
+		ProductID: params.ProductId,
+		Cursor:    params.Cursor,
+		Limit:     defaultMovementLimit,
+	}
+	if params.Limit != nil {
+		in.Limit = int64(*params.Limit)
+	}
+	page, err := domain.ListMovements(ctx, s.deps.DB, in)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Movement, len(page.Items))
+	for i, m := range page.Items {
+		items[i] = movementResponse(m)
+	}
+	return ListMovements200JSONResponse{Items: items, NextCursor: toNullable(page.NextCursor)}, nil
+}
+
 // requestHash returns the SHA-256 of json.Marshal of the decoded request body
 // in lower case hex (architecture.md 5, request_hash).
 func requestHash(body any) (string, error) {

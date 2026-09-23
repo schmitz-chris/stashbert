@@ -79,6 +79,185 @@ func (q *Queries) InsertMovement(ctx context.Context, arg InsertMovementParams) 
 	return i, err
 }
 
+const listMovements = `-- name: ListMovements :many
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+ORDER BY id DESC
+LIMIT ?
+`
+
+func (q *Queries) ListMovements(ctx context.Context, limit int64) ([]Movement, error) {
+	rows, err := q.db.QueryContext(ctx, listMovements, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Movement
+	for rows.Next() {
+		var i Movement
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.Kind,
+			&i.Delta,
+			&i.StockAfter,
+			&i.Barcode,
+			&i.ReversesID,
+			&i.IdempotencyKey,
+			&i.RequestHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMovementsBefore = `-- name: ListMovementsBefore :many
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+WHERE id < ?
+ORDER BY id DESC
+LIMIT ?
+`
+
+type ListMovementsBeforeParams struct {
+	ID    string
+	Limit int64
+}
+
+func (q *Queries) ListMovementsBefore(ctx context.Context, arg ListMovementsBeforeParams) ([]Movement, error) {
+	rows, err := q.db.QueryContext(ctx, listMovementsBefore, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Movement
+	for rows.Next() {
+		var i Movement
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.Kind,
+			&i.Delta,
+			&i.StockAfter,
+			&i.Barcode,
+			&i.ReversesID,
+			&i.IdempotencyKey,
+			&i.RequestHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductMovements = `-- name: ListProductMovements :many
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+WHERE product_id = ?
+ORDER BY id DESC
+LIMIT ?
+`
+
+type ListProductMovementsParams struct {
+	ProductID string
+	Limit     int64
+}
+
+func (q *Queries) ListProductMovements(ctx context.Context, arg ListProductMovementsParams) ([]Movement, error) {
+	rows, err := q.db.QueryContext(ctx, listProductMovements, arg.ProductID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Movement
+	for rows.Next() {
+		var i Movement
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.Kind,
+			&i.Delta,
+			&i.StockAfter,
+			&i.Barcode,
+			&i.ReversesID,
+			&i.IdempotencyKey,
+			&i.RequestHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductMovementsBefore = `-- name: ListProductMovementsBefore :many
+SELECT id, product_id, kind, delta, stock_after, barcode, reverses_id, idempotency_key, request_hash, created_at FROM movements
+WHERE product_id = ? AND id < ?
+ORDER BY id DESC
+LIMIT ?
+`
+
+type ListProductMovementsBeforeParams struct {
+	ProductID string
+	ID        string
+	Limit     int64
+}
+
+func (q *Queries) ListProductMovementsBefore(ctx context.Context, arg ListProductMovementsBeforeParams) ([]Movement, error) {
+	rows, err := q.db.QueryContext(ctx, listProductMovementsBefore, arg.ProductID, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Movement
+	for rows.Next() {
+		var i Movement
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.Kind,
+			&i.Delta,
+			&i.StockAfter,
+			&i.Barcode,
+			&i.ReversesID,
+			&i.IdempotencyKey,
+			&i.RequestHash,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProductStock = `-- name: UpdateProductStock :one
 UPDATE products
 SET stock = ?, updated_at = ?
