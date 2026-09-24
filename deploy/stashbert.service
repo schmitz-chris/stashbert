@@ -6,6 +6,10 @@
 Description=StashBert Vorratsinventar
 After=network-online.target
 Wants=network-online.target
+# Höchstens 5 Starts in 5 Minuten, damit ein dauerhafter Fehler (z. B. ein
+# belegter Port) nicht endlos neu startet.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 User=stashbert

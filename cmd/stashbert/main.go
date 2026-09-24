@@ -100,16 +100,6 @@ func run() error {
 		off = lookup.NewClient("https://world.openfoodfacts.org",
 			"StashBert/"+version+" ("+cfg.OFFContact+")", &http.Client{}, offLimiter)
 	}
-	// The background jobs end with ctx. Every return waits for them before
-	// the database is closed.
-	var jobs sync.WaitGroup
-	defer func() {
-		stop()
-		jobs.Wait()
-	}()
-	// Looks up pending products every 60 s with the same client and limiter
-	// (architecture.md, 7.3).
-	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second) })
 	// Loads product images every 60 s into DATA_DIR/images
 	// (architecture.md, 7.3).
 	imageDir := filepath.Join(cfg.DataDir, "images")
@@ -119,10 +109,6 @@ func run() error {
 	imageTransport := http.DefaultTransport.(*http.Transport).Clone()
 	imageTransport.TLSHandshakeTimeout = 30 * time.Second
 	images := lookup.NewImageFetcher(db, &http.Client{Transport: imageTransport}, imageDir, lookup.DefaultImageHosts, logger)
-	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
-	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
-	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
-	jobs.Go(func() { backup.Start(ctx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
 
 	handler, err := app.NewHandler(cfg, app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off, ImageDir: imageDir,
@@ -145,6 +131,25 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
+	// The background jobs start only after the port is open. A service
+	// that fails to listen (port in use) and is restarted by systemd would
+	// otherwise write a new backup on every attempt and push the older
+	// daily backups out (BACKUP_KEEP).
+	// The background jobs end with ctx. Every return waits for them before
+	// the database is closed.
+	var jobs sync.WaitGroup
+	defer func() {
+		stop()
+		jobs.Wait()
+	}()
+	// Looks up pending products every 60 s with the same client and limiter
+	// (architecture.md, 7.3).
+	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second) })
+	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
+	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
+	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
+	jobs.Go(func() { backup.Start(ctx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
+
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
 	logger.Info("server started", slog.String("addr", srv.Addr), slog.String("version", version))
