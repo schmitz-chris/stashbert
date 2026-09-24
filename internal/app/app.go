@@ -16,6 +16,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
+	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/webui"
 )
 
@@ -61,6 +62,9 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 
 // newChain wraps the generated API handler, from outside to inside:
 // Recover, Logging, StripPrefix("/api/v1"), request validator.
+// For PUT /api/v1/products/{id}/image the body is limited to
+// lookup.MaxImageBytes before StripPrefix, because the validator reads the
+// whole body (architecture.md, 4.4).
 // GET /api/v1/openapi.yaml passes Recover and Logging but bypasses the
 // validator, because the route is not part of the spec (architecture.md, 6.2).
 // All other paths go to the web UI handler, also inside Recover and Logging.
@@ -75,11 +79,15 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler) (http.Ha
 		ErrorHandlerWithOpts: validationErrorHandler,
 	})
 
+	apiChain := http.StripPrefix("/api/v1", validator(apiHandler))
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", validator(apiHandler)))
+	mux.Handle("/api/v1/", apiChain)
 	// The more specific pattern wins over /api/v1/ for GET and HEAD; other
 	// methods on this path still reach the validator.
 	mux.HandleFunc("GET /api/v1/openapi.yaml", serveSpec)
+	// Also more specific than /api/v1/: an uploaded image is limited before
+	// the validator reads it.
+	mux.Handle("PUT /api/v1/products/{id}/image", http.MaxBytesHandler(apiChain, lookup.MaxImageBytes))
 	mux.Handle("/", webHandler)
 
 	return httpx.Recover(logger, httpx.Logging(logger, mux)), nil

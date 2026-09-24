@@ -32,8 +32,9 @@ const (
 	maxImagesPerRun = 10
 	// imageTimeout is the timeout of the download of one image.
 	imageTimeout = 30 * time.Second
-	// maxImageBytes is the largest image that is stored (architecture.md, 7.3).
-	maxImageBytes = 2 * 1024 * 1024
+	// MaxImageBytes is the largest image that is stored, loaded or uploaded
+	// (architecture.md, 7.3).
+	MaxImageBytes = 2 * 1024 * 1024
 	// maxImageRedirects is the number of redirects followed per image, as in
 	// the default policy of http.Client.
 	maxImageRedirects = 10
@@ -159,8 +160,8 @@ func (f *ImageFetcher) load(ctx context.Context, id, src string) error {
 		return nil
 	}
 
-	name, err := f.write(id, ext, data)
-	if err != nil {
+	name := id + "." + ext
+	if err := WriteImageFile(f.dir, name, data); err != nil {
 		return fmt.Errorf("load image of product %s: %w", id, err)
 	}
 	arg := db.SetProductImageFileParams{ImageFile: &name, UpdatedAt: store.FormatTime(time.Now()), ID: id, ImageSourceUrl: &src}
@@ -210,19 +211,19 @@ func (f *ImageFetcher) download(ctx context.Context, src string) ([]byte, string
 		return nil, "", fmt.Errorf("%w: status %d", errImageRejected, code)
 	}
 	contentType := resp.Header.Get("Content-Type")
-	ext, ok := imageExtension(contentType)
+	ext, ok := ImageExtension(contentType)
 	if !ok {
 		return nil, "", fmt.Errorf("%w: content type %q", errImageRejected, contentType)
 	}
-	if resp.ContentLength > maxImageBytes {
+	if resp.ContentLength > MaxImageBytes {
 		return nil, "", fmt.Errorf("%w: %d bytes", errImageRejected, resp.ContentLength)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxImageBytes+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("read image: %w", err)
 	}
-	if len(data) > maxImageBytes {
-		return nil, "", fmt.Errorf("%w: more than %d bytes", errImageRejected, maxImageBytes)
+	if len(data) > MaxImageBytes {
+		return nil, "", fmt.Errorf("%w: more than %d bytes", errImageRejected, MaxImageBytes)
 	}
 	if len(data) == 0 {
 		return nil, "", fmt.Errorf("%w: empty body", errImageRejected)
@@ -230,10 +231,10 @@ func (f *ImageFetcher) download(ctx context.Context, src string) ([]byte, string
 	return data, ext, nil
 }
 
-// imageExtension returns the extension of the stored file for an allowed
+// ImageExtension returns the extension of the stored file for an allowed
 // content type of images (architecture.md, 7.3). Parameters such as
 // "; charset=binary" are ignored, and so is the case of the media type.
-func imageExtension(contentType string) (string, bool) {
+func ImageExtension(contentType string) (string, bool) {
 	mediaType, _, _ := strings.Cut(contentType, ";")
 	switch strings.ToLower(strings.TrimSpace(mediaType)) {
 	case "image/jpeg":
@@ -251,17 +252,17 @@ func (f *ImageFetcher) allowedURL(u *url.URL) bool {
 	return u.Scheme == "https" && f.allowed[u.Host]
 }
 
-// write stores data as <dir>/<id>.<ext> with mode 0o640 and returns the file
-// name. The data is written to a temporary file in dir first, which is then
-// renamed, so the file never exists partially. dir is created with mode
-// 0o750 if needed.
-func (f *ImageFetcher) write(id, ext string, data []byte) (name string, err error) {
-	if err := os.MkdirAll(f.dir, 0o750); err != nil {
-		return "", fmt.Errorf("create image dir: %w", err)
+// WriteImageFile stores data as the file name in dir with mode 0o640. The
+// data is written to a temporary file in dir first, which is then renamed,
+// so the file never exists partially. dir is created with mode 0o750 if
+// needed. name must not contain a path separator.
+func WriteImageFile(dir, name string, data []byte) (err error) {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("create image dir: %w", err)
 	}
-	tmp, err := os.CreateTemp(f.dir, "."+id+"-*.tmp")
+	tmp, err := os.CreateTemp(dir, "."+name+"-*.tmp")
 	if err != nil {
-		return "", fmt.Errorf("create temporary image file: %w", err)
+		return fmt.Errorf("create temporary image file: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -270,20 +271,19 @@ func (f *ImageFetcher) write(id, ext string, data []byte) (name string, err erro
 		}
 	}()
 	if err := tmp.Chmod(0o640); err != nil {
-		return "", fmt.Errorf("write image file: %w", err)
+		return fmt.Errorf("write image file: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		return "", fmt.Errorf("write image file: %w", err)
+		return fmt.Errorf("write image file: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		return "", fmt.Errorf("write image file: %w", err)
+		return fmt.Errorf("write image file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("write image file: %w", err)
+		return fmt.Errorf("write image file: %w", err)
 	}
-	name = id + "." + ext
-	if err := os.Rename(tmp.Name(), filepath.Join(f.dir, name)); err != nil {
-		return "", fmt.Errorf("rename image file: %w", err)
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
+		return fmt.Errorf("rename image file: %w", err)
 	}
-	return name, nil
+	return nil
 }

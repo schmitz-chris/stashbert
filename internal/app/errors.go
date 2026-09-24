@@ -9,6 +9,7 @@ import (
 	"github.com/getkin/kin-openapi/routers"
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
+	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 )
 
@@ -18,8 +19,13 @@ func writeError(w http.ResponseWriter, e *httpx.Error) {
 }
 
 // validationErrorHandler maps errors of the request validator to problems.
+// A body over the limit of http.MaxBytesReader is an uploaded image larger
+// than 2 MB (architecture.md, 4.4).
 func validationErrorHandler(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, _ nethttpmiddleware.ErrorHandlerOpts) {
+	var tooLarge *http.MaxBytesError
 	switch {
+	case errors.As(err, &tooLarge):
+		writeError(w, domain.ImageTooLarge())
 	case errors.Is(err, routers.ErrMethodNotAllowed):
 		writeError(w, httpx.NewError(http.StatusMethodNotAllowed, "method_not_allowed", ""))
 	case errors.Is(err, routers.ErrPathNotFound):

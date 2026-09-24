@@ -1310,7 +1310,7 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
 
 ### B32: Produktbild hochladen und entfernen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B22b
 - **Referenzen:** architecture.md 6.1, 6.2 (`uploadProductImage`, `deleteProductImage`), 6.4 (`invalid_image`), 7.3
 - **Umfang:**

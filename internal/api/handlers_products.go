@@ -145,6 +145,25 @@ func (s *Server) GetProductImage(ctx context.Context, request GetProductImageReq
 	}, nil
 }
 
+// UploadProductImage stores the uploaded photo as the image of a product and
+// returns the product. The type follows from the content, not from the
+// Content-Type of the request.
+func (s *Server) UploadProductImage(ctx context.Context, request UploadProductImageRequestObject) (UploadProductImageResponseObject, error) {
+	p, err := domain.UploadProductImage(ctx, s.deps.DB, s.deps.ImageDir, request.Id, request.Body)
+	if err != nil {
+		return nil, err
+	}
+	return UploadProductImage200JSONResponse(productResponse(p)), nil
+}
+
+// DeleteProductImage removes the image and the image URL of a product.
+func (s *Server) DeleteProductImage(ctx context.Context, request DeleteProductImageRequestObject) (DeleteProductImageResponseObject, error) {
+	if err := domain.DeleteProductImage(ctx, s.deps.DB, s.deps.ImageDir, request.Id); err != nil {
+		return nil, err
+	}
+	return DeleteProductImage204Response{}, nil
+}
+
 // AddBarcode assigns a barcode to a product and returns it normalized.
 func (s *Server) AddBarcode(ctx context.Context, request AddBarcodeRequestObject) (AddBarcodeResponseObject, error) {
 	units := int64(1)

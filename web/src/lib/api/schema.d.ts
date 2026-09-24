@@ -155,9 +155,17 @@ export interface paths {
          * @description Fehler-code: not_found (404), auch wenn das Produkt kein Bild hat oder die Bilddatei fehlt.
          */
         get: operations["getProductImage"];
-        put?: never;
+        /**
+         * Eigenes Foto als Produktbild hochladen
+         * @description Der Body ist das Bild, höchstens 2 MB. Erlaubt sind image/jpeg, image/png und image/webp; der Typ wird am Inhalt erkannt, nicht am Content-Type. Ein vorhandenes Bild wird ersetzt und die Bildquelle von Open Food Facts entfernt. Fehler-code: invalid_request (400), not_found (404), invalid_image (422, größer als 2 MB oder kein JPEG, PNG oder WebP).
+         */
+        put: operations["uploadProductImage"];
         post?: never;
-        delete?: never;
+        /**
+         * Produktbild und Bildquelle entfernen
+         * @description Entfernt die Bilddatei und die Bildquelle von Open Food Facts, damit das Bild nicht erneut geladen wird. Ein Produkt ohne Bild ist kein Fehler. Fehler-code: not_found (404).
+         */
+        delete: operations["deleteProductImage"];
         options?: never;
         head?: never;
         patch?: never;
@@ -773,6 +781,70 @@ export interface operations {
                 content: {
                     "image/*": unknown;
                 };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadProductImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/*": unknown;
+            };
+        };
+        responses: {
+            /** @description Das Produkt mit seinen Barcodes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteProductImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Das Produkt hat kein Bild mehr. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Fehler nach RFC 9457. */
             default: {

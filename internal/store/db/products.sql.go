@@ -305,6 +305,43 @@ func (q *Queries) MoveProductBarcodes(ctx context.Context, arg MoveProductBarcod
 	return err
 }
 
+const setProductImage = `-- name: SetProductImage :one
+UPDATE products
+SET image_file = ?, image_source_url = NULL, updated_at = ?
+WHERE id = ?
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
+`
+
+type SetProductImageParams struct {
+	ImageFile *string
+	UpdatedAt string
+	ID        string
+}
+
+func (q *Queries) SetProductImage(ctx context.Context, arg SetProductImageParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, setProductImage, arg.ImageFile, arg.UpdatedAt, arg.ID)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Brand,
+		&i.PackageSize,
+		&i.Stock,
+		&i.Target,
+		&i.MinStock,
+		&i.Note,
+		&i.Origin,
+		&i.LookupState,
+		&i.NeedsReview,
+		&i.ImageSourceUrl,
+		&i.ImageFile,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Marked,
+	)
+	return i, err
+}
+
 const updateProduct = `-- name: UpdateProduct :one
 UPDATE products
 SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,

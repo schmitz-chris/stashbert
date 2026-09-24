@@ -49,3 +49,9 @@ WHERE code = ? AND product_id = ?;
 UPDATE barcodes
 SET product_id = sqlc.arg(target_id)
 WHERE product_id = sqlc.arg(source_id);
+
+-- name: SetProductImage :one
+UPDATE products
+SET image_file = ?, image_source_url = NULL, updated_at = ?
+WHERE id = ?
+RETURNING *;

@@ -250,6 +250,49 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    put:
+      operationId: uploadProductImage
+      summary: Eigenes Foto als Produktbild hochladen
+      description: >-
+        Der Body ist das Bild, höchstens 2 MB. Erlaubt sind image/jpeg,
+        image/png und image/webp; der Typ wird am Inhalt erkannt, nicht am
+        Content-Type. Ein vorhandenes Bild wird ersetzt und die Bildquelle von
+        Open Food Facts entfernt. Fehler-code: invalid_request (400),
+        not_found (404), invalid_image (422, größer als 2 MB oder kein JPEG,
+        PNG oder WebP).
+      requestBody:
+        required: true
+        content:
+          image/*: {}
+      responses:
+        "200":
+          description: Das Produkt mit seinen Barcodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: deleteProductImage
+      summary: Produktbild und Bildquelle entfernen
+      description: >-
+        Entfernt die Bilddatei und die Bildquelle von Open Food Facts, damit
+        das Bild nicht erneut geladen wird. Ein Produkt ohne Bild ist kein
+        Fehler. Fehler-code: not_found (404).
+      responses:
+        "204":
+          description: Das Produkt hat kein Bild mehr.
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /movements:
     get:
       operationId: listMovements
