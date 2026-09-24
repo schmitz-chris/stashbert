@@ -1384,7 +1384,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F20: Zeilen neu ordnen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F19
 - **Referenzen:** hig-pruefung.md H2, M1, M9, N5
 - **Umfang:**

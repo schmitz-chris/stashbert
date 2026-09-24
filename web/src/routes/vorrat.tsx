@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { CartIcon } from "../components/CartIcon";
 import { problemCode } from "../lib/api/client";
 import {
   markProductMutation,
@@ -28,41 +29,68 @@ const filters: { value: ProductFilter; label: string }[] = [
 // How long the notice of a failed booking or mark stays visible.
 const noticeDuration = 2000;
 
-// The buttons of a row: the tap area is 44 × 44 px, the visible face only
-// 40 × 40 px, so the three buttons leave more room for the name.
-const rowButtonClass = "flex size-11 items-center justify-center disabled:opacity-40";
-const rowButtonFaceClass = "pressable flex size-9 items-center justify-center rounded-lg border";
+// The buttons of a row: 44 × 44 px, above the link of the row.
+const rowButtonClass =
+  "pressable relative z-10 flex size-11 shrink-0 items-center justify-center disabled:opacity-40";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ProductFilter>("all");
+  const searchRef = useRef<HTMLInputElement>(null);
   const products = useQuery(productListQuery);
+
+  // Empties the search and leaves the focus in the field, because the
+  // button disappears with the text.
+  function clearSearch() {
+    setQuery("");
+    searchRef.current?.focus();
+  }
 
   return (
     <>
       <h1 className="text-2xl font-semibold">Vorrat</h1>
-      <input
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Name oder Marke suchen"
-        aria-label="Vorrat durchsuchen"
-        className="mt-4 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base"
-      />
-      <div role="group" aria-label="Filter" className="mt-3 flex flex-wrap gap-2">
-        {filters.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={filter === value}
-            onClick={() => setFilter(value)}
-            className="pressable min-h-11 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-white"
-          >
-            {label}
-          </button>
-        ))}
+      {/* Search and filters stay at the top while the list scrolls, below the
+          safe area. They lie above the buttons of the rows (z-10) and below
+          the update banner and the navigation bar (z-20). */}
+      <div className="sticky top-[env(safe-area-inset-top)] z-15 bg-canvas pt-4 pb-3">
+        <div className="relative">
+          <SearchIcon />
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Name oder Marke suchen"
+            aria-label="Vorrat durchsuchen"
+            className="min-h-11 w-full rounded-lg border border-line-strong bg-surface pr-11 pl-10 text-base [&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {query !== "" && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              aria-label="Suche löschen"
+              className="pressable absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-lg text-ink-tertiary"
+            >
+              <ClearIcon />
+            </button>
+          )}
+        </div>
+        <div role="radiogroup" aria-label="Filter" className="mt-3 flex flex-wrap gap-2">
+          {filters.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={filter === value}
+              onClick={() => setFilter(value)}
+              className="pressable min-h-11 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-checked:border-accent aria-checked:bg-accent aria-checked:text-white"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="mt-4">
+      <div className="mt-1">
         {products.data === undefined ? (
           products.isError && !products.isFetching ? (
             <div>
@@ -154,74 +182,71 @@ function StockRow({ product }: { product: Product }) {
     }
   }
 
+  // Two lines: image, name and brand over the full width, below them on
+  // the right the cart and, set apart by 16 px, the stepper [−] stock [+].
   // The link covers the whole row with its ::after box, so a tap anywhere
   // outside the buttons opens the product. The buttons lie above it.
   return (
-    <li className="relative flex items-center gap-1.5 px-3 py-2">
-      <ProductImage product={product} />
-      <div className="min-w-0 flex-1">
-        <Link
-          to={`/produkt/${encodeURIComponent(product.id)}`}
-          className="pressable-row line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
-        >
-          {product.name}
-        </Link>
-        {product.brand !== null && (
-          <p className="truncate text-sm text-ink-tertiary">
-            {product.brand}
+    <li className="relative px-3 py-2">
+      <div className="flex items-center gap-3">
+        <ProductImage product={product} />
+        <div className="min-w-0 flex-1">
+          <Link
+            to={`/produkt/${encodeURIComponent(product.id)}`}
+            className="pressable-row line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
+          >
+            {product.name}
+          </Link>
+          {product.brand !== null && (
+            <p className="truncate text-sm text-ink-tertiary">{product.brand}</p>
+          )}
+          <p role="status" className="text-sm font-medium text-danger">
+            {notice}
           </p>
-        )}
-        <p role="status" className="text-sm font-medium text-danger">
-          {notice}
-        </p>
+        </div>
       </div>
-      {/* The stock large, below it the target; without a target only the stock. */}
-      <div className="min-w-10 shrink-0 text-center tabular-nums">
-        <p className="text-xl font-semibold text-ink">
-          <span className="sr-only">Bestand </span>
-          {product.stock}
-        </p>
-        {product.target > 0 && (
-          <p className="text-xs text-ink-tertiary">Soll {product.target}</p>
-        )}
-      </div>
-      <div className="relative z-10 flex shrink-0">
+      <div className="flex flex-wrap items-center justify-end gap-4">
         <button
           type="button"
           disabled={mark.isPending || unmark.isPending}
           onClick={toggleCart}
           aria-pressed={cart.pressed}
           aria-label={cart.label}
-          className={rowButtonClass}
+          className={`${rowButtonClass} rounded-lg border ${cart.pressed ? "border-marked bg-marked text-white" : "border-line-strong bg-surface text-ink-secondary"}`}
         >
-          <span
-            className={`${rowButtonFaceClass} ${cart.pressed ? "border-marked bg-marked text-white" : "border-line-strong bg-surface text-ink-secondary"}`}
+          <CartIcon checked={cart.pressed} />
+        </button>
+        {/* The stepper in one frame: the stock large, below it the target
+            (without a target only the stock), between the buttons. */}
+        <div className="flex items-center rounded-lg ring-1 ring-line-strong ring-inset">
+          <button
+            type="button"
+            disabled={movement.isPending}
+            onClick={() => book("consume")}
+            aria-label={`Eins entnehmen: ${product.name}`}
+            className={`${rowButtonClass} rounded-l-lg text-xl`}
           >
-            <CartIcon checked={cart.pressed} />
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled={movement.isPending}
-          onClick={() => book("consume")}
-          aria-label={`Eins entnehmen: ${product.name}`}
-          className={rowButtonClass}
-        >
-          <span className={`${rowButtonFaceClass} border-line-strong bg-surface text-xl`}>
             −
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled={movement.isPending}
-          onClick={() => book("add")}
-          aria-label={`Eins einlagern: ${product.name}`}
-          className={rowButtonClass}
-        >
-          <span className={`${rowButtonFaceClass} border-line-strong bg-surface text-xl`}>
+          </button>
+          <div className="min-w-12 px-1 text-center tabular-nums">
+            <p className="text-xl leading-6 font-semibold text-ink">
+              <span className="sr-only">Bestand </span>
+              {product.stock}
+            </p>
+            {product.target > 0 && (
+              <p className="text-xs leading-4 text-ink-tertiary">Soll {product.target}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={movement.isPending}
+            onClick={() => book("add")}
+            aria-label={`Eins einlagern: ${product.name}`}
+            className={`${rowButtonClass} rounded-r-lg text-xl`}
+          >
             +
-          </span>
-        </button>
+          </button>
+        </div>
       </div>
     </li>
   );
@@ -239,9 +264,8 @@ function useResetAfterError({ isError, reset }: { isError: boolean; reset: () =>
   }, [isError, reset]);
 }
 
-// The shopping cart of the cart button, drawn with the color of the text
-// like the symbols of the navigation bar; checked, with a tick in the basket.
-function CartIcon({ checked }: { checked: boolean }) {
+// The magnifier at the start of the search field.
+function SearchIcon() {
   return (
     <svg
       aria-hidden="true"
@@ -250,13 +274,26 @@ function CartIcon({ checked }: { checked: boolean }) {
       stroke="currentColor"
       strokeWidth={2}
       strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-6"
+      className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-ink-tertiary"
     >
-      <path d="M2 3h2.5l2.6 12.2a1 1 0 0 0 1 .8h9.4a1 1 0 0 0 1-.76L21 7H5.6" />
-      <circle cx="9" cy="20" r="1.5" />
-      <circle cx="18" cy="20" r="1.5" />
-      {checked && <path d="m10 11.5 2 2 4-4" />}
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5" />
+    </svg>
+  );
+}
+
+// The cross in a filled circle of the button that empties the search.
+function ClearIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5">
+      <circle cx="12" cy="12" r="10" fill="currentColor" />
+      <path
+        d="m8.5 8.5 7 7m0-7-7 7"
+        fill="none"
+        stroke="white"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
