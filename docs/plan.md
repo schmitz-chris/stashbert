@@ -1165,7 +1165,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 - **Umfang:**
   - Flag `-version` in `cmd/stashbert`: gibt die Version aus (`main.version`) und endet mit 0, ohne Konfiguration zu laden oder etwas zu starten.
   - `make release`: baut wie `make build` zuerst die Web-Oberfläche (falls `web/package.json` existiert) und kopiert sie nach `internal/webui/dist/`, dann `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=<git describe --tags --always --dirty>"` nach `bin/release/stashbert-linux-amd64`, dazu `bin/release/SHA256SUMS` (mit `sha256sum`, auf macOS ersatzweise `shasum -a 256`). `bin/` ist schon ignoriert.
-  - Nach dem Build bleibt `internal/webui/dist/` bis auf `.gitkeep` leer, wie bei `make build`.
+  - Nach dem Build bleibt `internal/webui/dist/` bis auf `.gitkeep` leer (anders als `make build`, das die Oberfläche dort liegen lässt; der Ordner ist ignoriert).
 - **Nicht im Umfang:** arm64, GitHub-Releases, Signaturen.
 - **Abnahmekriterien:**
   1. Ein Go-Test prüft `-version` (z. B. über eine testbare Funktion statt `os.Exit`).
