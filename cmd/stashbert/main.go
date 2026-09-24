@@ -25,6 +25,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/config"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
+	"github.com/schmitz-chris/stashbert/internal/mqtt"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -132,6 +133,14 @@ func run() error {
 	imageTransport.TLSHandshakeTimeout = 30 * time.Second
 	images := lookup.NewImageFetcher(db, &http.Client{Transport: imageTransport}, imageDir, lookup.DefaultImageHosts, logger)
 
+	// Without MQTT_URL, StashBert runs without MQTT (architecture.md, 11).
+	var mqttClient *mqtt.Client
+	if cfg.MQTT.URL != "" {
+		if mqttClient, err = mqtt.New(cfg.MQTT, logger); err != nil {
+			return fmt.Errorf("create mqtt client: %w", err)
+		}
+	}
+
 	handler, err := app.NewHandler(cfg, app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off, ImageDir: imageDir,
 	})
@@ -171,6 +180,25 @@ func run() error {
 	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
 	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
 	jobs.Go(func() { backup.Start(ctx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
+
+	// With MQTT_URL, the client keeps the connection to the broker
+	// (architecture.md, 11.1). It has its own context, which ends only on
+	// return, after the HTTP server has shut down; the deferred call waits
+	// until the client has published offline and disconnected.
+	if mqttClient != nil {
+		mqttCtx, stopMQTT := context.WithCancel(context.Background())
+		mqttDone := make(chan struct{})
+		go func() {
+			defer close(mqttDone)
+			if err := mqttClient.Run(mqttCtx); err != nil {
+				logger.LogAttrs(mqttCtx, slog.LevelError, "mqtt stopped", slog.String("error", err.Error()))
+			}
+		}()
+		defer func() {
+			stopMQTT()
+			<-mqttDone
+		}()
+	}
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()

@@ -1571,7 +1571,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B34: MQTT-Konfiguration und Verbindung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B33
 - **Referenzen:** ADR-0018; architecture.md 11.1, 11.2, 9.2
 - **Umfang:**
