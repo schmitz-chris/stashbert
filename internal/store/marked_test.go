@@ -82,8 +82,8 @@ func TestMigrateMarked(t *testing.T) {
 	mustInsert(t, ctx, db, "products", "p", row{"stock": 2, "target": 5})
 	schemaBefore, productsBefore := schemaState(t, ctx, db), tableRows(t, ctx, db, "products")
 
-	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
-		t.Fatalf("Migrate: %v", err)
+	if _, err := p.UpTo(ctx, 3); err != nil {
+		t.Fatalf("migrate to 0003: %v", err)
 	}
 	if v := dbVersion(t, ctx, p); v != 3 {
 		t.Fatalf("version = %d, want 3", v)
@@ -106,8 +106,8 @@ func TestMigrateMarked(t *testing.T) {
 		t.Errorf("products after down:\n%s\nwant as before 0003:\n%s", after, productsBefore)
 	}
 
-	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
-		t.Fatalf("Migrate after down: %v", err)
+	if _, err := p.UpTo(ctx, 3); err != nil {
+		t.Fatalf("migrate to 0003 after down: %v", err)
 	}
 	if m := productMarked(t, ctx, db, "p"); m != 0 {
 		t.Errorf("marked after migrating up again = %d, want 0", m)

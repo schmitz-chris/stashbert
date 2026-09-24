@@ -1504,7 +1504,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### B33: Kastengröße im Datenmodell und in der API
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B31
 - **Referenzen:** ADR-0017; architecture.md 5, 6.5
 - **Umfang:**

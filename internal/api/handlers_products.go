@@ -68,6 +68,9 @@ func (s *Server) CreateProduct(ctx context.Context, request CreateProductRequest
 	if body.MinStock != nil {
 		in.MinStock = new(int64(*body.MinStock))
 	}
+	if crateSize, err := body.CrateSize.Get(); err == nil {
+		in.CrateSize = new(int64(crateSize))
+	}
 	if body.Barcodes != nil {
 		for _, b := range *body.Barcodes {
 			units := int64(1)
@@ -104,6 +107,12 @@ func (s *Server) UpdateProduct(ctx context.Context, request UpdateProductRequest
 		patch.MinStock.SetNull()
 	case body.MinStock.IsSpecified():
 		patch.MinStock.Set(int64(body.MinStock.GetOrEmpty()))
+	}
+	switch {
+	case body.CrateSize.IsNull():
+		patch.CrateSize.SetNull()
+	case body.CrateSize.IsSpecified():
+		patch.CrateSize.Set(int64(body.CrateSize.GetOrEmpty()))
 	}
 	p, err := domain.UpdateProduct(ctx, s.deps.DB, s.deps.Publisher, request.Id, patch)
 	if err != nil {
@@ -210,10 +219,19 @@ func productResponse(p domain.Product) Product {
 		Origin:      ProductOrigin(p.Origin),
 		LookupState: ProductLookupState(p.LookupState),
 		HasImage:    p.HasImage,
+		CrateSize:   intNullable(p.CrateSize),
 		Barcodes:    barcodes,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}
+}
+
+// intNullable returns null if v is nil and the value of v as int otherwise.
+func intNullable(v *int64) nullable.Nullable[int] {
+	if v == nil {
+		return nullable.NewNullNullable[int]()
+	}
+	return nullable.NewNullableWithValue(int(*v))
 }
 
 // toNullable returns null if v is nil and the value of v otherwise.

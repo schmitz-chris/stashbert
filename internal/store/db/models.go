@@ -49,6 +49,7 @@ type Product struct {
 	CreatedAt      string
 	UpdatedAt      string
 	Marked         int64
+	CrateSize      *int64
 }
 
 type Setting struct {

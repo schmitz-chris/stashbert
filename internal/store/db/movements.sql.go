@@ -314,7 +314,7 @@ const updateProductStock = `-- name: UpdateProductStock :one
 UPDATE products
 SET stock = ?, marked = ?, updated_at = ?
 WHERE id = ?
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size
 `
 
 type UpdateProductStockParams struct {
@@ -349,6 +349,7 @@ func (q *Queries) UpdateProductStock(ctx context.Context, arg UpdateProductStock
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Marked,
+		&i.CrateSize,
 	)
 	return i, err
 }

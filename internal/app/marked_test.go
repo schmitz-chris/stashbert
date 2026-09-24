@@ -62,10 +62,10 @@ func TestGetShoppingListMarked(t *testing.T) {
 	// marked p3 with its shortfall. p4 is neither marked nor short. The order
 	// stays by name.
 	checkShoppingList(t, h, `{"items": [
-		{"product_id": "p5", "name": "apfelmus", "brand": null, "missing": 2, "stock": 0, "target": 2, "marked": false},
-		{"product_id": "p3", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": true},
-		{"product_id": "p1", "name": "Spaghetti", "brand": "Barilla", "missing": 0, "stock": 6, "target": 5, "marked": true},
-		{"product_id": "p2", "name": "Zucker", "brand": null, "missing": 0, "stock": 0, "target": 0, "marked": true}
+		{"product_id": "p5", "name": "apfelmus", "brand": null, "missing": 2, "stock": 0, "target": 2, "marked": false, "crate_size": null},
+		{"product_id": "p3", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": true, "crate_size": null},
+		{"product_id": "p1", "name": "Spaghetti", "brand": "Barilla", "missing": 0, "stock": 6, "target": 5, "marked": true, "crate_size": null},
+		{"product_id": "p2", "name": "Zucker", "brand": null, "missing": 0, "stock": 0, "target": 0, "marked": true, "crate_size": null}
 	]}`)
 	checkFields(t, decodeProduct(t, get(h, "/api/v1/products/p1")), `{"missing": 0, "marked": true}`)
 	checkFields(t, decodeProduct(t, get(h, "/api/v1/products/p4")), `{"missing": 0, "marked": false}`)

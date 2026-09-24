@@ -132,7 +132,7 @@ export interface paths {
         put?: never;
         /**
          * Produkt in ein anderes Produkt überführen
-         * @description Barcodes und Buchungen des Produkts id gehen auf das Zielprodukt über. Hat das Produkt id Bestand, bekommt das Ziel eine Buchung mit kind merge und delta gleich diesem Bestand; ohne Bestand bleibt das Ziel unverändert. Danach wird das Produkt id mit seinem Bild gelöscht. Die übrigen Felder des Ziels bleiben unverändert. Fehler-code: invalid_request (400, auch wenn Ziel und Quelle gleich sind), not_found (404).
+         * @description Barcodes und Buchungen des Produkts id gehen auf das Zielprodukt über. Hat das Produkt id Bestand, bekommt das Ziel eine Buchung mit kind merge und delta gleich diesem Bestand; ohne Bestand gibt es keine Buchung. Hat das Ziel keine Kastengröße (crate_size), übernimmt es die des Produkts id. Danach wird das Produkt id mit seinem Bild gelöscht. Die übrigen Felder des Ziels bleiben unverändert. Fehler-code: invalid_request (400, auch wenn Ziel und Quelle gleich sind), not_found (404).
          */
         post: operations["mergeProduct"];
         delete?: never;
@@ -326,6 +326,8 @@ export interface components {
             /** @enum {string} */
             lookup_state: "none" | "pending" | "done" | "not_found";
             has_image: boolean;
+            /** @description Flaschen pro Kasten. null, wenn das Produkt nicht in Kästen gekauft wird. Bestand und Sollbestand bleiben in Flaschen. */
+            crate_size: number | null;
             /** @description Barcodes, sortiert nach Code. */
             barcodes: components["schemas"]["Barcode"][];
             /** Format: date-time */
@@ -361,6 +363,8 @@ export interface components {
             min_stock?: number;
             /** @description Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null. */
             note?: string;
+            /** @description Flaschen pro Kasten. Ohne Wert oder null wird das Produkt nicht in Kästen gekauft. */
+            crate_size?: number | null;
             /** @description Barcodes des Produkts. Jeder Code darf nur einmal vorkommen. */
             barcodes?: components["schemas"]["BarcodeInput"][];
         };
@@ -378,6 +382,8 @@ export interface components {
             min_stock?: number | null;
             /** @description Wird getrimmt, danach höchstens 500 Zeichen. Leer wird null. */
             note?: string | null;
+            /** @description Flaschen pro Kasten. null löscht die Kastengröße. */
+            crate_size?: number | null;
         };
         ProductMerge: {
             /** @description ID des Zielprodukts. Muss sich von der ID der Quelle unterscheiden. */
@@ -442,6 +448,8 @@ export interface components {
             target: number;
             /** @description Für den Einkauf vorgemerkt. Nur lesen. */
             marked: boolean;
+            /** @description Flaschen pro Kasten oder null. missing, stock und target bleiben in Flaschen. */
+            crate_size: number | null;
         };
         /** @description Vormerkung für ein Produkt, bestimmt über product_id oder barcode. Genau eines der beiden Felder muss gesetzt sein, sonst invalid_request. */
         MarkCreate: {

@@ -21,8 +21,8 @@ WHERE code = ?;
 
 -- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
-    origin, lookup_state, needs_review, image_source_url, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    origin, lookup_state, needs_review, image_source_url, crate_size, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: InsertBarcode :one
@@ -33,7 +33,7 @@ RETURNING *;
 -- name: UpdateProduct :one
 UPDATE products
 SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,
-    needs_review = ?, updated_at = ?
+    crate_size = ?, needs_review = ?, updated_at = ?
 WHERE id = ?
 RETURNING *;
 
@@ -44,6 +44,12 @@ WHERE id = ?;
 -- name: DeleteProductBarcode :execrows
 DELETE FROM barcodes
 WHERE code = ? AND product_id = ?;
+
+-- name: SetProductCrateSize :one
+UPDATE products
+SET crate_size = ?, updated_at = ?
+WHERE id = ?
+RETURNING *;
 
 -- name: MoveProductBarcodes :exec
 UPDATE barcodes

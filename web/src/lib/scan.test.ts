@@ -27,6 +27,7 @@ const product: Product = {
   origin: "manual",
   lookup_state: "none",
   has_image: false,
+  crate_size: null,
   barcodes: [{ code: "4001234567890", units: 1 }],
   created_at: "2026-09-23T10:00:00.000Z",
   updated_at: "2026-09-23T10:00:00.000Z",

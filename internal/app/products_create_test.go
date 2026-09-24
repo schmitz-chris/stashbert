@@ -104,7 +104,7 @@ func TestCreateProductWithNameOnly(t *testing.T) {
 	checkFields(t, got, `{
 		"name": "Kidneybohnen", "brand": null, "package_size": null, "note": null,
 		"stock": 0, "target": 0, "min_stock": null, "missing": 0,
-		"needs_review": false, "origin": "manual", "lookup_state": "none", "has_image": false,
+		"needs_review": false, "origin": "manual", "lookup_state": "none", "has_image": false, "crate_size": null,
 		"barcodes": []
 	}`)
 	id, _ := got["id"].(string)

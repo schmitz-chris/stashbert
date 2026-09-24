@@ -346,9 +346,9 @@ func TestMarkShoppingItemEndedByAdd(t *testing.T) {
 		insertProducts(t, db)
 		decodeMarkResult(t, markItem(h, `{"barcode": "3017620422003"}`))
 		checkShoppingList(t, h, `{"items": [
-			{"product_id": "p2", "name": "kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false},
-			{"product_id": "p3", "name": "Kidneybohnen", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false},
-			{"product_id": "p4", "name": "Mehl", "brand": null, "missing": 0, "stock": 2, "target": 4, "marked": true}
+			{"product_id": "p2", "name": "kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false, "crate_size": null},
+			{"product_id": "p3", "name": "Kidneybohnen", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false, "crate_size": null},
+			{"product_id": "p4", "name": "Mehl", "brand": null, "missing": 0, "stock": 2, "target": 4, "marked": true, "crate_size": null}
 		]}`)
 
 		result, _ := decodeMovementResult(t, post(h, "/api/v1/movements", `{"barcode": "3017620422003", "kind": "add"}`))

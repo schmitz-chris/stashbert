@@ -58,7 +58,7 @@ func (q *Queries) GetBarcode(ctx context.Context, code string) (Barcode, error) 
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked FROM products
+SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size FROM products
 WHERE id = ?
 `
 
@@ -82,6 +82,7 @@ func (q *Queries) GetProduct(ctx context.Context, id string) (Product, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Marked,
+		&i.CrateSize,
 	)
 	return i, err
 }
@@ -118,9 +119,9 @@ func (q *Queries) InsertBarcode(ctx context.Context, arg InsertBarcodeParams) (B
 
 const insertProduct = `-- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
-    origin, lookup_state, needs_review, image_source_url, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
+    origin, lookup_state, needs_review, image_source_url, crate_size, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size
 `
 
 type InsertProductParams struct {
@@ -135,6 +136,7 @@ type InsertProductParams struct {
 	LookupState    string
 	NeedsReview    int64
 	ImageSourceUrl *string
+	CrateSize      *int64
 	CreatedAt      string
 	UpdatedAt      string
 }
@@ -152,6 +154,7 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (P
 		arg.LookupState,
 		arg.NeedsReview,
 		arg.ImageSourceUrl,
+		arg.CrateSize,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -173,6 +176,7 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Marked,
+		&i.CrateSize,
 	)
 	return i, err
 }
@@ -245,7 +249,7 @@ func (q *Queries) ListProductBarcodes(ctx context.Context, productID string) ([]
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked FROM products
+SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size FROM products
 ORDER BY name COLLATE NOCASE, id
 `
 
@@ -275,6 +279,7 @@ func (q *Queries) ListProducts(ctx context.Context) ([]Product, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Marked,
+			&i.CrateSize,
 		); err != nil {
 			return nil, err
 		}
@@ -305,11 +310,49 @@ func (q *Queries) MoveProductBarcodes(ctx context.Context, arg MoveProductBarcod
 	return err
 }
 
+const setProductCrateSize = `-- name: SetProductCrateSize :one
+UPDATE products
+SET crate_size = ?, updated_at = ?
+WHERE id = ?
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size
+`
+
+type SetProductCrateSizeParams struct {
+	CrateSize *int64
+	UpdatedAt string
+	ID        string
+}
+
+func (q *Queries) SetProductCrateSize(ctx context.Context, arg SetProductCrateSizeParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, setProductCrateSize, arg.CrateSize, arg.UpdatedAt, arg.ID)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Brand,
+		&i.PackageSize,
+		&i.Stock,
+		&i.Target,
+		&i.MinStock,
+		&i.Note,
+		&i.Origin,
+		&i.LookupState,
+		&i.NeedsReview,
+		&i.ImageSourceUrl,
+		&i.ImageFile,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Marked,
+		&i.CrateSize,
+	)
+	return i, err
+}
+
 const setProductImage = `-- name: SetProductImage :one
 UPDATE products
 SET image_file = ?, image_source_url = NULL, updated_at = ?
 WHERE id = ?
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size
 `
 
 type SetProductImageParams struct {
@@ -338,6 +381,7 @@ func (q *Queries) SetProductImage(ctx context.Context, arg SetProductImageParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Marked,
+		&i.CrateSize,
 	)
 	return i, err
 }
@@ -345,9 +389,9 @@ func (q *Queries) SetProductImage(ctx context.Context, arg SetProductImageParams
 const updateProduct = `-- name: UpdateProduct :one
 UPDATE products
 SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,
-    needs_review = ?, updated_at = ?
+    crate_size = ?, needs_review = ?, updated_at = ?
 WHERE id = ?
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked, crate_size
 `
 
 type UpdateProductParams struct {
@@ -357,6 +401,7 @@ type UpdateProductParams struct {
 	Target      int64
 	MinStock    *int64
 	Note        *string
+	CrateSize   *int64
 	NeedsReview int64
 	UpdatedAt   string
 	ID          string
@@ -370,6 +415,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Target,
 		arg.MinStock,
 		arg.Note,
+		arg.CrateSize,
 		arg.NeedsReview,
 		arg.UpdatedAt,
 		arg.ID,
@@ -392,6 +438,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Marked,
+		&i.CrateSize,
 	)
 	return i, err
 }

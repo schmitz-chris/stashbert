@@ -27,9 +27,12 @@ type Product struct {
 	Origin      string
 	LookupState string
 	HasImage    bool
-	Barcodes    []Barcode
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// CrateSize is the number of bottles per crate, nil if the product is
+	// not bought in crates (ADR-0017).
+	CrateSize *int64
+	Barcodes  []Barcode
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Barcode is a barcode of a product.
@@ -71,6 +74,7 @@ func ProductFromDB(p db.Product, barcodes []db.Barcode) (Product, error) {
 		Origin:      p.Origin,
 		LookupState: p.LookupState,
 		HasImage:    p.ImageFile != nil,
+		CrateSize:   p.CrateSize,
 		Barcodes:    codes,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,

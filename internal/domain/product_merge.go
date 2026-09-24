@@ -20,7 +20,8 @@ import (
 // transaction it moves the barcodes and movements of the source to the
 // target, books the stock of the source on the target (see mergeStock) and
 // deletes the source. The target is marked for shopping if the source or the
-// target was (ADR-0015). The other fields of the target stay as they are.
+// target was (ADR-0015), and it takes over the crate size of the source if it
+// has none (ADR-0017). The other fields of the target stay as they are.
 //
 // After the commit it publishes the events of the merge movement to pub (see
 // publishMovementEvents), if there is one. Then it finishes the deletion of
@@ -63,6 +64,16 @@ func MergeProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imag
 	}
 	if err := q.MoveProductMovements(ctx, db.MoveProductMovementsParams{TargetID: target.ID, SourceID: source.ID}); err != nil {
 		return Product{}, fmt.Errorf("merge product %s: move movements to %s: %w", source.ID, target.ID, err)
+	}
+	if target.CrateSize == nil && source.CrateSize != nil {
+		target, err = q.SetProductCrateSize(ctx, db.SetProductCrateSizeParams{
+			CrateSize: source.CrateSize,
+			UpdatedAt: store.FormatTime(time.Now()),
+			ID:        target.ID,
+		})
+		if err != nil {
+			return Product{}, fmt.Errorf("merge product %s: set crate size of %s: %w", source.ID, targetID, err)
+		}
 	}
 	marked := target.Marked
 	if source.Marked != 0 {

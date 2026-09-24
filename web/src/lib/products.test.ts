@@ -27,6 +27,7 @@ function product(fields: Partial<Product>): Product {
     origin: "manual",
     lookup_state: "none",
     has_image: false,
+    crate_size: null,
     barcodes: [],
     created_at: "2026-09-23T10:00:00.000Z",
     updated_at: "2026-09-23T10:00:00.000Z",

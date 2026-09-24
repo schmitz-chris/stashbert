@@ -25,6 +25,7 @@ func (s *Server) GetShoppingList(ctx context.Context, request GetShoppingListReq
 			Stock:     int(it.Stock),
 			Target:    int(it.Target),
 			Marked:    it.Marked,
+			CrateSize: intNullable(it.CrateSize),
 		}
 	}
 	return GetShoppingList200JSONResponse{Items: items}, nil

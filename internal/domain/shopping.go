@@ -30,6 +30,8 @@ type ShoppingItem struct {
 	Stock     int64
 	Target    int64
 	Marked    bool
+	// CrateSize is the number of bottles per crate or nil (ADR-0017).
+	CrateSize *int64
 }
 
 // ShoppingListFromDB returns the stored products of which something is
@@ -51,6 +53,7 @@ func ShoppingListFromDB(products []db.Product) []ShoppingItem {
 			Stock:     p.Stock,
 			Target:    p.Target,
 			Marked:    p.Marked != 0,
+			CrateSize: p.CrateSize,
 		})
 	}
 	return items

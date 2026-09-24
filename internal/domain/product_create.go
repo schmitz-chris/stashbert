@@ -34,6 +34,7 @@ type NewProduct struct {
 	Target      int64
 	MinStock    *int64
 	Note        *string
+	CrateSize   *int64
 	Barcodes    []Barcode
 }
 
@@ -87,6 +88,7 @@ func CreateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in 
 		Target:      in.Target,
 		MinStock:    in.MinStock,
 		Note:        note,
+		CrateSize:   in.CrateSize,
 		Origin:      "manual",
 		LookupState: "none",
 		NeedsReview: 0,

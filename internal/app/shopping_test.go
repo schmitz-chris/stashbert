@@ -93,13 +93,13 @@ func TestGetShoppingListMissing(t *testing.T) {
 		want    string
 	}{
 		{"below target", shoppingProduct{"p1", "Kidneybohnen", "Bonduelle", 2, 5, nil},
-			`{"items": [{"product_id": "p1", "name": "Kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false}]}`},
+			`{"items": [{"product_id": "p1", "name": "Kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false, "crate_size": null}]}`},
 		{"above target", shoppingProduct{"p1", "Spaghetti", nil, 6, 5, nil}, empty},
 		{"at target", shoppingProduct{"p1", "Spaghetti", nil, 5, 5, nil}, empty},
 		{"above min_stock", shoppingProduct{"p1", "Mehl", nil, 2, 4, 1}, empty},
 		{"at min_stock", shoppingProduct{"p1", "Mehl", nil, 1, 4, 1}, empty},
 		{"below min_stock", shoppingProduct{"p1", "Mehl", nil, 0, 4, 1},
-			`{"items": [{"product_id": "p1", "name": "Mehl", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false}]}`},
+			`{"items": [{"product_id": "p1", "name": "Mehl", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false, "crate_size": null}]}`},
 		{"target 0", shoppingProduct{"p1", "Zucker", nil, 0, 0, nil}, empty},
 		{"target 0 and min_stock 0", shoppingProduct{"p1", "Zucker", nil, 0, 0, 0}, empty},
 	}
@@ -127,10 +127,10 @@ func TestGetShoppingListSorted(t *testing.T) {
 		shoppingProduct{"a2", "apfelmus", nil, 0, 2, nil})
 
 	checkShoppingList(t, h, `{"items": [
-		{"product_id": "a2", "name": "apfelmus", "brand": null, "missing": 2, "stock": 0, "target": 2, "marked": false},
-		{"product_id": "a3", "name": "Kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false},
-		{"product_id": "a4", "name": "mehl", "brand": "Aurora", "missing": 2, "stock": 1, "target": 3, "marked": false},
-		{"product_id": "a5", "name": "Mehl", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false}
+		{"product_id": "a2", "name": "apfelmus", "brand": null, "missing": 2, "stock": 0, "target": 2, "marked": false, "crate_size": null},
+		{"product_id": "a3", "name": "Kidneybohnen", "brand": "Bonduelle", "missing": 3, "stock": 2, "target": 5, "marked": false, "crate_size": null},
+		{"product_id": "a4", "name": "mehl", "brand": "Aurora", "missing": 2, "stock": 1, "target": 3, "marked": false, "crate_size": null},
+		{"product_id": "a5", "name": "Mehl", "brand": null, "missing": 4, "stock": 0, "target": 4, "marked": false, "crate_size": null}
 	]}`)
 }
 
@@ -140,7 +140,7 @@ func TestGetShoppingListFollowsMovements(t *testing.T) {
 		shoppingProduct{"p1", "Kidneybohnen", nil, 2, 5, nil},
 		shoppingProduct{"p2", "Spaghetti", nil, 6, 5, nil})
 	checkShoppingList(t, h, `{"items": [
-		{"product_id": "p1", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": false}
+		{"product_id": "p1", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": false, "crate_size": null}
 	]}`)
 
 	steps := []struct {
@@ -148,11 +148,11 @@ func TestGetShoppingListFollowsMovements(t *testing.T) {
 		want string
 	}{
 		{`{"product_id": "p2", "kind": "consume", "quantity": 2}`, `{"items": [
-			{"product_id": "p1", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": false},
-			{"product_id": "p2", "name": "Spaghetti", "brand": null, "missing": 1, "stock": 4, "target": 5, "marked": false}
+			{"product_id": "p1", "name": "Kidneybohnen", "brand": null, "missing": 3, "stock": 2, "target": 5, "marked": false, "crate_size": null},
+			{"product_id": "p2", "name": "Spaghetti", "brand": null, "missing": 1, "stock": 4, "target": 5, "marked": false, "crate_size": null}
 		]}`},
 		{`{"product_id": "p1", "kind": "add", "quantity": 3}`, `{"items": [
-			{"product_id": "p2", "name": "Spaghetti", "brand": null, "missing": 1, "stock": 4, "target": 5, "marked": false}
+			{"product_id": "p2", "name": "Spaghetti", "brand": null, "missing": 1, "stock": 4, "target": 5, "marked": false, "crate_size": null}
 		]}`},
 	}
 	for _, s := range steps {

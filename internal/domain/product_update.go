@@ -25,6 +25,7 @@ type ProductPatch struct {
 	Target      *int64
 	MinStock    nullable.Nullable[int64]
 	Note        nullable.Nullable[string]
+	CrateSize   nullable.Nullable[int64]
 }
 
 // UpdateProduct applies patch to the product with id and sets its updated_at,
@@ -163,6 +164,7 @@ func applyPatch(cur db.Product, patch ProductPatch) (db.UpdateProductParams, err
 	if arg.MinStock != nil && *arg.MinStock > arg.Target {
 		return db.UpdateProductParams{}, httpx.BadRequest("min_stock darf nicht größer als target sein")
 	}
+	arg.CrateSize = patchValue(cur.CrateSize, patch.CrateSize)
 	if patch.Name != nil || patch.Brand.IsSpecified() || patch.PackageSize.IsSpecified() {
 		arg.NeedsReview = 0
 	}

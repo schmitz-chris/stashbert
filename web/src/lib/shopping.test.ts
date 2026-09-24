@@ -9,6 +9,7 @@ const kidneyBeans: ShoppingItem = {
   stock: 2,
   target: 5,
   marked: false,
+  crate_size: null,
 };
 
 const flour: ShoppingItem = {
@@ -19,6 +20,7 @@ const flour: ShoppingItem = {
   stock: 0,
   target: 4,
   marked: false,
+  crate_size: null,
 };
 
 const pasta: ShoppingItem = {
@@ -29,6 +31,7 @@ const pasta: ShoppingItem = {
   stock: 4,
   target: 5,
   marked: false,
+  crate_size: null,
 };
 
 // Marked without a shortfall: on the list only because of the mark.
@@ -40,6 +43,7 @@ const milk: ShoppingItem = {
   stock: 3,
   target: 2,
   marked: true,
+  crate_size: null,
 };
 
 // Marked with a shortfall.
@@ -51,6 +55,7 @@ const rice: ShoppingItem = {
   stock: 0,
   target: 2,
   marked: true,
+  crate_size: null,
 };
 
 describe("shoppingQuantity", () => {

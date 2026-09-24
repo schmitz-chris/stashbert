@@ -111,8 +111,8 @@ func TestMigrateAfterInit(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("read goose version: %v", err)
 	}
-	if version != 3 {
-		t.Errorf("goose version = %d, want 3", version)
+	if version != 4 {
+		t.Errorf("goose version = %d, want 4", version)
 	}
 	if n := countRows(t, ctx, db, "settings"); n != 1 {
 		t.Errorf("settings has %d rows after migration, want 1", n)
@@ -132,7 +132,7 @@ func TestInventoryColumns(t *testing.T) {
 			"stock INTEGER NOT NULL DEFAULT 0", "target INTEGER NOT NULL DEFAULT 0", "min_stock INTEGER NULL",
 			"note TEXT NULL", "origin TEXT NOT NULL", "lookup_state TEXT NOT NULL", "needs_review INTEGER NOT NULL",
 			"image_source_url TEXT NULL", "image_file TEXT NULL", "created_at TEXT NOT NULL", "updated_at TEXT NOT NULL",
-			"marked INTEGER NOT NULL DEFAULT 0",
+			"marked INTEGER NOT NULL DEFAULT 0", "crate_size INTEGER NULL",
 		},
 		"barcodes": {
 			"code TEXT NOT NULL", "product_id TEXT NOT NULL", "units INTEGER NOT NULL DEFAULT 1", "created_at TEXT NOT NULL",
@@ -208,6 +208,8 @@ func TestInventoryChecks(t *testing.T) {
 		{"products", row{"needs_review": 1}},
 		{"products", row{"marked": 0}},
 		{"products", row{"marked": 1}},
+		{"products", row{"crate_size": 2}},
+		{"products", row{"crate_size": 100}},
 		{"barcodes", row{"units": 1}},
 		{"movements", row{"delta": 0, "stock_after": 0}},
 		{"movements", row{"delta": -3, "stock_after": 0}},
@@ -240,6 +242,8 @@ func TestInventoryChecks(t *testing.T) {
 		{"products", row{"lookup_state": "foo"}},
 		{"products", row{"needs_review": 2}},
 		{"products", row{"marked": 2}},
+		{"products", row{"crate_size": 1}},
+		{"products", row{"crate_size": 101}},
 		{"barcodes", row{"units": 0}},
 		{"movements", row{"kind": "foo"}},
 		{"movements", row{"stock_after": -1}},
