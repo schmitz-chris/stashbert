@@ -1112,7 +1112,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R01: Dockerfile und Healthcheck
 
-- **Status:** offen (optionaler Weg nach ADR-0014)
+- **Status:** erledigt (optionaler Weg nach ADR-0014)
 - **Abhängig von:** B29
 - **Referenzen:** ADR-0010, architecture.md 9.1
 - **Umfang:**

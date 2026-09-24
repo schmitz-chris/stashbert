@@ -1,0 +1,32 @@
+# Keeps the build context to what the Dockerfile needs: go.mod, go.sum,
+# api/, cmd/, internal/ and web/ without local builds and dependencies.
+
+# Version control, editors, agents
+.git
+.github
+.idea
+.vscode
+.claude
+**/.DS_Store
+
+# Local data, secrets, certificates
+.data
+.env
+**/.cert
+
+# Build outputs and dependencies; the image builds them itself
+bin
+**/node_modules
+web/dist
+web/public/zxing_reader.wasm
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep
+
+# Not part of the build
+poc
+docs
+deploy
+tools
+*.md
+Dockerfile
+.dockerignore

@@ -32,13 +32,9 @@ import (
 var version = "dev"
 
 func main() {
-	done, err := parseFlags(os.Args[1:], version, os.Stdout, os.Stderr)
+	done, err := parseFlags(context.Background(), os.Args[1:], version, os.Getenv, os.Stdout, os.Stderr)
 	if err != nil {
-		// Same exit codes as flag.ExitOnError: 0 for -h, otherwise 2.
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(0)
-		}
-		os.Exit(2)
+		os.Exit(exitCode(err))
 	}
 	if done {
 		return
@@ -49,14 +45,20 @@ func main() {
 	}
 }
 
+// errUnhealthy marks a failed -healthcheck.
+var errUnhealthy = errors.New("unhealthy")
+
 // parseFlags parses the command line arguments without the program name.
-// It reports done when the program should end without starting the server,
-// which is the case after -version has written the version to stdout. Parse
-// errors and the usage go to stderr.
-func parseFlags(args []string, version string, stdout, stderr io.Writer) (done bool, err error) {
+// It reports done when the program should end without starting the server:
+// after -version has written the version to stdout, or after -healthcheck
+// has asked the running server (healthcheck). A failed check returns an
+// error that wraps errUnhealthy. Parse errors, the usage and the reason of a
+// failed check go to stderr.
+func parseFlags(ctx context.Context, args []string, version string, getenv func(string) string, stdout, stderr io.Writer) (done bool, err error) {
 	fs := flag.NewFlagSet("stashbert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showVersion := fs.Bool("version", false, "print the version and exit")
+	checkHealth := fs.Bool("healthcheck", false, "check GET /api/v1/health on 127.0.0.1:$PORT and exit with 0 on 200, otherwise with 1")
 	if err := fs.Parse(args); err != nil {
 		return false, err
 	}
@@ -66,7 +68,27 @@ func parseFlags(args []string, version string, stdout, stderr io.Writer) (done b
 		}
 		return true, nil
 	}
+	if *checkHealth {
+		if err := healthcheck(ctx, getenv); err != nil {
+			fmt.Fprintf(stderr, "healthcheck: %v\n", err)
+			return true, fmt.Errorf("%w: %w", errUnhealthy, err)
+		}
+		return true, nil
+	}
 	return false, nil
+}
+
+// exitCode returns the exit code for an error of parseFlags. It matches
+// flag.ExitOnError (0 for -h, otherwise 2), except for a failed
+// -healthcheck, which ends with 1.
+func exitCode(err error) int {
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		return 0
+	case errors.Is(err, errUnhealthy):
+		return 1
+	}
+	return 2
 }
 
 func run() error {

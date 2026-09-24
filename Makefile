@@ -1,6 +1,6 @@
 # Requires only GNU Make 3.81 (default on macOS).
 
-.PHONY: generate check test run build release webui
+.PHONY: generate check test run build release webui docker
 
 # With web/package.json, the API types of the web UI are generated too.
 # Without web/node_modules (fresh clone), npm ci installs the tools first.
@@ -61,3 +61,8 @@ release: webui
 	else \
 		shasum -a 256 stashbert-linux-amd64 > SHA256SUMS; \
 	fi
+
+# Builds the container image stashbert:dev, the optional way of running
+# StashBert (ADR-0014). The Dockerfile builds the web UI itself.
+docker:
+	docker build --build-arg VERSION=$$(git describe --tags --always --dirty) -t stashbert:dev .
