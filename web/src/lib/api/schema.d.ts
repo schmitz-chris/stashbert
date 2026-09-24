@@ -321,6 +321,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/mqtt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * MQTT-Verbindung und Zielliste
+         * @description Zustand der Verbindung zum Broker, die von Home Assistant auf <MQTT_TOPIC_PREFIX>/in/targets angebotenen Ziellisten und die gewählte Zielliste. Immer verfügbar, auch ohne MQTT (dann status disabled und keine angebotenen Listen).
+         */
+        get: operations["getMqttStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/mqtt/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Zielliste wählen
+         * @description Wählt die Liste in Home Assistant, in die die Einkaufsliste geht, oder hebt die Wahl mit id null auf. Beim Wechsel geht zuerst ein shopping.snapshot hinaus, der die alte Liste abräumt (falls eine gewählt war), danach einer für die neue Liste (falls es eine gibt). Dieselbe Liste erneut zu wählen ändert nichts. Fehler-code: invalid_request (400), mqtt_disabled (409, ohne MQTT), unknown_target (422, die id ist nicht im aktuellen Angebot).
+         */
+        put: operations["setShoppingTarget"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -533,6 +573,28 @@ export interface components {
             }[];
             /** @description true, wenn die Einkaufsliste mehr als 100 Einträge hat. */
             shopping_truncated: boolean;
+        };
+        /** @description Eine Liste in Home Assistant, in die die Einkaufsliste gehen kann. */
+        ShoppingTarget: {
+            /** @description Undurchsichtige Kennung aus Home Assistant, z. B. todo.bring_zuhause. */
+            id: string;
+            /** @description Anzeigename der Liste. */
+            name: string;
+        };
+        ShoppingTargetChoice: {
+            /** @description Kennung einer gerade angebotenen Liste oder null, um die Wahl aufzuheben. */
+            id: string | null;
+        };
+        MqttStatus: {
+            /**
+             * @description disabled ohne MQTT, connecting ohne Verbindung zum Broker (der Client versucht es weiter), connected mit Verbindung.
+             * @enum {string}
+             */
+            status: "disabled" | "connecting" | "connected";
+            /** @description Die zuletzt von Home Assistant angebotenen Ziellisten in ihrer Reihenfolge. Leer ohne MQTT oder ohne gültiges Angebot. */
+            targets: components["schemas"]["ShoppingTarget"][];
+            /** @description Die gewählte Zielliste, auch wenn sie gerade nicht angeboten wird, oder null. */
+            target: components["schemas"]["ShoppingTarget"] | null;
         };
     };
     responses: never;
@@ -1172,6 +1234,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Summary"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMqttStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verbindung, angebotene und gewählte Zielliste. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MqttStatus"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setShoppingTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShoppingTargetChoice"];
+            };
+        };
+        responses: {
+            /** @description Verbindung, angebotene und gewählte Zielliste nach der Wahl. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MqttStatus"];
                 };
             };
             /** @description Fehler nach RFC 9457. */

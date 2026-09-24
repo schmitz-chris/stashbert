@@ -1658,7 +1658,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B39: Zielliste wählen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B38
 - **Referenzen:** ADR-0018; architecture.md 11.7, 6.2, 6.4, 6.5
 - **Umfang:**

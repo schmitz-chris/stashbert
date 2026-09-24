@@ -41,6 +41,11 @@ type Deps struct {
 	// (architecture.md, 11.3). It is nil without MQTT; the endpoint then
 	// answers 409 mqtt_disabled.
 	Snapshots api.SnapshotRequester
+	// MQTT reports the connection and chooses the target list for
+	// GET /integrations/mqtt and PUT /integrations/mqtt/target
+	// (architecture.md, 11.7). It is nil without MQTT; GET then reports
+	// disabled, and PUT answers 409 mqtt_disabled.
+	MQTT api.MQTTIntegration
 	// OnChange is called after every successful changing API request, so
 	// that the summary is published again (architecture.md, 11.5). It must
 	// not block. It is nil without MQTT.
@@ -51,7 +56,7 @@ type Deps struct {
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 	server := api.NewServer(api.ServerDeps{
 		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
-		Snapshots: d.Snapshots,
+		Snapshots: d.Snapshots, MQTT: d.MQTT,
 	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,

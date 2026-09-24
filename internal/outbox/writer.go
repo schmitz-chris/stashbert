@@ -19,10 +19,6 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/store/db"
 )
 
-// settingShoppingTarget is the settings key of the id of the chosen target
-// list (architecture.md, 11.7).
-const settingShoppingTarget = "shopping_target_id"
-
 // Writer is an events.Publisher that writes every event into the outbox
 // (architecture.md, 11.4).
 type Writer struct {
@@ -126,9 +122,16 @@ func shoppingChanged(ctx context.Context, q *db.Queries, d events.ShoppingChange
 		out.OnList = missing > 0 || out.Marked
 		out.Quantity, out.Unit = domain.ShoppingQuantity(missing, p.CrateSize)
 	}
-	out.List, err = q.GetSetting(ctx, settingShoppingTarget)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return out, fmt.Errorf("read setting %s: %w", settingShoppingTarget, err)
+	out.List, err = targetList(ctx, q)
+	return out, err
+}
+
+// targetList returns the id of the chosen target list, or "" if there is
+// none (architecture.md, 11.7).
+func targetList(ctx context.Context, q *db.Queries) (string, error) {
+	t, err := domain.StoredShoppingTarget(ctx, q)
+	if err != nil || t == nil {
+		return "", err
 	}
-	return out, nil
+	return t.ID, nil
 }

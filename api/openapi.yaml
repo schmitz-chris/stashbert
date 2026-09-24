@@ -534,6 +534,59 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /integrations/mqtt:
+    get:
+      operationId: getMqttStatus
+      summary: MQTT-Verbindung und Zielliste
+      description: >-
+        Zustand der Verbindung zum Broker, die von Home Assistant auf
+        <MQTT_TOPIC_PREFIX>/in/targets angebotenen Ziellisten und die gewählte
+        Zielliste. Immer verfügbar, auch ohne MQTT (dann status disabled und
+        keine angebotenen Listen).
+      responses:
+        "200":
+          description: Verbindung, angebotene und gewählte Zielliste.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MqttStatus"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /integrations/mqtt/target:
+    put:
+      operationId: setShoppingTarget
+      summary: Zielliste wählen
+      description: >-
+        Wählt die Liste in Home Assistant, in die die Einkaufsliste geht, oder
+        hebt die Wahl mit id null auf. Beim Wechsel geht zuerst ein
+        shopping.snapshot hinaus, der die alte Liste abräumt (falls eine
+        gewählt war), danach einer für die neue Liste (falls es eine gibt).
+        Dieselbe Liste erneut zu wählen ändert nichts. Fehler-code:
+        invalid_request (400), mqtt_disabled (409, ohne MQTT),
+        unknown_target (422, die id ist nicht im aktuellen Angebot).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingTargetChoice"
+      responses:
+        "200":
+          description: Verbindung, angebotene und gewählte Zielliste nach der Wahl.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MqttStatus"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:
@@ -1018,3 +1071,56 @@ components:
         shopping_truncated:
           type: boolean
           description: true, wenn die Einkaufsliste mehr als 100 Einträge hat.
+    ShoppingTarget:
+      type: object
+      description: Eine Liste in Home Assistant, in die die Einkaufsliste gehen kann.
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Undurchsichtige Kennung aus Home Assistant, z. B. todo.bring_zuhause.
+        name:
+          type: string
+          description: Anzeigename der Liste.
+    ShoppingTargetChoice:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: [string, "null"]
+          description: >-
+            Kennung einer gerade angebotenen Liste oder null, um die Wahl
+            aufzuheben.
+    MqttStatus:
+      type: object
+      required:
+        - status
+        - targets
+        - target
+      properties:
+        status:
+          type: string
+          enum:
+            - disabled
+            - connecting
+            - connected
+          description: >-
+            disabled ohne MQTT, connecting ohne Verbindung zum Broker (der
+            Client versucht es weiter), connected mit Verbindung.
+        targets:
+          type: array
+          description: >-
+            Die zuletzt von Home Assistant angebotenen Ziellisten in ihrer
+            Reihenfolge. Leer ohne MQTT oder ohne gültiges Angebot.
+          items:
+            $ref: "#/components/schemas/ShoppingTarget"
+        target:
+          description: >-
+            Die gewählte Zielliste, auch wenn sie gerade nicht angeboten wird,
+            oder null.
+          anyOf:
+            - $ref: "#/components/schemas/ShoppingTarget"
+            - type: "null"

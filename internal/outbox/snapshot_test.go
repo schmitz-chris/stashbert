@@ -109,11 +109,7 @@ func TestWriteShoppingSnapshot(t *testing.T) {
 		name     string
 		products bool
 		target   string // stored setting shopping_target_id, "" for none
-		// list is the list for WriteShoppingSnapshotFor with cleared; nil
-		// calls WriteShoppingSnapshot.
-		list    *string
-		cleared bool
-		data    string
+		data     string
 	}{
 		{
 			name: "chosen target list", products: true, target: "todo.bring_zuhause",
@@ -126,14 +122,6 @@ func TestWriteShoppingSnapshot(t *testing.T) {
 		{
 			name: "without products",
 			data: `{"list":"","items":[]}`,
-		},
-		{
-			name: "for a given list", products: true, target: "todo.alt", list: new("todo.neu"),
-			data: `{"list":"todo.neu","items":` + snapshotItems + `}`,
-		},
-		{
-			name: "clearing a given list", products: true, target: "todo.neu", list: new("todo.alt"), cleared: true,
-			data: `{"list":"todo.alt","items":` + clearedItems + `}`,
 		},
 	}
 	for _, tt := range tests {
@@ -150,13 +138,7 @@ func TestWriteShoppingSnapshot(t *testing.T) {
 			w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() { reported.Add(1) }, logger)
 			start := time.Now()
 
-			var err error
-			if tt.list == nil {
-				err = w.WriteShoppingSnapshot(testContext(t))
-			} else {
-				err = w.WriteShoppingSnapshotFor(testContext(t), *tt.list, tt.cleared)
-			}
-			if err != nil {
+			if err := w.WriteShoppingSnapshot(testContext(t)); err != nil {
 				t.Fatalf("write snapshot: %v", err)
 			}
 

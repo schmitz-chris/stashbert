@@ -145,13 +145,16 @@ func run() error {
 	// succession, which the writer and the handler report, and every 5 min
 	// (architecture.md, 11.5). The discovery for Home Assistant goes out after
 	// every connection, before the summary, and answers the birth message of
-	// Home Assistant (architecture.md, 11.6).
+	// Home Assistant (architecture.md, 11.6). The target lists offered on
+	// <p>/in/targets stay in memory for GET /integrations/mqtt and
+	// PUT /integrations/mqtt/target (architecture.md, 11.7).
 	var (
 		mqttClient  *mqtt.Client
 		deliverer   *outbox.Deliverer
 		snapshotter *outbox.Snapshotter
 		summary     *outbox.SummaryPublisher
 		discovery   *outbox.Discovery
+		targets     *outbox.Targets
 		publisher   events.Publisher = events.Nop{}
 	)
 	if cfg.MQTT.URL != "" {
@@ -171,15 +174,18 @@ func run() error {
 		publisher = writer
 		snapshotter = outbox.NewSnapshotter(writer, cfg.MQTT.TopicPrefix, logger)
 		mqttClient.OnMessage(snapshotter.Receive)
+		targets = outbox.NewTargets(writer, mqttClient, cfg.MQTT.TopicPrefix, logger)
+		mqttClient.OnMessage(targets.Receive)
 	}
 
 	deps := app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
 	}
-	// Without MQTT, Snapshots stays a nil interface, not one holding a nil
-	// pointer, and OnChange stays nil.
+	// Without MQTT, Snapshots and MQTT stay nil interfaces, not ones holding
+	// a nil pointer, and OnChange stays nil.
 	if snapshotter != nil {
 		deps.Snapshots = snapshotter
+		deps.MQTT = targets
 		deps.OnChange = summary.Request
 	}
 	handler, err := app.NewHandler(cfg, deps)

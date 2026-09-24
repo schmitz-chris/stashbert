@@ -2,9 +2,7 @@ package outbox
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -42,24 +40,11 @@ type shoppingSnapshotItem struct {
 	Unit      string `json:"unit"`
 }
 
-// WriteShoppingSnapshot writes shopping.snapshot for the chosen target list
-// into the outbox and then calls wake (architecture.md, 11.3). list is the
-// setting shopping_target_id, or "" if there is none.
+// WriteShoppingSnapshot writes shopping.snapshot for the chosen target list,
+// or with list "" if there is none, into the outbox and then calls wake
+// (architecture.md, 11.3). It reads the target list and the products in the
+// same transaction.
 func (w *Writer) WriteShoppingSnapshot(ctx context.Context) error {
-	return w.writeSnapshot(ctx, nil, false)
-}
-
-// WriteShoppingSnapshotFor writes shopping.snapshot for the target list with
-// the id list into the outbox and then calls wake. If cleared is set, every
-// item has on_list false and quantity 0, so that the list is cleared when
-// another one is chosen (architecture.md, 11.7).
-func (w *Writer) WriteShoppingSnapshotFor(ctx context.Context, list string, cleared bool) error {
-	return w.writeSnapshot(ctx, &list, cleared)
-}
-
-// writeSnapshot reads the products and, if list is nil, the chosen target
-// list, and inserts the snapshot in one transaction.
-func (w *Writer) writeSnapshot(ctx context.Context, list *string, cleared bool) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("write shopping snapshot: begin transaction: %w", err)
@@ -67,37 +52,41 @@ func (w *Writer) writeSnapshot(ctx context.Context, list *string, cleared bool) 
 	defer tx.Rollback()
 	q := db.New(tx)
 
-	var data shoppingSnapshotData
-	if list != nil {
-		data.List = *list
-	} else {
-		data.List, err = q.GetSetting(ctx, settingShoppingTarget)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("write shopping snapshot: read setting %s: %w", settingShoppingTarget, err)
-		}
+	list, err := targetList(ctx, q)
+	if err != nil {
+		return fmt.Errorf("write shopping snapshot: %w", err)
 	}
+	if err := insertSnapshot(ctx, q, list, false); err != nil {
+		return fmt.Errorf("write shopping snapshot: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("write shopping snapshot: commit: %w", err)
+	}
+	w.wake()
+	return nil
+}
+
+// insertSnapshot reads the products with q and inserts shopping.snapshot
+// for the target list with the id list into the outbox. If cleared is set,
+// every item has on_list false and quantity 0, so that the list is cleared
+// when another one is chosen (architecture.md, 11.7).
+func insertSnapshot(ctx context.Context, q *db.Queries, list string, cleared bool) error {
 	rows, err := q.ListShoppingSnapshotProducts(ctx)
 	if err != nil {
-		return fmt.Errorf("write shopping snapshot: list products: %w", err)
+		return fmt.Errorf("list products: %w", err)
 	}
-	data.Items = snapshotItems(rows, cleared)
-
-	e := events.New(typeShoppingSnapshot, data)
+	e := events.New(typeShoppingSnapshot, shoppingSnapshotData{List: list, Items: snapshotItems(rows, cleared)})
 	payload, err := json.Marshal(e)
 	if err != nil {
-		return fmt.Errorf("write shopping snapshot: encode event: %w", err)
+		return fmt.Errorf("encode event: %w", err)
 	}
 	if err := q.InsertOutboxEntry(ctx, db.InsertOutboxEntryParams{
 		Topic:     "events/" + e.Type,
 		Payload:   string(payload),
 		CreatedAt: store.FormatTime(time.Now()),
 	}); err != nil {
-		return fmt.Errorf("write shopping snapshot: insert outbox entry: %w", err)
+		return fmt.Errorf("insert outbox entry: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("write shopping snapshot: commit: %w", err)
-	}
-	w.wake()
 	return nil
 }
 
