@@ -1,6 +1,7 @@
 import { isValidElement } from "react";
 import { matchRoutes, Navigate, type NavigateProps } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { StartRedirect } from "./components/StartRedirect";
 import { TabLayout } from "./components/TabLayout";
 import { routes } from "./router";
 import { ShoppingPage } from "./routes/einkauf";
@@ -18,18 +19,49 @@ function match(path: string) {
   return matches;
 }
 
-describe("routes", () => {
-  it("redirects / to /vorrat with replace", () => {
-    const matches = match("/");
-    expect(matches.map((m) => m.route.id)).toEqual(["redirect"]);
-
-    const element = matches[0].route.element;
-    if (!isValidElement<NavigateProps>(element)) {
-      throw new Error("the route for / has no element");
-    }
-    expect(element.type).toBe(Navigate);
-    expect(element.props).toEqual({ to: "/vorrat", replace: true });
+// Replaces localStorage with a store that holds saved.
+function stubStorage(saved: Record<string, string>) {
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved[key] ?? null,
+    setItem: () => {},
   });
+}
+
+// Returns the props of the Navigate element the route for / renders.
+function startRedirect() {
+  const matches = match("/");
+  expect(matches.map((m) => m.route.id)).toEqual(["redirect"]);
+  expect(matches[0].route.Component).toBe(StartRedirect);
+
+  // StartRedirect uses no hooks, so it can be called without a DOM.
+  const element = StartRedirect();
+  if (!isValidElement<NavigateProps>(element)) {
+    throw new Error("the route for / renders no element");
+  }
+  expect(element.type).toBe(Navigate);
+  return element.props;
+}
+
+describe("routes", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["/vorrat", "/scan", "/einkauf"])(
+    "redirects / to the tab %s shown last with replace",
+    (path) => {
+      stubStorage({ "stashbert.lastTab": path });
+      expect(startRedirect()).toEqual({ to: path, replace: true });
+    },
+  );
+
+  it.each<Record<string, string>>([{}, { "stashbert.lastTab": "/produkt/abc" }])(
+    "redirects / to /vorrat with replace without a saved tab (%o)",
+    (saved) => {
+      stubStorage(saved);
+      expect(startRedirect()).toEqual({ to: "/vorrat", replace: true });
+    },
+  );
 
   it.each([
     ["/vorrat", "stock", StockPage],

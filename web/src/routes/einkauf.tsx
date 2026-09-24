@@ -3,11 +3,14 @@ import { useEffect, useReducer, useState } from "react";
 import { Link } from "react-router";
 import { CartIcon } from "../components/CartIcon";
 import { CloseIcon } from "../components/CloseIcon";
+import { PageHeading } from "../components/PageHeading";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   markProductMutation,
   shoppingListQuery,
   unmarkMutation,
 } from "../lib/api/queries";
+import { pageTitle } from "../lib/pageTitle";
 import { productLinkState } from "../lib/productOrigin";
 import {
   shoppingQuantity,
@@ -41,6 +44,7 @@ const noticeText: Record<ShareNotice, string> = {
 export function ShoppingPage() {
   const list = useQuery(shoppingListQuery);
   const [bar, dispatchBar] = useReducer(undoBarReducer, hiddenUndoBar);
+  useDocumentTitle(pageTitle("shopping"));
 
   // While the bar is shown, reports the time to the reducer, which hides
   // the bar when its time is up.
@@ -58,7 +62,7 @@ export function ShoppingPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Einkauf</h1>
+      <PageHeading className="text-2xl font-semibold">Einkauf</PageHeading>
       <div className="mt-4">
         {list.data === undefined ? (
           list.isError && !list.isFetching ? (

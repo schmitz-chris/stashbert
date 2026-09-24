@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { CartIcon } from "../components/CartIcon";
+import { PageHeading } from "../components/PageHeading";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { problemCode } from "../lib/api/client";
 import {
   markProductMutation,
@@ -11,6 +13,7 @@ import {
   type ProductMovement,
 } from "../lib/api/queries";
 import { cartToggle } from "../lib/cartToggle";
+import { pageTitle } from "../lib/pageTitle";
 import { productImageUrl } from "../lib/productImage";
 import { productLinkState } from "../lib/productOrigin";
 import {
@@ -38,6 +41,7 @@ export function StockPage() {
   const [filter, setFilter] = useState<ProductFilter>("all");
   const searchRef = useRef<HTMLInputElement>(null);
   const products = useQuery(productListQuery);
+  useDocumentTitle(pageTitle("stock"));
 
   // Empties the search and leaves the focus in the field, because the
   // button disappears with the text.
@@ -48,7 +52,7 @@ export function StockPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Vorrat</h1>
+      <PageHeading className="text-2xl font-semibold">Vorrat</PageHeading>
       {/* Search and filters stay at the top while the list scrolls, below the
           safe area. They lie above the buttons of the rows (z-10) and below
           the update banner and the navigation bar (z-20). Their minimum

@@ -1445,7 +1445,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F24: Barrierefreiheit und Feinschliff
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F22
 - **Referenzen:** hig-pruefung.md N1, N3, N7, N9, N10
 - **Umfang:**

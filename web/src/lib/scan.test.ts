@@ -336,7 +336,10 @@ describe("feedbackIcon", () => {
 
 describe("cameraErrorText", () => {
   it.each([
-    ["NotAllowedError", "Kein Zugriff auf die Kamera. Bitte den Kamerazugriff für diese Seite erlauben."],
+    [
+      "NotAllowedError",
+      "Die Kamera liest nur Barcodes; Bilder verlassen das Gerät nicht. Kamera in den Safari-Einstellungen für diese Seite erlauben.",
+    ],
     ["NotFoundError", "Keine Kamera gefunden."],
     ["OverconstrainedError", "Keine Kamera gefunden."],
     ["NotReadableError", "Die Kamera ist gerade belegt, vielleicht von einer anderen App."],

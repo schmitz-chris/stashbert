@@ -5,8 +5,10 @@ import { Dialog } from "../components/Dialog";
 import { FeedbackSymbol } from "../components/FeedbackSymbol";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
+import { PageHeading } from "../components/PageHeading";
 import { MarkResultCard, ResultCard } from "../components/ResultCard";
 import { TorchButton } from "../components/TorchButton";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useScanner } from "../hooks/useScanner";
 import {
   markScanMutation,
@@ -15,6 +17,7 @@ import {
   scanMovementMutation,
   unmarkMutation,
 } from "../lib/api/queries";
+import { pageTitle } from "../lib/pageTitle";
 import type { Product } from "../lib/products";
 import { hiddenCard, resultCardReducer } from "../lib/resultCard";
 import {
@@ -46,12 +49,15 @@ const modes: { mode: ScanMode; label: string; active: string }[] = [
   { mode: "mark", label: "Einkaufen", active: "bg-marked text-white" },
 ];
 
+// The flash tints the whole camera image in the color of the feedback. With
+// reduced motion (HIG, Motion) it is only a frame of 6 px in that color
+// along the edge of the image (docs/plan.md, F24).
 const flashClass: Record<FeedbackColor, string> = {
-  green: "bg-accent/70",
-  blue: "bg-consume/70",
-  orange: "bg-marked/70",
-  yellow: "bg-warning/70",
-  red: "bg-danger/70",
+  green: "motion-safe:bg-accent/70 motion-reduce:border-accent",
+  blue: "motion-safe:bg-consume/70 motion-reduce:border-consume",
+  orange: "motion-safe:bg-marked/70 motion-reduce:border-marked",
+  yellow: "motion-safe:bg-warning/70 motion-reduce:border-warning",
+  red: "motion-safe:bg-danger/70 motion-reduce:border-danger",
 };
 
 const messageClass: Record<FeedbackColor, string> = {
@@ -96,6 +102,7 @@ export function ScanPage() {
   const [mergeSource, setMergeSource] = useState<Product | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
+  useDocumentTitle(pageTitle("scan"));
 
   function show(feedback: Feedback, failed = false) {
     playSound(feedback.sound);
@@ -228,7 +235,7 @@ export function ScanPage() {
 
   return (
     <div className="flex flex-col gap-3" onClick={handleTap}>
-      <h1 className="sr-only">Scannen</h1>
+      <PageHeading className="sr-only">Scannen</PageHeading>
       {/* The mode switch does not grow with the text size of the system
           (ADR-0016). Its text is at most 18 px and shrinks with the width of
           the switch (cqw), so "Entnehmen" fits into a third on every screen. */}
@@ -272,7 +279,7 @@ export function ScanPage() {
         )}
         {shown?.flash && (
           <div
-            className={`pointer-events-none absolute inset-0 ${flashClass[shown.feedback.color]}`}
+            className={`pointer-events-none absolute inset-0 rounded-[inherit] motion-reduce:border-[6px] ${flashClass[shown.feedback.color]}`}
           />
         )}
         {phase === "starting" && (

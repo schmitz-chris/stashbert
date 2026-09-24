@@ -4,9 +4,11 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { ConfirmActions, Dialog } from "../components/Dialog";
 import { MergeSection } from "../components/MergeSection";
 import { MovementHistory } from "../components/MovementHistory";
+import { PageHeading } from "../components/PageHeading";
 import { ProductImageSection } from "../components/ProductImageSection";
 import { ShoppingListSection } from "../components/ShoppingListSection";
 import { StockSection } from "../components/StockSection";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { problemCode } from "../lib/api/client";
 import {
   barcodeAddMutation,
@@ -16,6 +18,7 @@ import {
   productUpdateMutation,
 } from "../lib/api/queries";
 import { normalizeGtin } from "../lib/gtin";
+import { pageTitle } from "../lib/pageTitle";
 import { diffPatch, toForm, type ProductForm } from "../lib/productForm";
 import { productBack } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
@@ -46,14 +49,20 @@ export function ProductPage() {
   // no page of the app to go back to (reload, start of the installed app).
   const canGoBack = location.key !== "default";
   const back = productBack(location.state);
+  const notFound = problemCode(product.error) === "not_found";
+  useDocumentTitle(
+    notFound ? pageTitle("not-found") : pageTitle("product", product.data?.name),
+  );
 
   let content = <p className="mt-4 text-ink-tertiary">Produkt wird geladen …</p>;
   if (product.data !== undefined) {
     content = <ProductEditor key={product.data.id} product={product.data} />;
-  } else if (problemCode(product.error) === "not_found") {
+  } else if (notFound) {
     content = (
       <>
-        <h1 className="mt-4 text-2xl font-semibold">Produkt nicht gefunden</h1>
+        <PageHeading className="mt-4 text-2xl font-semibold">
+          Produkt nicht gefunden
+        </PageHeading>
         <Link
           to="/vorrat"
           className="pressable mt-6 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 font-medium text-white"
@@ -191,9 +200,9 @@ function ProductEditor({ product }: { product: Product }) {
 
   return (
     <>
-      <h1 className="mt-4 text-2xl font-semibold break-words hyphens-auto">
+      <PageHeading className="mt-4 text-2xl font-semibold break-words hyphens-auto">
         {product.name}
-      </h1>
+      </PageHeading>
       {product.brand !== null && (
         <p className="break-words hyphens-auto text-ink-tertiary">{product.brand}</p>
       )}

@@ -209,7 +209,8 @@ export function cameraErrorText(error: unknown): string {
   const name = (error as { name?: unknown } | null)?.name;
   switch (name) {
     case "NotAllowedError":
-      return "Kein Zugriff auf die Kamera. Bitte den Kamerazugriff für diese Seite erlauben.";
+      // Why the view needs the camera and how to allow it (docs/plan.md, F24).
+      return "Die Kamera liest nur Barcodes; Bilder verlassen das Gerät nicht. Kamera in den Safari-Einstellungen für diese Seite erlauben.";
     case "NotFoundError":
     case "OverconstrainedError":
       return "Keine Kamera gefunden.";

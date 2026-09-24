@@ -1,4 +1,5 @@
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
+import { createBrowserRouter, type RouteObject } from "react-router";
+import { StartRedirect } from "./components/StartRedirect";
 import { TabLayout } from "./components/TabLayout";
 import { ShoppingPage } from "./routes/einkauf";
 import { NotFoundPage } from "./routes/nicht-gefunden";
@@ -10,10 +11,11 @@ import { StockPage } from "./routes/vorrat";
  * The route table. Every route has an id, so tests can check with
  * matchRoutes which view a path shows, without a DOM. Only the routes
  * below TabLayout show the bottom navigation bar; the product page is one
- * of them, so the bar stays visible there (docs/plan.md, F22).
+ * of them, so the bar stays visible there (docs/plan.md, F22). The start
+ * of the app (/) leads to the tab shown last (F24).
  */
 export const routes: RouteObject[] = [
-  { id: "redirect", path: "/", element: <Navigate to="/vorrat" replace /> },
+  { id: "redirect", path: "/", Component: StartRedirect },
   {
     id: "tabs",
     Component: TabLayout,
