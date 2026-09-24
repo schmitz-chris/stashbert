@@ -347,7 +347,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 
 Ereignisse werden erst **nach** dem Commit ausgelöst, in dieser Reihenfolge: `product.created`, Buchungsereignis, `product.empty`, `shopping.changed`. Die Buchungsereignisse gibt es nur, wenn `delta ≠ 0`.
 
-Ab M2 (ADR-0018): `shopping.changed` entsteht zusätzlich beim Vormerken und beim Entfernen der Vormerkung, wenn sich dadurch ändert, ob das Produkt auf der Einkaufsliste steht (`missing_before` = `missing_after`). Für MQTT ergänzt die Outbox die Daten (Kapitel 11.3); dazu kommt der Typ `shopping.snapshot`, den nicht die Fachlogik, sondern der Abgleich erzeugt.
+Ab M2 (ADR-0018): `shopping.changed` entsteht außerdem immer dann, wenn sich ändert, ob das Produkt auf der Einkaufsliste steht (`missing > 0` oder `marked`), gleich aus welchem Grund: Vormerken, Entfernen der Vormerkung, eine Buchung, die die Vormerkung beendet, Zusammenführen, Löschen. Pro Produkt und Vorgang höchstens ein `shopping.changed`; ändert sich nur die Zugehörigkeit, ist `missing_before` = `missing_after`. Für MQTT ergänzt die Outbox die Daten (Kapitel 11.3); dazu kommt der Typ `shopping.snapshot`, den nicht die Fachlogik, sondern der Abgleich erzeugt.
 
 ## 7. Barcodes und Open Food Facts
 

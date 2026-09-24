@@ -1614,10 +1614,23 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
   1. Tests: Vormerken eines Produkts ohne Fehlbestand löst `shopping.changed` aus, Vormerken eines Produkts mit Fehlbestand nicht; Entfernen entsprechend; Inhalt und Sortierung des Snapshots; Retain-Flag wird ignoriert; mehrere Anfragen in 2 s ergeben einen Snapshot; API 202 und 409.
   2. `make check` ist grün.
 
+### B36a: Einkaufsereignis bei jeder Änderung der Listenzugehörigkeit
+
+- **Status:** offen
+- **Abhängig von:** B36
+- **Referenzen:** ADR-0018; architecture.md 6.6, 11.3; ADR-0015
+- **Umfang:**
+  - Befund aus B36: Wenn eine Buchung die Vormerkung beendet, ein vorgemerktes Produkt gelöscht oder beim Zusammenführen die Vormerkung übertragen wird, ändert sich die Zugehörigkeit zur Einkaufsliste ohne `shopping.changed`. In HA bliebe der Eintrag dann bis zum nächsten Abgleich stehen.
+  - Fachlogik nach der Regel in 6.6: `shopping.changed` bei jeder Änderung von `missing` oder der Zugehörigkeit, höchstens eines pro Produkt und Vorgang, nach dem Commit, in der Reihenfolge aus 6.6.
+- **Nicht im Umfang:** alles andere.
+- **Abnahmekriterien:**
+  1. Tests: `add` auf ein vorgemerktes Produkt ohne Fehlbestand (Vormerkung endet) löst `shopping.changed` aus; Löschen eines vorgemerkten Produkts ohne Fehlbestand; Zusammenführen, bei dem das Ziel die Vormerkung der Quelle übernimmt, und die gelöschte vorgemerkte Quelle; kein doppeltes Ereignis, wenn sich `missing` und Zugehörigkeit zugleich ändern; bestehende Fälle unverändert.
+  2. `make check` ist grün.
+
 ### B37: Zusammenfassung
 
 - **Status:** offen
-- **Abhängig von:** B35
+- **Abhängig von:** B36a
 - **Referenzen:** ADR-0018; architecture.md 11.5, 6.2, 6.5
 - **Umfang:**
   - `GET /summary` (`getSummary`, Schema `Summary`), contract-first; Berechnung in `internal/domain` mit sqlc.
