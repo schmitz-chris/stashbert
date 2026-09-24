@@ -145,9 +145,9 @@ func TestWriteShoppingSnapshot(t *testing.T) {
 			if tt.target != "" {
 				exec(t, sqlDB, "INSERT INTO settings (key, value) VALUES ('shopping_target_id', ?)", tt.target)
 			}
-			var wakes atomic.Int64
+			var wakes, reported atomic.Int64
 			logger, _ := newLogger()
-			w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, logger)
+			w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() { reported.Add(1) }, logger)
 			start := time.Now()
 
 			var err error
@@ -168,6 +168,10 @@ func TestWriteShoppingSnapshot(t *testing.T) {
 			if n := wakes.Load(); n != 1 {
 				t.Errorf("wake called %d times, want 1", n)
 			}
+			// A snapshot changes nothing, so it is no event for the summary.
+			if n := reported.Load(); n != 0 {
+				t.Errorf("onEvent called %d times, want 0", n)
+			}
 		})
 	}
 }
@@ -177,7 +181,7 @@ func TestWriteShoppingSnapshotError(t *testing.T) {
 	sqlDB := openDB(t)
 	logger, _ := newLogger()
 	var wakes atomic.Int64
-	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, logger)
+	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() {}, logger)
 	if err := sqlDB.Close(); err != nil {
 		t.Fatalf("close database: %v", err)
 	}
@@ -225,7 +229,7 @@ func TestSnapshotterCoalescesRequests(t *testing.T) {
 	sqlDB := openDB(t)
 	insertSnapshotProducts(t, sqlDB)
 	logger, logs := newLogger()
-	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, logger), "vorrat", logger)
+	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, func() {}, logger), "vorrat", logger)
 	runSnapshotter(t, s, snapshotWindow)
 	start := time.Now()
 
@@ -258,7 +262,7 @@ func TestSnapshotterCoalescesRequests(t *testing.T) {
 func TestSnapshotterReceive(t *testing.T) {
 	sqlDB := openDB(t)
 	logger, _ := newLogger()
-	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, logger), "vorrat", logger)
+	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, func() {}, logger), "vorrat", logger)
 	runSnapshotter(t, s, snapshotWindow/10)
 
 	for _, m := range []mqtt.Message{
@@ -283,7 +287,7 @@ func TestSnapshotterReceive(t *testing.T) {
 func TestSnapshotterError(t *testing.T) {
 	sqlDB := openDB(t)
 	logger, logs := newLogger()
-	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, logger), "vorrat", logger)
+	s := outbox.NewSnapshotter(outbox.NewWriter(sqlDB, func() {}, func() {}, logger), "vorrat", logger)
 	if err := sqlDB.Close(); err != nil {
 		t.Fatalf("close database: %v", err)
 	}

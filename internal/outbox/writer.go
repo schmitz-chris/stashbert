@@ -1,5 +1,7 @@
 // Package outbox writes the domain events into the table outbox and delivers
-// them to the MQTT broker (ADR-0018, architecture.md 11.3 and 11.4).
+// them to the MQTT broker (ADR-0018, architecture.md 11.3 and 11.4). It also
+// publishes the summary, which does not go through the outbox
+// (architecture.md, 11.5).
 package outbox
 
 import (
@@ -24,15 +26,17 @@ const settingShoppingTarget = "shopping_target_id"
 // Writer is an events.Publisher that writes every event into the outbox
 // (architecture.md, 11.4).
 type Writer struct {
-	db     *sql.DB
-	wake   func()
-	logger *slog.Logger
+	db      *sql.DB
+	wake    func()
+	onEvent func()
+	logger  *slog.Logger
 }
 
 // NewWriter returns a Writer for the outbox in sqlDB that calls wake after
-// every written event, usually Deliverer.Wake.
-func NewWriter(sqlDB *sql.DB, wake func(), logger *slog.Logger) *Writer {
-	return &Writer{db: sqlDB, wake: wake, logger: logger}
+// every written entry, usually Deliverer.Wake, and onEvent after every event
+// given to Publish, usually SummaryPublisher.Request.
+func NewWriter(sqlDB *sql.DB, wake, onEvent func(), logger *slog.Logger) *Writer {
+	return &Writer{db: sqlDB, wake: wake, onEvent: onEvent, logger: logger}
 }
 
 // shoppingChangedData is the data of shopping.changed in the outbox: the data
@@ -52,8 +56,11 @@ type shoppingChangedData struct {
 // first adds the state of the product and the chosen target list
 // (architecture.md, 11.3). The write is not cancelled with ctx, because the
 // business logic has already committed. An error is logged with level warn
-// and never reaches the caller; the event is then lost.
+// and never reaches the caller; the event is then lost. At the end Publish
+// calls onEvent, also after an error, because the commit before the event
+// may have changed the summary.
 func (w *Writer) Publish(ctx context.Context, e events.Event) {
+	defer w.onEvent()
 	if err := w.write(context.WithoutCancel(ctx), e); err != nil {
 		w.logger.LogAttrs(ctx, slog.LevelWarn, "write event to outbox",
 			slog.String("event_id", e.ID),

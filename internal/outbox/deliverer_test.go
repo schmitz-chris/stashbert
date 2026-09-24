@@ -153,7 +153,7 @@ func TestWriterWakesDeliverer(t *testing.T) {
 	client := newFakeClient(mqtt.StateConnected)
 	logger, logs := newLogger()
 	d := outbox.NewDeliverer(sqlDB, client, "stashbert", logger)
-	w := outbox.NewWriter(sqlDB, d.Wake, logger)
+	w := outbox.NewWriter(sqlDB, d.Wake, func() {}, logger)
 	run(t, d)
 	receive(t, client.states, "the first pass")
 

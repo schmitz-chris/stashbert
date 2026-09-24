@@ -207,7 +207,7 @@ func TestWriterShoppingChanged(t *testing.T) {
 			}
 			var wakes atomic.Int64
 			logger, logs := newLogger()
-			w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, logger)
+			w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() {}, logger)
 			start := time.Now().UTC().Truncate(time.Millisecond)
 
 			w.Publish(testContext(t), eventAt(events.TypeShoppingChanged, tt.data))
@@ -239,12 +239,13 @@ func TestWriterShoppingChanged(t *testing.T) {
 	}
 }
 
-// Other events go into the outbox unchanged, in the order of Publish.
+// Other events go into the outbox unchanged, in the order of Publish. Every
+// event wakes the deliverer and is reported with onEvent.
 func TestWriterOtherEvents(t *testing.T) {
 	sqlDB := openDB(t)
-	var wakes atomic.Int64
+	var wakes, reported atomic.Int64
 	logger, logs := newLogger()
-	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, logger)
+	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() { reported.Add(1) }, logger)
 	published := []events.Event{
 		events.New(events.TypeProductCreated, events.ProductCreatedData{ProductID: "p1", Name: "Kidneybohnen", Origin: "manual"}),
 		events.New(events.TypeStockAdded, events.StockData{ProductID: "p1", MovementID: "m1", Delta: 3, StockAfter: 3}),
@@ -274,6 +275,9 @@ func TestWriterOtherEvents(t *testing.T) {
 	if n := wakes.Load(); n != int64(len(published)) {
 		t.Errorf("wake called %d times, want %d", n, len(published))
 	}
+	if n := reported.Load(); n != int64(len(published)) {
+		t.Errorf("onEvent called %d times, want %d", n, len(published))
+	}
 }
 
 // The business logic has committed before it publishes, so a request that
@@ -281,7 +285,7 @@ func TestWriterOtherEvents(t *testing.T) {
 func TestWriterIgnoresCancelledContext(t *testing.T) {
 	sqlDB := openDB(t)
 	logger, logs := newLogger()
-	w := outbox.NewWriter(sqlDB, func() {}, logger)
+	w := outbox.NewWriter(sqlDB, func() {}, func() {}, logger)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -292,13 +296,14 @@ func TestWriterIgnoresCancelledContext(t *testing.T) {
 	}
 }
 
-// A failed write is logged with level warn and does not wake the deliverer;
-// Publish returns normally.
+// A failed write is logged with level warn and does not wake the deliverer,
+// but the event is still reported with onEvent, because the commit before it
+// may have changed the summary; Publish returns normally.
 func TestWriterError(t *testing.T) {
 	sqlDB := openDB(t)
 	logger, logs := newLogger()
-	var wakes atomic.Int64
-	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, logger)
+	var wakes, reported atomic.Int64
+	w := outbox.NewWriter(sqlDB, func() { wakes.Add(1) }, func() { reported.Add(1) }, logger)
 	if err := sqlDB.Close(); err != nil {
 		t.Fatalf("close database: %v", err)
 	}
@@ -317,5 +322,8 @@ func TestWriterError(t *testing.T) {
 	}
 	if n := wakes.Load(); n != 0 {
 		t.Errorf("wake called %d times, want 0", n)
+	}
+	if n := reported.Load(); n != 1 {
+		t.Errorf("onEvent called %d times, want 1", n)
 	}
 }

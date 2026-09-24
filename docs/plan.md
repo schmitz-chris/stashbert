@@ -1629,7 +1629,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B37: Zusammenfassung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B36a
 - **Referenzen:** ADR-0018; architecture.md 11.5, 6.2, 6.5
 - **Umfang:**

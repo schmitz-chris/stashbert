@@ -105,7 +105,7 @@ func TestMovementEventsOverMQTT(t *testing.T) {
 	deliverer := outbox.NewDeliverer(db, client, "vorrat", logger)
 	client.OnConnect(func(context.Context) { deliverer.Wake() })
 	h, _ := newAppWithDeps(t, app.Deps{
-		DB: db, Publisher: outbox.NewWriter(db, deliverer.Wake, logger),
+		DB: db, Publisher: outbox.NewWriter(db, deliverer.Wake, func() {}, logger),
 		Lookuper: lookup.NewDisabledClient(), ImageDir: t.TempDir(),
 	})
 	// Stopped in reverse order: the deliverer first, then the client.
@@ -171,7 +171,7 @@ func TestShoppingSnapshotOverMQTT(t *testing.T) {
 	}
 	deliverer := outbox.NewDeliverer(db, client, "vorrat", logger)
 	client.OnConnect(func(context.Context) { deliverer.Wake() })
-	writer := outbox.NewWriter(db, deliverer.Wake, logger)
+	writer := outbox.NewWriter(db, deliverer.Wake, func() {}, logger)
 	snapshotter := outbox.NewSnapshotter(writer, "vorrat", logger)
 	client.OnMessage(snapshotter.Receive)
 	incoming := make(chan mqtt.Message, 16)
@@ -277,5 +277,124 @@ func checkEventMessage(t *testing.T, msgs <-chan published, start time.Time, top
 	}
 	if !reflect.DeepEqual(e["data"], data) {
 		t.Errorf("data = %v\n     want %v", e["data"], data)
+	}
+}
+
+// TestSummaryOverMQTT publishes the summary with the outbox and the summary
+// publisher wired as in main: retained after every connection and once
+// after several events in quick succession, each time the JSON of
+// GET /summary (architecture.md, 11.5).
+func TestSummaryOverMQTT(t *testing.T) {
+	const delay = 200 * time.Millisecond
+	srv, url := startBroker(t)
+	msgs := make(chan published, 16)
+	if err := srv.Subscribe("vorrat/state/#", 1, func(_ *mochi.Client, _ packets.Subscription, pk packets.Packet) {
+		msgs <- published{pk.TopicName, string(pk.Payload)}
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	db := newDB(t)
+	insertSummaryProducts(t, db, summaryTestProducts...)
+	logger := slog.New(slog.DiscardHandler)
+	client, err := mqtt.New(config.MQTT{URL: url, ClientID: "stashbert", TopicPrefix: "vorrat", HAPrefix: "homeassistant"}, logger)
+	if err != nil {
+		t.Fatalf("mqtt.New: %v", err)
+	}
+	deliverer := outbox.NewDeliverer(db, client, "vorrat", logger)
+	summary := outbox.NewSummaryPublisher(db, client, "vorrat", logger)
+	client.OnConnect(func(context.Context) { deliverer.Wake() })
+	client.OnConnect(summary.Publish)
+	h, _ := newAppWithDeps(t, app.Deps{
+		DB: db, Publisher: outbox.NewWriter(db, deliverer.Wake, summary.Request, logger),
+		Lookuper: lookup.NewDisabledClient(), ImageDir: t.TempDir(),
+	})
+	// Stopped in reverse order: the summary publisher and the deliverer
+	// first, then the client.
+	startJob(t, func(ctx context.Context) {
+		if err := client.Run(ctx); err != nil {
+			t.Errorf("mqtt Run: %v", err)
+		}
+	})
+	startJob(t, func(ctx context.Context) { deliverer.Run(ctx, outbox.MinBackoff, outbox.MaxBackoff) })
+	startJob(t, func(ctx context.Context) { summary.Run(ctx, delay) })
+
+	// After the connection.
+	checkSummaryMessage(t, srv, h, msgs, summaryTestJSON)
+
+	// Several events in quick succession result in one publish.
+	var last time.Time
+	for _, body := range []string{
+		// Kidneybohnen 2 → 5: nothing missing any more.
+		`{"product_id": "s3", "kind": "add", "quantity": 3}`,
+		// Apfelsaft 0 → 2: not empty, and the marking ends.
+		`{"product_id": "s6", "kind": "add", "quantity": 2}`,
+		// Mehl 2 → 0: empty and below the minimum stock.
+		`{"product_id": "s7", "kind": "consume", "quantity": 2}`,
+	} {
+		last = time.Now()
+		if rec := post(h, "/api/v1/movements", body); rec.Code != http.StatusCreated {
+			t.Fatalf("book %s: status %d, body %s", body, rec.Code, rec.Body.String())
+		}
+	}
+	checkSummaryMessage(t, srv, h, msgs, `{
+		"product_count": 9, "shopping_count": 5, "empty_count": 3, "review_count": 2,
+		"shopping": [
+			{"name": "Cola", "missing": 0, "quantity": 0, "unit": "crate"},
+			{"name": "Jever", "missing": 17, "quantity": 1, "unit": "crate"},
+			{"name": "kidneybohnen", "missing": 4, "quantity": 4, "unit": "piece"},
+			{"name": "Mehl", "missing": 4, "quantity": 4, "unit": "piece"},
+			{"name": "Milch", "missing": 2, "quantity": 2, "unit": "piece"}
+		],
+		"shopping_truncated": false
+	}`)
+	if d := time.Since(last); d < delay {
+		t.Errorf("summary published %v after the last booking began, want at least %v", d, delay)
+	}
+	checkNoMessage(t, msgs, 3*delay)
+
+	// A change without an event is published with the next connection.
+	insertSummaryProducts(t, db, summaryProduct{id: "s10", name: "Zwieback", target: 2})
+	checkNoMessage(t, msgs, 3*delay)
+	cl, ok := srv.Clients.Get("stashbert")
+	if !ok {
+		t.Fatal("client stashbert not connected to the broker")
+	}
+	// DisconnectClient returns the reason code as error.
+	_ = srv.DisconnectClient(cl, packets.ErrServerShuttingDown)
+	checkSummaryMessage(t, srv, h, msgs, `{
+		"product_count": 10, "shopping_count": 6, "empty_count": 4, "review_count": 2,
+		"shopping": [
+			{"name": "Cola", "missing": 0, "quantity": 0, "unit": "crate"},
+			{"name": "Jever", "missing": 17, "quantity": 1, "unit": "crate"},
+			{"name": "kidneybohnen", "missing": 4, "quantity": 4, "unit": "piece"},
+			{"name": "Mehl", "missing": 4, "quantity": 4, "unit": "piece"},
+			{"name": "Milch", "missing": 2, "quantity": 2, "unit": "piece"},
+			{"name": "Zwieback", "missing": 2, "quantity": 2, "unit": "piece"}
+		],
+		"shopping_truncated": false
+	}`)
+	checkNoMessage(t, msgs, 3*delay)
+}
+
+// checkSummaryMessage receives the next message from msgs and checks that
+// it is the JSON want on vorrat/state/summary, the same as the response of
+// GET /summary of h, and retained on srv.
+func checkSummaryMessage(t *testing.T, srv *mochi.Server, h http.Handler, msgs <-chan published, want string) {
+	t.Helper()
+	var m published
+	select {
+	case m = <-msgs:
+	case <-time.After(mqttWait):
+		t.Fatal("timeout waiting for the summary")
+	}
+	if m.topic != "vorrat/state/summary" {
+		t.Fatalf("topic = %q, want vorrat/state/summary", m.topic)
+	}
+	checkJSON(t, m.payload, want)
+	checkJSON(t, m.payload, getSummary(t, h))
+	stored := srv.Topics.Messages("vorrat/state/summary")
+	if len(stored) != 1 || !stored[0].FixedHeader.Retain || string(stored[0].Payload) != m.payload {
+		t.Errorf("retained messages on vorrat/state/summary = %v, want exactly the last one", stored)
 	}
 }

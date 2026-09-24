@@ -140,10 +140,14 @@ func run() error {
 	// connection and every new event (architecture.md, 11.4). The
 	// snapshotter writes shopping.snapshot into the outbox on requests from
 	// <p>/in/snapshot and POST /shopping-list/snapshot (architecture.md, 11.3).
+	// The summary goes out retained after every connection and 1 s after the
+	// last of several events in quick succession, which the writer reports
+	// (architecture.md, 11.5).
 	var (
 		mqttClient  *mqtt.Client
 		deliverer   *outbox.Deliverer
 		snapshotter *outbox.Snapshotter
+		summary     *outbox.SummaryPublisher
 		publisher   events.Publisher = events.Nop{}
 	)
 	if cfg.MQTT.URL != "" {
@@ -151,8 +155,10 @@ func run() error {
 			return fmt.Errorf("create mqtt client: %w", err)
 		}
 		deliverer = outbox.NewDeliverer(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
+		summary = outbox.NewSummaryPublisher(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
 		mqttClient.OnConnect(func(context.Context) { deliverer.Wake() })
-		writer := outbox.NewWriter(db, deliverer.Wake, logger)
+		mqttClient.OnConnect(summary.Publish)
+		writer := outbox.NewWriter(db, deliverer.Wake, summary.Request, logger)
 		publisher = writer
 		snapshotter = outbox.NewSnapshotter(writer, cfg.MQTT.TopicPrefix, logger)
 		mqttClient.OnMessage(snapshotter.Receive)
@@ -222,14 +228,16 @@ func run() error {
 			<-mqttDone
 		}()
 
-		// The deliverer and the snapshotter also have their own context.
-		// Their deferred call runs before the one of the client, so they stop
-		// after the HTTP server and before the client publishes offline;
-		// undelivered events stay in the outbox for the next start.
+		// The deliverer, the snapshotter and the summary publisher also have
+		// their own context. Their deferred call runs before the one of the
+		// client, so they stop after the HTTP server and before the client
+		// publishes offline; undelivered events stay in the outbox for the
+		// next start.
 		outboxCtx, stopOutbox := context.WithCancel(context.Background())
 		var outboxJobs sync.WaitGroup
 		outboxJobs.Go(func() { deliverer.Run(outboxCtx, outbox.MinBackoff, outbox.MaxBackoff) })
 		outboxJobs.Go(func() { snapshotter.Run(outboxCtx, outbox.SnapshotWindow) })
+		outboxJobs.Go(func() { summary.Run(outboxCtx, outbox.SummaryDelay) })
 		defer func() {
 			stopOutbox()
 			outboxJobs.Wait()
