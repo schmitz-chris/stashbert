@@ -158,6 +158,7 @@ Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Al
 | `origin` | TEXT | `openfoodfacts`, `openbeautyfacts`, `openpetfoodfacts`, `openproductsfacts`, `manual`, `placeholder` |
 | `lookup_state` | TEXT | `none`, `pending`, `done`, `not_found` |
 | `needs_review` | INTEGER | 0/1 |
+| `marked` | INTEGER | 0/1, Standard 0: für den Einkauf vorgemerkt (ADR-0015) |
 | `image_source_url` | TEXT | NULL, Bild-URL von OFF |
 | `image_file` | TEXT | NULL, Dateiname in `DATA_DIR/images/` |
 | `created_at`, `updated_at` | TEXT | `updated_at` ändert sich bei jeder Änderung der Zeile `products`, also bei Stammdaten (PATCH), jeder Buchung (auch `inventory` mit `delta` 0), Storno, Zusammenführen und Nachladen. Barcodes zuordnen oder entfernen ändert es nicht. |
@@ -223,7 +224,9 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `POST /movements` | `createMovement` | Buchung anlegen | 201 `MovementResult` | siehe 6.3 |
 | `GET /movements` | `listMovements` | Buchungen, neueste zuerst, `?product_id=&limit=&cursor=` (`limit` 1 bis 200, Standard 50) | 200 `{items: Movement[], next_cursor}` | |
 | `POST /movements/{id}/reversal` | `reverseMovement` | Buchung stornieren | 201 `MovementResult` | `already_reversed` (409), `not_reversible` (409), `not_found` |
-| `GET /shopping-list` | `getShoppingList` | Einkaufsliste, sortiert nach Name | 200 `{items: ShoppingItem[]}` | |
+| `GET /shopping-list` | `getShoppingList` | Einkaufsliste: Produkte mit `missing > 0` oder `marked`, sortiert nach Name | 200 `{items: ShoppingItem[]}` | |
+| `POST /shopping-list/items` | `markShoppingItem` | Produkt vormerken, per `{product_id}` oder `{barcode}` (genau eines); ändert nie den Bestand; unbekannter Barcode legt das Produkt wie beim Einlagern an, ohne Buchung (ADR-0015) | 200 `MarkResult` | `invalid_request`, `invalid_barcode` (422), `not_found` |
+| `DELETE /shopping-list/items/{product_id}` | `unmarkShoppingItem` | Vormerkung entfernen (Fehlbestand nach Soll bleibt) | 204 | `not_found` |
 
 Zusätzlich, **nicht** in der Spec beschrieben: `GET /api/v1/openapi.yaml` liefert die eingebettete Spec aus (öffentlich).
 
@@ -247,6 +250,8 @@ Request: `{product_id?, barcode?, kind, quantity?, stock?}`. Genau eines von `pr
 | `barcode` unbekannt, `add` | Produkt anlegen (7.2), dann buchen; `product_created: true`, bei Platzhalter zusätzlich `warnings: ["placeholder_created"]` |
 | `barcode` unbekannt, `consume` oder `inventory` | 404 `unknown_barcode` |
 | `product_id` unbekannt | 404 `not_found` |
+
+Eine Buchung `add` beendet eine Vormerkung des Produkts (`marked = 0`), in derselben Transaktion (ADR-0015).
 
 **`delta` ist immer die tatsächliche Änderung** (`stock_after - stock_vorher`), auch bei Begrenzung auf 0. Beispiel: Bestand 1, `consume` 3 ergibt `delta = -1`.
 
@@ -293,7 +298,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 
 - **Product:**
   - `id`, `name`, `brand|null`, `package_size|null`, `note|null`
-  - `stock` (nur lesen), `target`, `min_stock|null`, `missing` (nur lesen)
+  - `stock` (nur lesen), `target`, `min_stock|null`, `missing` (nur lesen), `marked` (nur lesen, ADR-0015)
   - `needs_review`, `origin`, `lookup_state`, `has_image`
   - `barcodes: Barcode[]`, `created_at`, `updated_at`
 - **Barcode:** `code`, `units`
@@ -304,10 +309,12 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - `null` löscht ein nullbares Feld.
   - `needs_review` wird nur dann `false`, wenn der Patch mindestens eines der Felder `name`, `brand` oder `package_size` enthält. Ein Patch nur mit `target` ändert `needs_review` nicht.
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
-- **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`
+- **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`
+- **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".
 - **Merge:**
   - Barcodes und Buchungen der Quelle gehen auf das Ziel über.
   - Das Ziel bekommt eine Buchung `kind: merge` mit `delta` = Bestand der Quelle.
+  - Das Ziel ist vorgemerkt, wenn Quelle oder Ziel es war (ADR-0015).
   - Danach wird die Quelle gelöscht.
 
 ### 6.6 Domänen-Ereignisse (intern, M1 ohne Empfänger)

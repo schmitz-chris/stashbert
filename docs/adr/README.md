@@ -18,3 +18,4 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0012](0012-agentengetriebene-entwicklung.md) | Agentengetriebene Entwicklung mit kleinteiligem Plan | angenommen |
 | [0013](0013-keine-anmeldung-in-m1.md) | Keine Anmeldung in M1 | angenommen |
 | [0014](0014-betrieb-im-lxc.md) | Betrieb im Proxmox-LXC mit systemd | angenommen |
+| [0015](0015-vormerken-fuer-den-einkauf.md) | Vormerken für den Einkauf | angenommen |

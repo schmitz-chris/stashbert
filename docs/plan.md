@@ -1236,6 +1236,74 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
   8. Derselbe Code innerhalb von 2 s wird nur einmal gebucht; [+1] und [Rückgängig] funktionieren.
   9. Nach 2 bis 3 Wochen Nutzung: Liste und Regal verglichen, Ergebnis notiert. Das ist die Kernfrage der Erprobung.
 
+## Phase 1d: Vormerken für den Einkauf (ADR-0015)
+
+### B30: Vormerkung im Datenmodell und in der Einkaufsliste
+
+- **Status:** offen
+- **Abhängig von:** B26, B25
+- **Referenzen:** ADR-0015, architecture.md 5, 6.2, 6.3, 6.5
+- **Umfang:**
+  - Migration `0003_marked.sql`: Spalte `products.marked INTEGER NOT NULL DEFAULT 0 CHECK (marked IN (0, 1))`, mit Down-Migration.
+  - `marked` als Pflichtfeld (boolean, nur lesen) in `Product` und `ShoppingItem` der Spec.
+  - `getShoppingList`: Produkte mit `missing > 0` oder `marked`; `missing` bleibt die berechnete Menge (bei nur vorgemerkten Produkten 0).
+  - Eine Buchung `add` setzt `marked = 0` in derselben Transaktion (per Barcode, per `product_id`, bei neu angelegten Produkten, bei +1). Inventur, Entnehmen, Storno und Zusammenführen ändern die Vormerkung nicht, außer: beim Zusammenführen ist das Ziel vorgemerkt, wenn Quelle oder Ziel es war.
+  - Keine neuen Ereignisse (ADR-0015).
+- **Nicht im Umfang:** Endpunkte zum Vormerken (B31), Oberfläche.
+- **Abnahmekriterien (Tests):**
+  1. Ein vorgemerktes Produkt ohne Fehlbestand steht mit `missing: 0` und `marked: true` auf der Liste; ein nicht vorgemerktes ohne Fehlbestand nicht.
+  2. `add` beendet die Vormerkung, `consume` und `inventory` nicht.
+  3. Zusammenführen übernimmt die Vormerkung der Quelle.
+  4. Migration hin und zurück funktioniert; `make check` ist grün.
+
+### B31: Endpunkte zum Vormerken
+
+- **Status:** offen
+- **Abhängig von:** B30, B20
+- **Referenzen:** ADR-0015, architecture.md 6.2 (`markShoppingItem`, `unmarkShoppingItem`), 6.5 (`MarkResult`), 7.2
+- **Umfang:**
+  - `POST /shopping-list/items` mit `{product_id}` oder `{barcode}` (genau eines, sonst 400 `invalid_request`; Barcode normalisieren, ungültig 422 `invalid_barcode`; unbekanntes `product_id` 404). Setzt `marked = 1`, ändert nie `stock` und legt keine Buchung an. `updated_at` ändert sich nur, wenn sich `marked` ändert.
+  - Unbekannter Barcode: Produkt anlegen wie in B20 (Lookup außerhalb der Schreibtransaktion, Cache, Platzhalter, `product.created`), aber **ohne Buchung**, Bestand 0, `marked = 1`. Die Anlege-Logik aus B20 wiederverwenden, nicht kopieren.
+  - Antwort 200 `MarkResult` mit `message` nach 6.5.
+  - `DELETE /shopping-list/items/{product_id}`: setzt `marked = 0`, 204; unbekanntes Produkt 404; nicht vorgemerktes Produkt ebenfalls 204.
+- **Nicht im Umfang:** Idempotency-Key (Vormerken ist von sich aus wiederholbar), Ereignisse, Oberfläche.
+- **Abnahmekriterien (Tests):**
+  1. Vormerken per Barcode und per `product_id` ändert weder Bestand noch Buchungen.
+  2. Unbekannter Barcode legt ein Produkt mit Bestand 0 und `marked` an, ohne Buchung; lokaler Code ohne Lookup.
+  3. `already_listed` und `message` für die drei Fälle.
+  4. Entfernen; Fehlerfälle.
+  5. `make check` ist grün.
+
+### F15: Scan-Modus „Einkaufen"
+
+- **Status:** offen
+- **Abhängig von:** B31, F10
+- **Referenzen:** ADR-0015, F08 bis F11
+- **Umfang:**
+  - Dritter Modus im Schalter: „Einlagern | Entnehmen | Einkaufen", Farbe für Einkaufen orange (Tailwind `amber`), gespeichert wie bisher.
+  - Scan und „Code eintippen" im Modus Einkaufen rufen `markShoppingItem` per Barcode auf. Rückmeldung über `feedbackFor` erweitert: Erfolg orange mit eigenem Ton `mark` (in `TONES`: 2 × 1320 Hz, je 60 ms), Meldung `message` der Antwort; Fehler wie bisher.
+  - Ergebniskarte im Modus Einkaufen: Name und „vorgemerkt" bzw. „schon auf der Liste", nur ein Button [Rückgängig] (entfernt die Vormerkung per `unmarkShoppingItem`, nur wenn die Vormerkung durch diesen Scan entstand, sonst kein Button). Kein [+1], keine Soll-Chips.
+  - Caches aktualisieren (Produkt, Liste, Einkaufsliste).
+- **Nicht im Umfang:** Einkaufsansicht (F16).
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die erweiterte `feedbackFor`, den Ton und die Kartenlogik im Modus Einkaufen.
+  2. `make check` ist grün.
+  3. (Nutzer) Bedienung auf dem iPhone.
+
+### F16: Vormerkungen in Einkauf und Vorrat
+
+- **Status:** offen
+- **Abhängig von:** B31, F12
+- **Referenzen:** ADR-0015
+- **Umfang:**
+  - Einkaufsansicht: vorgemerkte Produkte ohne Fehlbestand erscheinen ohne Mengenangabe mit dem Hinweis „vorgemerkt"; vorgemerkte mit Fehlbestand wie bisher mit Menge. Jeder vorgemerkte Eintrag hat „Von der Liste nehmen" (entfernt nur die Vormerkung). `shoppingText` nimmt vorgemerkte Einträge ohne Menge als reinen Namen auf.
+  - Vorrat: der Filter „Nachkaufen" zeigt `missing > 0` oder `marked`; vorgemerkte Zeilen haben einen kleinen Hinweis.
+  - Produktseite: Hinweis „vorgemerkt" mit „Von der Liste nehmen" bzw. Button „Vormerken" (per `product_id`).
+- **Nicht im Umfang:** Mengen für Vormerkungen.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für `shoppingText` und den Filter mit Vormerkungen.
+  2. `make check` ist grün.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
