@@ -1112,7 +1112,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R01: Dockerfile und Healthcheck
 
-- **Status:** offen
+- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
 - **Abhängig von:** B29
 - **Referenzen:** ADR-0010, architecture.md 9.1
 - **Umfang:**
@@ -1132,7 +1132,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R02: Compose und Betriebsanleitung
 
-- **Status:** offen
+- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
 - **Abhängig von:** R01
 - **Referenzen:** architecture.md 9
 - **Umfang:**
@@ -1146,7 +1146,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R03: CI: Image bauen
 
-- **Status:** offen
+- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
 - **Abhängig von:** R01, F01
 - **Referenzen:** ADR-0003, ADR-0012
 - **Umfang:**
@@ -1156,6 +1156,51 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 - **Abnahmekriterien:**
   1. (Nutzer) Nach dem Push ist die CI auf `main` grün.
   2. (Nutzer) Ein Test-Tag erzeugt das Image in GHCR.
+
+### L01: Release-Binary für den LXC
+
+- **Status:** offen
+- **Abhängig von:** B29, F13b
+- **Referenzen:** ADR-0014, architecture.md 9.1
+- **Umfang:**
+  - Flag `-version` in `cmd/stashbert`: gibt die Version aus (`main.version`) und endet mit 0, ohne Konfiguration zu laden oder etwas zu starten.
+  - `make release`: baut wie `make build` zuerst die Web-Oberfläche (falls `web/package.json` existiert) und kopiert sie nach `internal/webui/dist/`, dann `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=<git describe --tags --always --dirty>"` nach `bin/release/stashbert-linux-amd64`, dazu `bin/release/SHA256SUMS` (mit `sha256sum`, auf macOS ersatzweise `shasum -a 256`). `bin/` ist schon ignoriert.
+  - Nach dem Build bleibt `internal/webui/dist/` bis auf `.gitkeep` leer, wie bei `make build`.
+- **Nicht im Umfang:** arm64, GitHub-Releases, Signaturen.
+- **Abnahmekriterien:**
+  1. Ein Go-Test prüft `-version` (z. B. über eine testbare Funktion statt `os.Exit`).
+  2. `make release` erzeugt ein statisch gelinktes ELF-Binary für x86-64 (`file` zeigt es) mit eingebetteter Web-Oberfläche; die Prüfsumme stimmt (`shasum -c` bzw. `sha256sum -c`).
+  3. `make check` ist grün.
+
+### L02: systemd-Unit und Installationsskript
+
+- **Status:** offen
+- **Abhängig von:** L01
+- **Referenzen:** ADR-0014, architecture.md 9
+- **Umfang:**
+  - **`deploy/stashbert.service`:** `User=stashbert`, `Group=stashbert`, `StateDirectory=stashbert`, `Environment=DATA_DIR=/var/lib/stashbert`, `EnvironmentFile=/etc/stashbert/stashbert.env`, `ExecStart=/usr/local/bin/stashbert`, `Restart=on-failure`, `RestartSec=5`, `NoNewPrivileges=yes`, `After=network-online.target`, `Wants=network-online.target`, `WantedBy=multi-user.target`. Weitergehende Schutzoptionen, die Namensräume brauchen (`ProtectSystem`, `PrivateTmp`, `ProtectHome` usw.), nur **auskommentiert** mit dem Hinweis, dass sie im LXC Nesting brauchen.
+  - **`deploy/stashbert.env.example`:** alle Variablen aus 9.2 außer `DATA_DIR`, mit Kommentaren; `OFF_CONTACT` leer.
+  - **`deploy/install.sh`** (POSIX `sh`, als root im Container, idempotent, `set -eu`): Aufruf `sh install.sh <pfad-zum-binary>`. Prüft root und dass das Binary mit `-version` läuft; legt den Systembenutzer `stashbert` an, falls er fehlt (`useradd --system --home-dir /var/lib/stashbert --shell /usr/sbin/nologin`); installiert das Binary mit Modus 0755 nach `/usr/local/bin/stashbert`; installiert die Unit; legt `/etc/stashbert/stashbert.env` aus dem Beispiel an, **nur wenn sie fehlt** (Modus 0640, Gruppe `stashbert`); `systemctl daemon-reload`; beim ersten Mal `systemctl enable --now stashbert`, sonst `systemctl restart stashbert`; zeigt am Ende Version und `systemctl status` kurz an. Unit und Beispiel liegen neben dem Skript (Pfade relativ zum Skript).
+  - `make check` prüft die Syntax des Skripts mit `sh -n`.
+- **Nicht im Umfang:** Container anlegen, Reverse Proxy, Deinstallationsskript.
+- **Abnahmekriterien:**
+  1. `make check` ist grün (inklusive `sh -n`).
+  2. (Nutzer) In einem frischen Debian-13-LXC führt `install.sh` zu einem laufenden Dienst; ein zweiter Aufruf mit neuem Binary aktualisiert ihn, ohne die Env-Datei zu überschreiben.
+
+### L03: Betriebsanleitung für den LXC
+
+- **Status:** offen
+- **Abhängig von:** L02
+- **Referenzen:** ADR-0014, architecture.md 8, 9
+- **Umfang:** `docs/betrieb.md` auf Deutsch:
+  - Container anlegen (Empfehlung: Debian-13-Vorlage, unprivilegiert, 1 Kern, 512 MB RAM, 8 GB Platte, feste IP bzw. DHCP-Reservierung), ohne Proxmox-Klickanleitung im Detail.
+  - Binary bauen (`make release`), per `scp` samt `deploy/` in den Container kopieren, `install.sh` ausführen, Env-Datei anpassen (`OFF_CONTACT`), Dienst neu starten.
+  - Anforderungen an den Reverse Proxy (9.1), Kamera nur über HTTPS mit vertrauenswürdigem Zertifikat, Kamera-Freigabe in Safari dauerhaft erlauben.
+  - Update, Logs (`journalctl -u stashbert`), Backup (eigene Backups in `DATA_DIR/backups`, zusätzlich Proxmox-Snapshots), Restore nach 9.3, Deinstallation in wenigen Befehlen.
+- **Nicht im Umfang:** Docker, Reverse-Proxy-Konfiguration im Detail.
+- **Abnahmekriterien:**
+  1. Alle Befehle in der Anleitung passen zu `install.sh`, Unit und Makefile (gegenlesen).
+  2. (Nutzer) Die Anleitung führt zu einer laufenden Instanz.
 
 ### R04: Restore-Test
 

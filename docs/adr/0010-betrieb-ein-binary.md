@@ -1,6 +1,6 @@
 # ADR-0010: Betrieb als ein Binary mit einem HTTP-Port
 
-- Status: angenommen
+- Status: angenommen, ergänzt durch ADR-0014 (Hauptweg LXC mit systemd, Image optional)
 - Datum: 2026-09-23
 
 ## Kontext

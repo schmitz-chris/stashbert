@@ -391,8 +391,9 @@ Danach wird mit `target = 0` gebucht.
 ### 9.1 Artefakt
 
 - Ein statisch gelinktes Go-Binary (`CGO_ENABLED=0`). Es enthält API, Web-Oberfläche, Migrationen und `openapi.yaml` (ausgeliefert unter `GET /api/v1/openapi.yaml`, öffentlich).
-- Container-Image `gcr.io/distroless/static-debian13:nonroot` plus Binary. Multi-Arch: amd64 und arm64. Das Verzeichnis `/data` wird im Image mit Besitzer 65532 angelegt, damit ein neues Volume beschreibbar ist.
-- Docker Compose mit genau einem Dienst. TLS, DNS und Reverse Proxy stellt der Betreiber.
+- **Hauptweg (ADR-0014):** systemd-Dienst in einem unprivilegierten Debian-LXC auf Proxmox (amd64). Binary `/usr/local/bin/stashbert`, `DATA_DIR=/var/lib/stashbert`, Konfiguration in `/etc/stashbert/stashbert.env`, Systembenutzer `stashbert`. `make release` baut `stashbert-linux-amd64` per Cross-Compile; `deploy/install.sh` installiert und aktualisiert.
+- **Optional, zurückgestellt:** Container-Image `gcr.io/distroless/static-debian13:nonroot` plus Binary, Multi-Arch amd64 und arm64, `/data` im Image mit Besitzer 65532; Docker Compose mit genau einem Dienst.
+- TLS, DNS und Reverse Proxy stellt der Betreiber.
 - **Anforderungen an den vorgelagerten Proxy:**
   - HTTPS mit einem Zertifikat, dem das iPhone vertraut. Ohne sichere Verbindung gibt iOS die Kamera nicht frei.
   - Weiterleitung aller Pfade an Port 8080, ohne Umschreibung auf einen Unterpfad.
@@ -412,7 +413,8 @@ Danach wird mit `target = 0` gebucht.
 
 - **Beim Start und danach alle 24 h:** `VACUUM INTO 'DATA_DIR/backups/stashbert-<YYYYMMDD-HHMMSS>.db'`. Es bleiben die neuesten `BACKUP_KEEP` Dateien erhalten.
 - **Vor Migrationen:** Stehen Migrationen an und existiert die DB schon, wird vorher `pre-migration-<YYYYMMDD-HHMMSS>.db` geschrieben (wird nicht automatisch gelöscht).
-- **Restore:** Container stoppen, `stashbert.db`, `-wal` und `-shm` entfernen, Backup als `stashbert.db` ablegen, Container starten.
+- **Restore:** Dienst stoppen (`systemctl stop stashbert`), `stashbert.db`, `-wal` und `-shm` in `DATA_DIR` entfernen, Backup als `stashbert.db` ablegen (Besitzer `stashbert`), Dienst starten.
+- **Zusätzlich:** Proxmox-Snapshots bzw. vzdump sichern den ganzen Container.
 
 ## 10. Später (nicht M1)
 
