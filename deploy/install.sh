@@ -78,5 +78,8 @@ fi
 
 installed=$("$bin" -version) || die "$bin -version schlug fehl."
 echo "Installierte Version: $installed"
+# Kurz warten, damit ein Dienst, der gleich nach dem Start abstürzt, nicht
+# noch als laufend gemeldet wird.
+sleep 3
 systemctl --no-pager --lines=5 status stashbert ||
 	die "Der Dienst läuft nicht. Details: journalctl -u stashbert"

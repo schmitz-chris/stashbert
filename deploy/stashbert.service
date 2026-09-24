@@ -12,6 +12,7 @@ User=stashbert
 Group=stashbert
 # Legt /var/lib/stashbert an und gibt es dem Benutzer stashbert.
 StateDirectory=stashbert
+StateDirectoryMode=0750
 Environment=DATA_DIR=/var/lib/stashbert
 EnvironmentFile=/etc/stashbert/stashbert.env
 ExecStart=/usr/local/bin/stashbert
