@@ -1648,11 +1648,13 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 - **Umfang:**
   - Reine Funktion für das Discovery-Payload nach 11.6 (Präfixe und Version eingesetzt).
   - Veröffentlichung nach jeder Verbindung; nach `online` auf `<ha>/status` nach 1 bis 5 s Zufallsverzögerung Discovery, `<p>/status` = `online` und Zusammenfassung erneut; mit `MQTT_HA_DISCOVERY=false` stattdessen leeres retained Payload.
+  - Nachtrag aus B37: Die Zusammenfassung wird auch nach jeder erfolgreichen ändernden API-Anfrage (Middleware in `internal/app.NewHandler`, nur mit MQTT) und alle 5 min neu veröffentlicht (11.5).
 - **Nicht im Umfang:** Zielliste, Blueprints.
 - **Abnahmekriterien:**
   1. Test des Payloads gegen das JSON aus 11.6 (mit Standardpräfixen und mit eigenem Präfix); gültiges JSON, keine Schlüssel `object_id`.
   2. Tests mit `mochi-mqtt`: Discovery retained nach dem Verbinden; erneute Veröffentlichung nach `online` (Verzögerung im Test verkürzbar); leeres Payload bei `false`.
-  3. `make check` ist grün.
+  3. Tests: eine ändernde API-Anfrage ohne Ereignis (z. B. PATCH des Namens) führt zu einer neuen Zusammenfassung; GET-Anfragen und fehlgeschlagene Anfragen nicht; die periodische Veröffentlichung (Intervall im Test verkürzbar).
+  4. `make check` ist grün.
 
 ### B39: Zielliste wählen
 

@@ -535,7 +535,7 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
 
 - `Summary`: `product_count` (alle Produkte), `shopping_count` (Einträge der Einkaufsliste), `empty_count` (Bestand 0, wie der Filter „Leer"), `review_count` (`needs_review`, wie „Prüfen"), `shopping` (die ersten 100 Einträge der Einkaufsliste als `{name, missing, quantity, unit}`, `quantity` und `unit` wie in 11.3), `shopping_truncated` (mehr als 100 Einträge).
 - `GET /summary` liefert sie immer, auch ohne MQTT.
-- Mit MQTT publiziert StashBert sie retained mit QoS 1 auf `<p>/state/summary`: nach jeder Verbindung, nach der Birth-Nachricht von HA und 1 s nach dem letzten von mehreren schnell aufeinander folgenden Ereignissen. Sie geht nicht über die Outbox; ohne Verbindung wird sie übersprungen und nach dem nächsten Verbinden gesendet.
+- Mit MQTT publiziert StashBert sie retained mit QoS 1 auf `<p>/state/summary`: nach jeder Verbindung, nach der Birth-Nachricht von HA, 1 s nach dem letzten von mehreren schnell aufeinander folgenden Ereignissen oder erfolgreichen ändernden API-Anfragen (auch solchen ohne Ereignis, z. B. Umbenennen oder „Passt so") und zusätzlich alle 5 min (fängt Änderungen durch Hintergrund-Jobs wie das Nachladen von Open Food Facts auf). Sie geht nicht über die Outbox; ohne Verbindung wird sie übersprungen und nach dem nächsten Verbinden gesendet.
 
 ### 11.6 HA-Discovery
 
