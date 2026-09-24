@@ -1304,6 +1304,44 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
   1. Vitest-Tests für `shoppingText` und den Filter mit Vormerkungen.
   2. `make check` ist grün.
 
+## Phase 1e: Falsche Produktbilder
+
+Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild (Bruschetta statt Blueberry Jam). Name und Marke lassen sich schon ändern, das Bild nicht.
+
+### B32: Produktbild hochladen und entfernen
+
+- **Status:** offen
+- **Abhängig von:** B22b
+- **Referenzen:** architecture.md 6.1, 6.2 (`uploadProductImage`, `deleteProductImage`), 6.4 (`invalid_image`), 7.3
+- **Umfang:**
+  - `PUT /products/{id}/image`: Body ist das Bild (`image/jpeg`, `image/png` oder `image/webp` in der Spec), höchstens 2 MB (Lesen mit Begrenzung, Überschreitung 422 `invalid_image`). Der Inhalt wird per `http.DetectContentType` geprüft und muss zu einem der drei Typen passen (sonst 422 `invalid_image`); die Dateiendung folgt dem erkannten Typ. Speichern über eine temporäre Datei plus `rename` als `<id>.<ext>` im Bildverzeichnis; eine alte Datei mit anderer Endung wird danach entfernt. In der Datenbank `image_file` setzen, `image_source_url` auf `NULL`, `updated_at`. Antwort 200 `Product`. Unbekanntes Produkt 404 (dann keine Datei zurücklassen).
+  - Der Request-Validator muss den Bild-Body durchlassen; schlage nach, wie kin-openapi bzw. nethttp-middleware Nicht-JSON-Bodies behandelt (z. B. `openapi3filter.RegisterBodyDecoder` für die drei Typen), statt die Validierung für die Route abzuschalten.
+  - `DELETE /products/{id}/image`: Datei löschen (fehlende Datei ist kein Fehler), `image_file` und `image_source_url` auf `NULL`, `updated_at`. 204; unbekanntes Produkt 404; Produkt ohne Bild ebenfalls 204.
+  - Der Bild-Job aus B22a überschreibt ein hochgeladenes Foto nicht (er lädt nur bei `image_source_url` ohne `image_file`); prüfen und testen.
+- **Nicht im Umfang:** Verkleinern auf dem Server, weitere Formate (HEIC), mehrere Bilder pro Produkt.
+- **Abnahmekriterien (Tests):**
+  1. Hochladen von JPEG, PNG und WebP; danach liefert `getProductImage` das neue Bild mit richtigem Typ; `has_image` ist true.
+  2. Falscher Inhalt (z. B. Text mit `Content-Type: image/jpeg`) und zu große Dateien ergeben 422 ohne Änderung.
+  3. Ersetzen eines Bildes mit anderer Endung hinterlässt nur die neue Datei.
+  4. Entfernen löscht Datei und Bildquelle; der Bild-Job lädt danach nichts nach.
+  5. `make check` ist grün.
+
+### F17: Bild auf der Produktseite ersetzen oder entfernen
+
+- **Status:** offen
+- **Abhängig von:** B32, F06a
+- **Referenzen:** architecture.md 7.3 (Verkleinern im Frontend)
+- **Umfang:**
+  - Unter dem Bild bzw. dem Platzhalter der Produktseite zwei Knöpfe: „Foto aufnehmen" (`<input type="file" accept="image/*" capture="environment">`, versteckt hinter einem Knopf) und, wenn ein Bild da ist, „Bild entfernen" (mit Bestätigungsdialog über `components/Dialog.tsx`).
+  - Vor dem Hochladen verkleinert das Frontend das Foto: längste Kante höchstens 1024 px, JPEG mit Qualität 0,8, über `createImageBitmap` und ein Canvas (`toBlob`). Die Berechnung der Zielgröße als reine Funktion in `web/src/lib/`. Hochladen per `PUT` über den generierten Client (Body als `Blob`, Content-Type `image/jpeg`), mit Zeitlimit 30 s.
+  - Nach Erfolg Produkt-Caches aktualisieren; das Bild wird neu geladen (z. B. Cache-Buster aus `updated_at` an der Bild-URL, auch in Vorrat und Ergebniskarte, wo das Bild erscheint).
+  - Fehler als kurze Meldung („Foto zu groß oder ungültig", „Hochladen fehlgeschlagen").
+- **Nicht im Umfang:** Zuschneiden, Drehen, Galerie mehrerer Bilder.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Zielgröße (Hochformat, Querformat, kleiner als 1024 bleibt gleich) und den Cache-Buster.
+  2. `make check` ist grün.
+  3. (Nutzer) Auf dem iPhone ein falsches Bild durch ein eigenes Foto ersetzen und ein Bild entfernen.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)

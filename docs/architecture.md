@@ -195,7 +195,7 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 
 - Basis-Pfad `/api/v1`. JSON-Felder in `snake_case`. Zeitstempel sind RFC 3339 in UTC (`format: date-time`); die Zahl der Nachkommastellen ist in der API nicht fest, das feste Format gilt nur in der Datenbank.
 - Fehler: RFC 9457, `application/problem+json`, mit den Feldern `type` (`about:blank`), `title`, `status`, `detail`, `code`. Die Liste der `code`-Werte steht in 6.4.
-- Ändernde Aufrufe (`POST`, `PATCH`, `DELETE`) verlangen `Content-Type: application/json`, sofern sie einen Body haben.
+- Ändernde Aufrufe (`POST`, `PATCH`, `DELETE`) verlangen `Content-Type: application/json`, sofern sie einen Body haben. Einzige Ausnahme ist `PUT /products/{id}/image` mit einem Bild als Body; `PUT` löst im Browser immer eine CORS-Vorabanfrage aus, die ohne CORS-Header scheitert, der Schutz vor fremden Webseiten bleibt also bestehen.
 - Keine Anmeldung (ADR-0013). Es werden keine CORS-Header gesetzt; zusammen mit der JSON-Pflicht für Bodies verhindert der Browser, dass fremde Webseiten Buchungen auslösen.
 - Idempotenz: optionaler Header `Idempotency-Key` bei `POST /movements` und `POST /movements/{id}/reversal`.
   - Gleicher Schlüssel mit gleichem Body: keine neue Buchung, sondern 201 mit einer aus der gespeicherten Buchung **rekonstruierten** Antwort (aktuelles Produkt, `product_created: false`, `warnings: []`, `message` aus der Buchung).
@@ -221,6 +221,8 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `DELETE /products/{id}/barcodes/{code}` | `removeBarcode` | Barcode entfernen | 204 | `not_found` |
 | `POST /products/{id}/merge` | `mergeProduct` | in anderes Produkt überführen `{target_product_id}` | 200 `Product` (Ziel) | `not_found`, `invalid_request` (Ziel = Quelle) |
 | `GET /products/{id}/image` | `getProductImage` | Produktbild | 200 Bild | `not_found` |
+| `PUT /products/{id}/image` | `uploadProductImage` | eigenes Foto hochladen (Body ist das Bild, `image/jpeg`, `image/png` oder `image/webp`, höchstens 2 MB); ersetzt ein vorhandenes Bild | 200 `Product` | `not_found`, `invalid_image` (422) |
+| `DELETE /products/{id}/image` | `deleteProductImage` | Bild entfernen, auch die Bildquelle von OFF, damit es nicht erneut geladen wird | 204 | `not_found` |
 | `POST /movements` | `createMovement` | Buchung anlegen | 201 `MovementResult` | siehe 6.3 |
 | `GET /movements` | `listMovements` | Buchungen, neueste zuerst, `?product_id=&limit=&cursor=` (`limit` 1 bis 200, Standard 50) | 200 `{items: Movement[], next_cursor}` | |
 | `POST /movements/{id}/reversal` | `reverseMovement` | Buchung stornieren | 201 `MovementResult` | `already_reversed` (409), `not_reversible` (409), `not_found` |
@@ -292,6 +294,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `method_not_allowed` | 405 |
 | `invalid_barcode` | 422 |
 | `idempotency_key_mismatch` | 422 |
+| `invalid_image` | 422 |
 | `internal` | 500 |
 
 ### 6.5 Schemas (Kurzform)
@@ -380,6 +383,7 @@ Danach wird mit `target = 0` gebucht.
   - Höchstens 2 MB, Typen `image/jpeg`, `image/png` oder `image/webp`. Auch Redirect-Ziele müssen erlaubte Hosts sein.
   - Dauerhafte Fehler (4xx außer 408 und 429, falscher Typ, leer oder zu groß) setzen `image_source_url = NULL`; vorübergehende werden im nächsten Lauf wiederholt.
   - Ablage unter `DATA_DIR/images/<product_id>.<ext>`. Nie im Scan-Pfad.
+  - **Eigene Fotos und Entfernen:** Ein hochgeladenes Foto wird auf dem Server am Inhalt geprüft (Sniffing, nicht nur `Content-Type`), über eine temporäre Datei plus `rename` gespeichert und setzt `image_file`; `image_source_url` wird dabei `NULL`, damit der Bild-Job es nicht mit dem OFF-Bild überschreibt. Das Frontend verkleinert Fotos vor dem Hochladen (längste Kante 1024 px, JPEG). Entfernen löscht die Datei und setzt `image_file` und `image_source_url` auf `NULL`. Beides ändert `updated_at`.
 - **Backup:** siehe 9.3.
 
 ## 8. Zugriffsschutz und Sicherheits-Header
