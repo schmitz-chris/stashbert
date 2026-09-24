@@ -1342,6 +1342,25 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
   2. `make check` ist grün.
   3. (Nutzer) Auf dem iPhone ein falsches Bild durch ein eigenes Foto ersetzen und ein Bild entfernen.
 
+## Phase 1f: Vormerken direkt im Vorrat
+
+### F18: Einkaufswagen-Knopf in der Vorrat-Liste
+
+- **Status:** offen
+- **Abhängig von:** F16
+- **Referenzen:** ADR-0015; Wunsch des Nutzers vom 24.09.2026 (Variante A: Knopf in jeder Zeile)
+- **Umfang:**
+  - In jeder Zeile der Vorrat-Liste links neben [−] und [+] ein Knopf mit Einkaufswagen-Symbol (Inline-SVG, keine neue Abhängigkeit), Tippfläche mindestens 44 × 44 px, `aria-pressed` = `marked`, `aria-label` „Auf die Einkaufsliste: <Name>" bzw. „Von der Einkaufsliste nehmen: <Name>".
+  - Der Knopf zeigt nur die Vormerkung: nicht vorgemerkt als Umriss-Symbol, vorgemerkt orange (`amber`, wie der Modus Einkaufen) mit Häkchen im Symbol. Ein Tipp merkt vor (`markShoppingItem` mit `product_id`), ein zweiter entfernt die Vormerkung (`unmarkShoppingItem`). Ein Fehlbestand nach Soll ändert den Knopf nicht.
+  - Der Tipp löst keine Navigation aus; während die Anfrage läuft, ist der Knopf der Zeile gesperrt; Fehler als kurze Meldung an der Zeile wie bei −/+. Caches wie in F16 aktualisieren (Liste, Detail, Einkaufsliste).
+  - Der Hinweis „vorgemerkt" in der Zeile (aus F16) entfällt, weil der Knopf den Zustand zeigt.
+  - Die drei Knöpfe dürfen optisch etwas schmaler werden (z. B. 40 px Symbolfläche), die Tippfläche bleibt mindestens 44 px (z. B. über Padding oder Überlappung der Klickfläche); Name und Marke bekommen den restlichen Platz.
+- **Nicht im Umfang:** Wischgesten, Auswahlmodus, Änderungen am Backend.
+- **Abnahmekriterien:**
+  1. Vitest-Test für die Beschriftungs- bzw. Zustandslogik des Knopfes (reine Funktion).
+  2. `make check` ist grün.
+  3. (Nutzer) Auf dem iPhone vormerken und wieder entfernen, ohne die Zeile zu öffnen.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
