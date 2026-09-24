@@ -49,6 +49,7 @@ Ablauf nach [betrieb.md](betrieb.md), Abschnitte 2 bis 6.
 | F13b | Installation auf dem Home-Bildschirm beider iPhones, Start im Standalone-Modus; Update-Hinweis nach einem neuen Build | | |
 | F15 | Scan-Modus „Einkaufen": bekanntes und unbekanntes Produkt vormerken, Rückgängig; der Bestand ändert sich nie | | |
 | F17 | Falsches Bild durch ein eigenes Foto ersetzen (kommt es aufrecht an?) und ein Bild entfernen | | |
+| ADR-0016 | Scan-Töne: Verhalten bei Stummschalter und laufender Musik; passt `playback` oder lieber `transient` bzw. `ambient`? | | |
 | P0-2, P0-3 | Prototypen: keine Anfragen an fremde Hosts (nur noch der Vollständigkeit halber) | | |
 | R02 | Optional: Docker-Anleitung führt zu einer laufenden Instanz | | |
 | R03 | Optional: Nach dem Push ist die CI grün; ein Test-Tag `v…` erzeugt das Image in GHCR | | |
@@ -57,7 +58,6 @@ Ablauf nach [betrieb.md](betrieb.md), Abschnitte 2 bis 6.
 
 Keine davon ist Teil von M1. Sie stehen hier, damit sie nicht verloren gehen.
 
-- **App-Icon:** Die drei Balken wirken wie ein Menü-Symbol. Mögliche Motive: Regal mit Seitenwänden oder Regal mit Dosen.
 - **Selbstgemachte Produkte:** „Produkt anlegen" ohne Barcode im Vorrat; später eigene Barcode-Etiketten mit lokalen Codes (Präfix 2). Wiederverwendete Gläser: alten Barcode überkleben oder am Produkt entfernen.
 - **Lange Produktnamen** von Open Food Facts brechen im Vorrat über mehrere Zeilen um; von Hand kürzen oder auf zwei Zeilen begrenzen.
 - **M2:** MQTT, Home Assistant und Bring! (research.md, Kapitel 10 und 11).

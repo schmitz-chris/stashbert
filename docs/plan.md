@@ -1361,6 +1361,105 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
   2. `make check` ist grün.
   3. (Nutzer) Auf dem iPhone vormerken und wieder entfernen, ohne die Zeile zu öffnen.
 
+## Phase 1g: Oberfläche nach Apples HIG (ADR-0016)
+
+Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Task, der Layout ändert, prüft mit Bildschirmfotos in 320, 390 und 402 px Breite und mit großer Schrift (z. B. per CDP `Page.setFontSizes`).
+
+### F19: Farbrollen, Kontrast und Druckzustand
+
+- **Status:** offen
+- **Abhängig von:** F18
+- **Referenzen:** ADR-0016; hig-pruefung.md H3, M2, M7, N8
+- **Umfang:**
+  - Farbrollen als Variablen in `web/src/index.css` (`@theme`): Akzent (Primärgrün, Weiß darauf mindestens 4,5:1, z. B. `emerald-700`), Entnehmen (Blau, Weiß darauf mindestens 4,5:1, z. B. `sky-700`), Vorgemerkt (Amber), Warnung (Gelb), Fehler und Zerstörendes (Rot). Alle Stellen im Frontend auf diese Rollen umstellen; Amber nur noch für „vorgemerkt", Fehler überall rot, „Bitte prüfen" als Warnung.
+  - Rahmen von Eingabefeldern und Rahmenknöpfen mit mindestens 3:1 Kontrast zum Hintergrund.
+  - Einheitlicher Druckzustand (`active:`) für alle Knöpfe und tippbaren Zeilen, zentral als Utility in `index.css`.
+  - Scan-Meldung zusätzlich mit Symbol je Rückmeldung (Haken, Warenkorb, Ausrufezeichen, Kreuz) als Inline-SVG.
+  - `color-scheme: light` bzw. `<meta name="color-scheme" content="light">`.
+  - AGENTS.md, Frontend-Regeln: Farben nur über die Rollen, Druckzustand für Tippbares.
+- **Nicht im Umfang:** Dark Mode, Layout der Zeilen (F20).
+- **Abnahmekriterien:**
+  1. Ein Vitest-Test prüft die Kontraste der Rollenfarben gegen Weiß bzw. Hintergrund (Farbwerte als Konstanten, Formel nach WCAG).
+  2. `make check` ist grün; Bildschirmfotos zeigen die neuen Farben.
+
+### F20: Zeilen neu ordnen
+
+- **Status:** offen
+- **Abhängig von:** F19
+- **Referenzen:** hig-pruefung.md H2, M1, M9, N5
+- **Umfang:**
+  - Vorrat-Zeile zweistufig: oben Bild, Name (bis zwei Zeilen) und Marke über die volle Breite; darunter rechtsbündig die Gruppe [−] Bestand/Soll [+] und, mit mindestens 12 px Abstand abgesetzt, der Einkaufswagen. Tippflächen mindestens 44 px, keine aneinanderstoßenden Tippflächen verschiedener Aktionen.
+  - Einkaufsliste: „Von der Liste nehmen" als kompakter Symbolknopf (Warenkorb mit Haken, `aria-label`); nach dem Entfernen einige Sekunden eine Leiste „Entfernt: <Name>" mit „Rückgängig" (vormerken erneut).
+  - Suchfeld im Vorrat mit Lupe links und Löschen-Knopf rechts; Suche und Filter bleiben beim Scrollen oben sichtbar; Filter als `role="radiogroup"` mit `aria-checked`.
+- **Nicht im Umfang:** Produktseite (F22), Schriftgrößen (F21).
+- **Abnahmekriterien:**
+  1. Vitest-Tests für ausgelagerte Logik (z. B. Rückgängig-Leiste).
+  2. `make check` ist grün; Bildschirmfotos in 320, 390 und 402 px zeigen vollständig lesbare Namen (bis zwei Zeilen).
+  3. (Nutzer) Bedienung auf dem iPhone.
+
+### F21: Dynamic Type und Meldungen ohne Zeitgrenze
+
+- **Status:** offen
+- **Abhängig von:** F20
+- **Referenzen:** ADR-0016; hig-pruefung.md H1, M6
+- **Umfang:**
+  - `html { font: -apple-system-body }` in einem `@supports`-Block, sodass die Wurzelschrift auf iOS der Systemtextgröße folgt; Desktop-Safari (13 px) ausnehmen, z. B. per Medienabfrage auf Zeigegeräte. Alle Größen in `rem`.
+  - Tab-Leiste und Modus-Schalter mit festen Größen bzw. Obergrenze, damit sie bei großer Schrift nicht umbrechen; Kamera-Overlays (Zahnrad, Licht) ebenfalls fest.
+  - Layouts von Vorrat, Einkauf, Scan und Produktseite bis etwa 200 % Schrift nutzbar (umbrechen statt abschneiden).
+  - Fehlermeldungen bleiben stehen bis zur nächsten Aktion in derselben Zeile bzw. Ansicht (Erfolgsmeldungen dürfen weiter nach 2 s verschwinden). Die Ergebniskarte bleibt bis zum nächsten Scan oder bis „Schließen" (neuer Knopf „×" mit `aria-label`); der 10-s-Timer aus F09 entfällt, Pause-Logik nur, soweit noch nötig.
+- **Nicht im Umfang:** eigene Schriftgrößen-Einstellung.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für den geänderten Karten-Reducer.
+  2. `make check` ist grün; Bildschirmfotos mit 22 px und 32 px Grundschrift zeigen keine abgeschnittenen Bedienelemente.
+  3. (Nutzer) Auf dem iPhone mit großer Textgröße (Einstellungen, Anzeige und Helligkeit, Textgröße) nutzbar.
+
+### F22: Produktseite aufräumen
+
+- **Status:** offen
+- **Abhängig von:** F21
+- **Referenzen:** hig-pruefung.md M3, M4, N6
+- **Umfang:**
+  - Die Produktseite liegt im Tab-Layout (Tab-Leiste sichtbar). Oben eine fixierte schmale Navigationszeile mit Zurück samt Herkunft („‹ Vorrat", „‹ Einkauf", „‹ Scan", Rückfall „‹ Vorrat") und dem Produktnamen; Name über dem Bild.
+  - Nur „Speichern" als gefüllter Hauptknopf; „Hinzufügen", „Bestand setzen", „Vormerken" als Sekundärknöpfe. Verlauf zeigt drei Einträge mit „Alle anzeigen" (bis zehn). Barcodes und „Produkt löschen" in einem aufklappbaren Bereich (`details`/`summary`).
+  - Bestätigungsdialoge: zerstörende Aktion als rote Schrift ohne Füllung, „Abbrechen" gleichwertig. Die Auswahl beim Zusammenführen als Sheet von unten mit „Abbrechen" oben links (weiter `<dialog>`). Im Kamera-Dialog „Schließen" statt „Fertig".
+- **Nicht im Umfang:** Wischen zum Schließen von Sheets.
+- **Abnahmekriterien:**
+  1. Router-Test angepasst (Produktseite unter der Layout-Route).
+  2. `make check` ist grün; Bildschirmfotos der Produktseite und der Dialoge.
+  3. (Nutzer) Bedienung.
+
+### F23: App-Icon, Favicon, Startbild und Statusleiste
+
+- **Status:** offen
+- **Abhängig von:** F13a
+- **Referenzen:** ADR-0016; hig-pruefung.md M8, N4, N3, N2
+- **Umfang:**
+  - `tools/icongen`: neues Motiv, vollflächiges Grün, ein Regalbrett mit zwei bis drei unterschiedlich hohen, vereinfachten Gläsern bzw. Dosen in Weiß (klar lesbar bei 180 px, kein Text), Maße als benannte Konstanten; zusätzlich ein Favicon (32 px PNG) statt des Vite-Logos. Die Tests aus F13a an das Motiv anpassen (Eckfarbe, einige Motivpixel, eingecheckte Dateien entsprechen dem Generator).
+  - Startbilder (`apple-touch-startup-image`) als einfarbige Fläche in der Hintergrundfarbe für iPhone 15 (393 × 852 pt, @3x) und iPhone 16 Pro (402 × 874 pt, @3x), erzeugt von icongen.
+  - `theme-color` auf die Hintergrundfarbe der App; `html` und `body` mit derselben Hintergrundfarbe.
+- **Nicht im Umfang:** Icon-Varianten für dunkel oder getönt (im Web nicht möglich).
+- **Abnahmekriterien:**
+  1. Go-Tests für Icon und Startbilder.
+  2. `make check` ist grün.
+  3. (Nutzer) Das Icon auf dem Home-Bildschirm gefällt.
+
+### F24: Barrierefreiheit und Feinschliff
+
+- **Status:** offen
+- **Abhängig von:** F22
+- **Referenzen:** hig-pruefung.md N1, N3, N7, N9, N10
+- **Umfang:**
+  - Seitentitel je Route (`document.title`, z. B. „Vorrat · StashBert"); nach einer Navigation liegt der Fokus auf der `h1`.
+  - Einkaufswagen im Vorrat: feste Beschriftung „Auf der Einkaufsliste: <Name>" plus `aria-pressed` (ersetzt die wechselnde Beschriftung aus F18).
+  - Tab-Leiste: gefüllte Symbole für den aktiven Reiter, deutlicherer Auswahlzustand beim Scan-Knopf, leicht transluzenter Hintergrund mit `backdrop-filter`.
+  - Kamera abgelehnt: Zweck und Weg nennen („Die Kamera liest nur Barcodes; Bilder verlassen das Gerät nicht. Kamera in den Safari-Einstellungen für diese Seite erlauben.").
+  - `prefers-reduced-motion: reduce`: statt Vollflächen-Blitz ein farbiger Rahmen um das Kamerabild.
+  - Zuletzt genutzten Reiter merken und beim Start (`/`) dorthin leiten.
+- **Nicht im Umfang:** Haptik (im Web nicht möglich), Audio-Kategorie (Gerätetest durch den Nutzer).
+- **Abnahmekriterien:**
+  1. Vitest-Tests für Titel-Zuordnung und Reiter-Merken.
+  2. `make check` ist grün.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
