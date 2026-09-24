@@ -123,6 +123,8 @@ Kette für `/api/v1/` von außen nach innen:
 4. Request-Validator (`nethttp-middleware`, umschließt den gesamten generierten Mux)
 5. generierter std-http-Handler mit Strict-Handler
 
+Einzige routenspezifische Ergänzung: Für `PUT /api/v1/products/{id}/image` begrenzt ein `http.MaxBytesReader` den Body auf 2 MB **vor** dem Validator, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
+
 Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict-Middleware: oapi-codegen übergibt ihr die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
 
 **Fehler-Muster (verbindlich für alle Handler):**
@@ -185,7 +187,7 @@ Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Al
 **Abgeleitete Werte:**
 
 - `missing = (target > 0 und stock < coalesce(min_stock, target)) ? target - stock : 0`
-- Ein Produkt steht auf der Einkaufsliste, wenn `missing > 0`.
+- Ein Produkt steht auf der Einkaufsliste, wenn `missing > 0` oder es vorgemerkt ist (`marked`, ADR-0015).
 
 ## 6. API v1
 
@@ -221,7 +223,7 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `DELETE /products/{id}/barcodes/{code}` | `removeBarcode` | Barcode entfernen | 204 | `not_found` |
 | `POST /products/{id}/merge` | `mergeProduct` | in anderes Produkt überführen `{target_product_id}` | 200 `Product` (Ziel) | `not_found`, `invalid_request` (Ziel = Quelle) |
 | `GET /products/{id}/image` | `getProductImage` | Produktbild | 200 Bild | `not_found` |
-| `PUT /products/{id}/image` | `uploadProductImage` | eigenes Foto hochladen (Body ist das Bild, `image/jpeg`, `image/png` oder `image/webp`, höchstens 2 MB); ersetzt ein vorhandenes Bild | 200 `Product` | `not_found`, `invalid_image` (422) |
+| `PUT /products/{id}/image` | `uploadProductImage` | eigenes Foto hochladen (Body ist das Bild; in der Spec als `image/*`, weil oapi-codegen mehrere Binär-Typen nicht erzeugen kann; erlaubt sind `image/jpeg`, `image/png`, `image/webp`, höchstens 2 MB); ersetzt ein vorhandenes Bild | 200 `Product` | `not_found`, `invalid_image` (422) |
 | `DELETE /products/{id}/image` | `deleteProductImage` | Bild entfernen, auch die Bildquelle von OFF, damit es nicht erneut geladen wird | 204 | `not_found` |
 | `POST /movements` | `createMovement` | Buchung anlegen | 201 `MovementResult` | siehe 6.3 |
 | `GET /movements` | `listMovements` | Buchungen, neueste zuerst, `?product_id=&limit=&cursor=` (`limit` 1 bis 200, Standard 50) | 200 `{items: Movement[], next_cursor}` | |
@@ -383,7 +385,7 @@ Danach wird mit `target = 0` gebucht.
   - Höchstens 2 MB, Typen `image/jpeg`, `image/png` oder `image/webp`. Auch Redirect-Ziele müssen erlaubte Hosts sein.
   - Dauerhafte Fehler (4xx außer 408 und 429, falscher Typ, leer oder zu groß) setzen `image_source_url = NULL`; vorübergehende werden im nächsten Lauf wiederholt.
   - Ablage unter `DATA_DIR/images/<product_id>.<ext>`. Nie im Scan-Pfad.
-  - **Eigene Fotos und Entfernen:** Ein hochgeladenes Foto wird auf dem Server am Inhalt geprüft (Sniffing, nicht nur `Content-Type`), über eine temporäre Datei plus `rename` gespeichert und setzt `image_file`; `image_source_url` wird dabei `NULL`, damit der Bild-Job es nicht mit dem OFF-Bild überschreibt. Das Frontend verkleinert Fotos vor dem Hochladen (längste Kante 1024 px, JPEG). Entfernen löscht die Datei und setzt `image_file` und `image_source_url` auf `NULL`. Beides ändert `updated_at`.
+  - **Eigene Fotos und Entfernen:** Ein hochgeladenes Foto wird auf dem Server am Inhalt geprüft (Sniffing, nicht nur `Content-Type`), über eine temporäre Datei plus `rename` unter einem eigenen, eindeutigen Namen `<product_id>-upload-<unix-millis>.<ext>` gespeichert (so kann der Bild-Job, der nur `<product_id>.<ext>` schreibt, ein Foto nie überschreiben) und setzt `image_file`; die vorherige Datei wird nach dem Commit entfernt; `image_source_url` wird dabei `NULL`, damit der Bild-Job es nicht mit dem OFF-Bild überschreibt. Das Frontend verkleinert Fotos vor dem Hochladen (längste Kante 1024 px, JPEG). Entfernen löscht die Datei und setzt `image_file` und `image_source_url` auf `NULL`. Beides ändert `updated_at`.
 - **Backup:** siehe 9.3.
 
 ## 8. Zugriffsschutz und Sicherheits-Header

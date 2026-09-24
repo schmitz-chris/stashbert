@@ -1314,15 +1314,15 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
 - **Abhängig von:** B22b
 - **Referenzen:** architecture.md 6.1, 6.2 (`uploadProductImage`, `deleteProductImage`), 6.4 (`invalid_image`), 7.3
 - **Umfang:**
-  - `PUT /products/{id}/image`: Body ist das Bild (`image/jpeg`, `image/png` oder `image/webp` in der Spec), höchstens 2 MB (Lesen mit Begrenzung, Überschreitung 422 `invalid_image`). Der Inhalt wird per `http.DetectContentType` geprüft und muss zu einem der drei Typen passen (sonst 422 `invalid_image`); die Dateiendung folgt dem erkannten Typ. Speichern über eine temporäre Datei plus `rename` als `<id>.<ext>` im Bildverzeichnis; eine alte Datei mit anderer Endung wird danach entfernt. In der Datenbank `image_file` setzen, `image_source_url` auf `NULL`, `updated_at`. Antwort 200 `Product`. Unbekanntes Produkt 404 (dann keine Datei zurücklassen).
-  - Der Request-Validator muss den Bild-Body durchlassen; schlage nach, wie kin-openapi bzw. nethttp-middleware Nicht-JSON-Bodies behandelt (z. B. `openapi3filter.RegisterBodyDecoder` für die drei Typen), statt die Validierung für die Route abzuschalten.
+  - `PUT /products/{id}/image`: Body ist das Bild; in der Spec als `image/*` (oapi-codegen erzeugt für mehrere Binär-Typen doppelte Felder), die erlaubten Typen `image/jpeg`, `image/png`, `image/webp` und die Grenze von 2 MB stehen in der `description`. Die 2 MB begrenzt ein `http.MaxBytesReader` nur für diese Route vor dem Validator (architecture.md 4.4); `*http.MaxBytesError` wird 422 `invalid_image`. Die Fachlogik prüft zusätzlich mit Begrenzung (höchstens 2 MB + 1 Byte). Der Inhalt wird per `http.DetectContentType` geprüft und muss zu einem der drei Typen passen (sonst 422 `invalid_image`); die Dateiendung folgt dem erkannten Typ. Speichern über eine temporäre Datei plus `rename` unter dem eindeutigen Namen `<id>-upload-<unix-millis>.<ext>` im Bildverzeichnis (so kann der Bild-Job, der nur `<id>.<ext>` schreibt, ein Foto nicht überschreiben); die vorherige Datei wird nach dem Commit entfernt. In der Datenbank `image_file` setzen, `image_source_url` auf `NULL`, `updated_at`. Antwort 200 `Product`. Unbekanntes Produkt 404 (dann keine Datei zurücklassen).
+  - Der Request-Validator bleibt aktiv; ohne `schema` prüft kin-openapi nur den Content-Type gegen `image/*`.
   - `DELETE /products/{id}/image`: Datei löschen (fehlende Datei ist kein Fehler), `image_file` und `image_source_url` auf `NULL`, `updated_at`. 204; unbekanntes Produkt 404; Produkt ohne Bild ebenfalls 204.
   - Der Bild-Job aus B22a überschreibt ein hochgeladenes Foto nicht (er lädt nur bei `image_source_url` ohne `image_file`); prüfen und testen.
 - **Nicht im Umfang:** Verkleinern auf dem Server, weitere Formate (HEIC), mehrere Bilder pro Produkt.
 - **Abnahmekriterien (Tests):**
   1. Hochladen von JPEG, PNG und WebP; danach liefert `getProductImage` das neue Bild mit richtigem Typ; `has_image` ist true.
   2. Falscher Inhalt (z. B. Text mit `Content-Type: image/jpeg`) und zu große Dateien ergeben 422 ohne Änderung.
-  3. Ersetzen eines Bildes mit anderer Endung hinterlässt nur die neue Datei.
+  3. Ersetzen eines Bildes (auch eines OFF-Bildes `<id>.<ext>`) hinterlässt nur die neue Datei; ein Body über 2 MB ergibt 422, ohne dass der Handler ihn einliest.
   4. Entfernen löscht Datei und Bildquelle; der Bild-Job lädt danach nichts nach.
   5. `make check` ist grün.
 
