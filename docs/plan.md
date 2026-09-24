@@ -1090,6 +1090,22 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
   2. `make check` ist grün.
   3. (Nutzer) Installation auf dem Home-Bildschirm beider iPhones, Start im Standalone-Modus.
 
+### F14: Oberfläche nachbessern
+
+- **Status:** offen
+- **Abhängig von:** F13b
+- **Referenzen:** Rückmeldung des Nutzers vom 24.09.2026 („sieht nicht schön aus, der Knopf für das Licht ist weg")
+- **Umfang:**
+  - **Scan, Licht:** Ein runder Licht-Knopf (mindestens 48 px) liegt sichtbar unten links auf dem Kamerabild, nur wenn das Gerät Licht kann; an/aus ist klar erkennbar (z. B. gefüllt gelb bzw. dunkel halbtransparent) und hat `aria-pressed`. Im Zahnrad-Menü bleiben Kamerawahl und Zoom; das Licht ist dort nicht mehr doppelt.
+  - **Scan, Zahnrad:** Der Knopf ist mindestens 44 × 44 px groß und auf jedem Kamerabild gut sichtbar (runder, dunkler halbtransparenter Hintergrund).
+  - **Navigationsleiste:** Über den Beschriftungen Vorrat, Scan und Einkauf je ein einfaches Symbol als Inline-SVG (keine neue Abhängigkeit): Regal bzw. Kiste, Barcode, Einkaufswagen. Der aktive Reiter ist farbig; der Scan-Knopf bleibt mittig und hervorgehoben.
+  - **Vorrat-Zeile:** Statt „3 / 0" steht der Bestand groß, darunter klein „Soll 5"; bei Soll 0 entfällt die Zeile.
+- **Nicht im Umfang:** Farben, Schriften oder Abstände grundsätzlich ändern, neue Funktionen, App-Icon.
+- **Abnahmekriterien:**
+  1. `make check` ist grün.
+  2. Bildschirmfotos der drei Ansichten und der Produktseite in 390 × 844 zeigen die Änderungen.
+  3. (Nutzer) Sieht auf dem iPhone gut aus.
+
 ---
 
 ## Phase 1c: Auslieferung
