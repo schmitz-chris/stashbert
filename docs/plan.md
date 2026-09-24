@@ -1520,7 +1520,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F27: Kastengröße auf der Produktseite und Kästen in der Einkaufsliste
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B33, F26
 - **Referenzen:** ADR-0017
 - **Umfang:**

@@ -13,6 +13,9 @@ import {
 import { pageTitle } from "../lib/pageTitle";
 import { productLinkState } from "../lib/productOrigin";
 import {
+  crateQuantity,
+  cratesText,
+  missingBottlesText,
   shoppingQuantity,
   shoppingText,
   type ShoppingItem,
@@ -125,6 +128,8 @@ function ShoppingRow({
   const queryClient = useQueryClient();
   const unmark = useMutation(unmarkMutation(queryClient));
   const quantity = shoppingQuantity(item);
+  // Set for an item bought in crates (ADR-0017); it replaces the quantity.
+  const crates = crateQuantity(item);
 
   // The link covers the whole row with its ::after box, so a tap anywhere
   // outside the button opens the product. The button lies above it. The
@@ -138,7 +143,8 @@ function ShoppingRow({
           state={productLinkState("einkauf")}
           className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
-          {quantity !== null && (
+          {crates !== null && `${cratesText(crates.crates)} `}
+          {crates === null && quantity !== null && (
             <>
               <span className="tabular-nums">{quantity}</span> ×{" "}
             </>
@@ -148,6 +154,11 @@ function ShoppingRow({
         {item.brand !== null && (
           <p className="text-sm break-words hyphens-auto text-ink-tertiary">
             {item.brand}
+          </p>
+        )}
+        {crates !== null && (
+          <p className="text-sm text-ink-secondary">
+            {missingBottlesText(crates.bottles)}
           </p>
         )}
         {item.marked && (

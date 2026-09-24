@@ -11,8 +11,12 @@ const original: ProductFormFields = {
   brand: "Ferrero",
   package_size: "450 g",
   target: 2,
+  crate_size: null,
   note: null,
 };
+
+// A product bought in crates of 20.
+const crated: ProductFormFields = { ...original, crate_size: 20 };
 
 function form(fields: Partial<ProductForm>): ProductForm {
   return { ...toForm(original), ...fields };
@@ -25,8 +29,13 @@ describe("toForm", () => {
       brand: "Ferrero",
       package_size: "450 g",
       target: "2",
+      crate_size: "",
       note: "",
     });
+  });
+
+  it("turns the crate size into text", () => {
+    expect(toForm(crated).crate_size).toBe("20");
   });
 });
 
@@ -75,6 +84,41 @@ describe("diffPatch", () => {
     expect(diffPatch(original, form({ target: " " }))).toEqual({});
   });
 
+  it("contains a crate size set for the first time as a number", () => {
+    expect(diffPatch(original, form({ crate_size: "20" }))).toEqual({
+      crate_size: 20,
+    });
+  });
+
+  it("contains a changed crate size as a number", () => {
+    const changed = { ...toForm(crated), crate_size: "24" };
+    expect(diffPatch(crated, changed)).toEqual({ crate_size: 24 });
+  });
+
+  it("sends a cleared crate size as null", () => {
+    const cleared = { ...toForm(crated), crate_size: "" };
+    expect(diffPatch(crated, cleared)).toEqual({ crate_size: null });
+  });
+
+  it("sends a crate size of only spaces as null", () => {
+    const cleared = { ...toForm(crated), crate_size: "  " };
+    expect(diffPatch(crated, cleared)).toEqual({ crate_size: null });
+  });
+
+  it("does not count an unchanged crate size as a change", () => {
+    expect(diffPatch(crated, toForm(crated))).toEqual({});
+    expect(diffPatch(crated, { ...toForm(crated), crate_size: " 20 " })).toEqual(
+      {},
+    );
+    expect(diffPatch(original, form({ crate_size: " " }))).toEqual({});
+  });
+
+  it("ignores a crate size that is not a number", () => {
+    expect(diffPatch(crated, { ...toForm(crated), crate_size: "x" })).toEqual(
+      {},
+    );
+  });
+
   it("sends a note that was null before", () => {
     expect(diffPatch(original, form({ note: "Im Keller" }))).toEqual({
       note: "Im Keller",
@@ -97,6 +141,7 @@ describe("diffPatch", () => {
       brand: "",
       package_size: "1 kg",
       target: "3",
+      crate_size: "6",
       note: "Für das Frühstück",
     });
     expect(diffPatch(original, changed)).toEqual({
@@ -104,6 +149,7 @@ describe("diffPatch", () => {
       brand: null,
       package_size: "1 kg",
       target: 3,
+      crate_size: 6,
       note: "Für das Frühstück",
     });
   });

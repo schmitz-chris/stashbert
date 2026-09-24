@@ -10,22 +10,28 @@ export interface ProductForm {
   package_size: string;
   /** The text of the number input for the target. */
   target: string;
+  /** The text of the number input for the crate size; "" for no crate. */
+  crate_size: string;
   note: string;
 }
 
 /** The fields of a product that the form edits. */
 export type ProductFormFields = Pick<
   Product,
-  "name" | "brand" | "package_size" | "target" | "note"
+  "name" | "brand" | "package_size" | "target" | "crate_size" | "note"
 >;
 
-/** Returns the form values for product. A missing text becomes "". */
+/**
+ * Returns the form values for product. A missing text and a missing crate
+ * size become "".
+ */
 export function toForm(product: ProductFormFields): ProductForm {
   return {
     name: product.name,
     brand: product.brand ?? "",
     package_size: product.package_size ?? "",
     target: String(product.target),
+    crate_size: product.crate_size === null ? "" : String(product.crate_size),
     note: product.note ?? "",
   };
 }
@@ -35,8 +41,11 @@ export function toForm(product: ProductFormFields): ProductForm {
  * that differ from original. Texts are compared and sent trimmed; an
  * optional text that is empty after trimming becomes null. The target is
  * only compared if its text is a number; the number input checks that it
- * is a whole number from 0 to 100000. Without changes the patch is empty.
- * An empty name is part of the patch; the form must catch it.
+ * is a whole number from 0 to 100000. The crate size is compared like the
+ * target, except that an empty text becomes null (no crate); the number
+ * input checks that it is a whole number from 2 to 100. Without changes the
+ * patch is empty. An empty name is part of the patch; the form must catch
+ * it.
  */
 export function diffPatch(
   original: ProductFormFields,
@@ -57,6 +66,14 @@ export function diffPatch(
   const target = form.target.trim() === "" ? NaN : Number(form.target);
   if (Number.isFinite(target) && target !== original.target) {
     patch.target = target;
+  }
+  const crateText = form.crate_size.trim();
+  const crateSize = crateText === "" ? null : Number(crateText);
+  if (
+    (crateSize === null || Number.isFinite(crateSize)) &&
+    crateSize !== original.crate_size
+  ) {
+    patch.crate_size = crateSize;
   }
   return patch;
 }

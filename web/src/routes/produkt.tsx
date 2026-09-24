@@ -267,6 +267,22 @@ function ProductEditor({ product }: { product: Product }) {
             step={1}
           />
         </label>
+        {/* Empty means the product is not bought in crates (ADR-0017). */}
+        <label className="block">
+          <span className={labelClass}>Kastengröße</span>
+          <input
+            {...bind("crate_size")}
+            type="number"
+            inputMode="numeric"
+            min={2}
+            max={100}
+            step={1}
+            aria-describedby="product-crate-size-hint"
+          />
+        </label>
+        <p id="product-crate-size-hint" className="-mt-3 text-sm text-ink-tertiary">
+          Flaschen pro Kasten
+        </p>
         <label className="block">
           <span className={labelClass}>Notiz</span>
           <textarea {...bind("note")} rows={3} maxLength={500} />
