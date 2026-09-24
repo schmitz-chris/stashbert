@@ -2,9 +2,6 @@ import type { Movement } from "./movements";
 import type { Product } from "./products";
 import type { BookingMode, MarkResult, MovementResult } from "./scan";
 
-/** How long the result card stays visible after a booking or mark, in ms. */
-export const cardDuration = 10_000;
-
 /**
  * The booking a result card shows, with the kind that [+1] books again.
  * merged is true once the product of the booking was merged into another
@@ -26,21 +23,19 @@ export interface CardMark {
 export type CardContent = CardBooking | CardMark;
 
 /**
- * The result card of the scan view (docs/plan.md, F09): hidden, running
- * (hidden at hideAt) or paused while a dialog of the card is open (hidden
- * remaining ms after it resumes). Times are in ms, as from Date.now().
+ * The result card of the scan view (docs/plan.md, F09 and F21): hidden or
+ * shown. A shown card has no time limit (ADR-0016); it stays until the next
+ * booking or mark replaces it, until "Schließen" or until its booking or
+ * mark is undone.
  */
 export type ResultCardState =
   | { status: "hidden" }
-  | { status: "running"; content: CardContent; hideAt: number }
-  | { status: "paused"; content: CardContent; remaining: number };
+  | { status: "shown"; content: CardContent };
 
 export type ResultCardAction =
-  | { type: "show"; result: MovementResult; kind: BookingMode; now: number }
-  | { type: "show"; result: MarkResult; kind: "mark"; now: number }
-  | { type: "tick"; now: number }
-  | { type: "pause"; now: number }
-  | { type: "resume"; now: number }
+  | { type: "show"; result: MovementResult; kind: BookingMode }
+  | { type: "show"; result: MarkResult; kind: "mark" }
+  | { type: "close" }
   | { type: "hide"; movementId: string }
   | { type: "hideMark"; productId: string }
   | { type: "update"; product: Product }
@@ -52,11 +47,8 @@ export const hiddenCard: ResultCardState = { status: "hidden" };
  * Returns the next state of the result card:
  *
  *   - show: shows the booking result (booked with kind) or the mark
- *     result (kind mark) for cardDuration, replacing the card shown
- *     before, also a paused one.
- *   - tick: hides a running card whose time is up.
- *   - pause: stops the time of a running card.
- *   - resume: lets a paused card run for the time it had left.
+ *     result (kind mark), replacing the card shown before.
+ *   - close: hides the card ("Schließen").
  *   - hide: hides the card if it shows the booking movementId, so undoing
  *     an older booking leaves the card of a newer one.
  *   - hideMark: hides the card if it shows a mark of the product with
@@ -67,9 +59,9 @@ export const hiddenCard: ResultCardState = { status: "hidden" };
  *     target, the card shows target, to which the booking belongs now,
  *     and no longer as a new product.
  *
- * update and merge only change what the card of a booking shows, not its
- * time, and leave a card that shows a mark or another product unchanged.
- * Actions that do not apply to the state return it unchanged.
+ * update and merge only change what the card of a booking shows and leave
+ * a card that shows a mark or another product unchanged. Actions that do
+ * not apply to the state return it unchanged.
  */
 export function resultCardReducer(
   state: ResultCardState,
@@ -81,28 +73,10 @@ export function resultCardReducer(
         action.kind === "mark"
           ? { result: action.result, kind: "mark" }
           : { result: action.result, kind: action.kind, merged: false };
-      return { status: "running", content, hideAt: action.now + cardDuration };
+      return { status: "shown", content };
     }
-    case "tick":
-      return state.status === "running" && action.now >= state.hideAt ? hiddenCard : state;
-    case "pause":
-      if (state.status !== "running") {
-        return state;
-      }
-      return {
-        status: "paused",
-        content: state.content,
-        remaining: Math.max(0, state.hideAt - action.now),
-      };
-    case "resume":
-      if (state.status !== "paused") {
-        return state;
-      }
-      return {
-        status: "running",
-        content: state.content,
-        hideAt: action.now + state.remaining,
-      };
+    case "close":
+      return state.status === "hidden" ? state : hiddenCard;
     case "hide":
       if (
         state.status === "hidden" ||

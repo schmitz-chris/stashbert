@@ -34,11 +34,11 @@ import {
 import { ROI } from "../lib/scanner/decoder";
 import { isSoundUnlocked, playSound, unlockSound } from "../lib/sound";
 
-// How long the flash over the camera image and the message stay visible.
+// How long the flash over the camera image and the message of a success
+// stay visible. The message of a failure stays until the next feedback or a
+// change of the mode (ADR-0016).
 const flashDuration = 300;
 const messageDuration = 2000;
-// How often the result card checks whether its time is up.
-const cardTickInterval = 200;
 
 const modes: { mode: ScanMode; label: string; active: string }[] = [
   { mode: "add", label: "Einlagern", active: "bg-accent text-white" },
@@ -70,11 +70,13 @@ const roiStyle = {
   height: `${ROI.height * 100}%`,
 };
 
-// Feedback on screen; id tells consecutive feedbacks apart.
+// Feedback on screen; id tells consecutive feedbacks apart, failed marks
+// the feedback of a failed request, whose message has no time limit.
 interface Shown {
   feedback: Feedback;
   id: number;
   flash: boolean;
+  failed: boolean;
 }
 
 export function ScanPage() {
@@ -95,15 +97,15 @@ export function ScanPage() {
   const [manualOpen, setManualOpen] = useState(false);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
 
-  function show(feedback: Feedback) {
+  function show(feedback: Feedback, failed = false) {
     playSound(feedback.sound);
-    setShown((current) => ({ feedback, id: (current?.id ?? 0) + 1, flash: true }));
+    setShown((current) => ({ feedback, id: (current?.id ?? 0) + 1, flash: true, failed }));
   }
 
   // Reports a booking of kind and shows it on the result card.
   function showBooking(result: MovementResult, kind: BookingMode) {
     show(feedbackFor({ ok: true, mode: kind, result }));
-    dispatchCard({ type: "show", result, kind, now: Date.now() });
+    dispatchCard({ type: "show", result, kind });
   }
 
   // Books code in the mode that is set now, or marks it for shopping in
@@ -114,15 +116,15 @@ export function ScanPage() {
       mark(code).then(
         (result) => {
           show(feedbackFor({ ok: true, mode: kind, result }));
-          dispatchCard({ type: "show", result, kind, now: Date.now() });
+          dispatchCard({ type: "show", result, kind });
         },
-        (error: unknown) => show(feedbackFor({ ok: false, error, mode: kind })),
+        (error: unknown) => show(feedbackFor({ ok: false, error, mode: kind }), true),
       );
       return;
     }
     book({ barcode: code, kind }).then(
       (result) => showBooking(result, kind),
-      (error: unknown) => show(feedbackFor({ ok: false, error })),
+      (error: unknown) => show(feedbackFor({ ok: false, error }), true),
     );
   }
 
@@ -140,7 +142,7 @@ export function ScanPage() {
   function plusOne(productId: string, kind: BookingMode) {
     repeat.mutateAsync({ productId, kind }).then(
       (result) => showBooking(result, kind),
-      (error: unknown) => show(feedbackFor({ ok: false, error })),
+      (error: unknown) => show(feedbackFor({ ok: false, error }), true),
     );
   }
 
@@ -151,7 +153,7 @@ export function ScanPage() {
         dispatchCard({ type: "hide", movementId });
         show(undoFeedbackFor({ ok: true, result }));
       },
-      (error: unknown) => show(undoFeedbackFor({ ok: false, error })),
+      (error: unknown) => show(undoFeedbackFor({ ok: false, error }), true),
     );
   }
 
@@ -163,37 +165,14 @@ export function ScanPage() {
         dispatchCard({ type: "hideMark", productId: product.id });
         show(unmarkFeedbackFor({ ok: true, product }));
       },
-      (error: unknown) => show(unmarkFeedbackFor({ ok: false, error })),
+      (error: unknown) => show(unmarkFeedbackFor({ ok: false, error }), true),
     );
-  }
-
-  // "Stattdessen zu vorhandenem Produkt": the card waits while the dialog
-  // is open.
-  function openMerge(product: Product) {
-    dispatchCard({ type: "pause", now: Date.now() });
-    setMergeSource(product);
-  }
-
-  function closeMerge() {
-    setMergeSource(null);
-    dispatchCard({ type: "resume", now: Date.now() });
-  }
-
-  // "Code eintippen": the card waits while the dialog is open.
-  function openManual() {
-    dispatchCard({ type: "pause", now: Date.now() });
-    setManualOpen(true);
-  }
-
-  function closeManual() {
-    setManualOpen(false);
-    dispatchCard({ type: "resume", now: Date.now() });
   }
 
   // A code typed in by hand is booked or marked like a scanned one. The
   // repeat filter of the scanner does not apply: typing it in is deliberate.
   function submitManual(code: string) {
-    closeManual();
+    setManualOpen(false);
     handleCode(code);
   }
 
@@ -201,25 +180,13 @@ export function ScanPage() {
   // card belongs to now.
   function merged(target: Product, source: Product) {
     dispatchCard({ type: "merge", sourceId: source.id, target });
-    closeMerge();
+    setMergeSource(null);
   }
 
-  // While the card runs, reports the time to the reducer, which hides the
-  // card when its time is up.
-  const cardRunning = card.status === "running";
-  useEffect(() => {
-    if (!cardRunning) {
-      return;
-    }
-    const timer = setInterval(
-      () => dispatchCard({ type: "tick", now: Date.now() }),
-      cardTickInterval,
-    );
-    return () => clearInterval(timer);
-  }, [cardRunning]);
-
-  // Ends the flash and then hides the message of the latest feedback.
+  // Ends the flash and then hides the message of the latest feedback,
+  // unless it reports a failure.
   const shownId = shown?.id;
+  const shownFailed = shown?.failed;
   useEffect(() => {
     if (shownId === undefined) {
       return;
@@ -228,12 +195,14 @@ export function ScanPage() {
       () => setShown((current) => current && { ...current, flash: false }),
       flashDuration,
     );
-    const messageTimer = setTimeout(() => setShown(null), messageDuration);
+    const messageTimer = shownFailed
+      ? undefined
+      : setTimeout(() => setShown(null), messageDuration);
     return () => {
       clearTimeout(flashTimer);
       clearTimeout(messageTimer);
     };
-  }, [shownId]);
+  }, [shownId, shownFailed]);
 
   // Every tap in the view unlocks the sound (iOS).
   function handleTap() {
@@ -241,9 +210,11 @@ export function ScanPage() {
     setSoundReady(true);
   }
 
+  // A change of the mode also ends the message of the last feedback.
   function chooseMode(next: ScanMode) {
     setMode(next);
     saveScanMode(next);
+    setShown(null);
   }
 
   function handleVideoSize(video: HTMLVideoElement) {
@@ -258,21 +229,26 @@ export function ScanPage() {
   return (
     <div className="flex flex-col gap-3" onClick={handleTap}>
       <h1 className="sr-only">Scannen</h1>
-      <div role="group" aria-label="Modus" className="grid grid-cols-3 gap-2">
+      {/* The mode switch does not grow with the text size of the system
+          (ADR-0016). Its text is at most 18 px and shrinks with the width of
+          the switch (cqw), so "Entnehmen" fits into a third on every screen. */}
+      <div role="group" aria-label="Modus" className="@container grid grid-cols-3 gap-[8px]">
         {modes.map(({ mode: value, label, active }) => (
           <button
             key={value}
             type="button"
             aria-pressed={mode === value}
             onClick={() => chooseMode(value)}
-            className={`pressable min-h-14 rounded-xl text-lg font-semibold ${mode === value ? active : "bg-fill text-ink-secondary"}`}
+            className={`pressable min-h-[56px] rounded-[12px] text-[min(18px,5.5cqw)] leading-[24px] font-semibold ${mode === value ? active : "bg-fill text-ink-secondary"}`}
           >
             {label}
           </button>
         ))}
       </div>
 
-      {/* Sized to the aspect ratio of the video, so the strip lies where the decoder reads. */}
+      {/* Sized to the aspect ratio of the video, so the strip lies where the decoder reads.
+          The buttons over the image keep their size in px; the texts keep
+          64 px away from the top and the bottom, where the buttons lie. */}
       <div
         className="relative mx-auto overflow-hidden rounded-xl bg-black"
         style={{
@@ -300,7 +276,7 @@ export function ScanPage() {
           />
         )}
         {phase === "starting" && (
-          <p className="absolute inset-0 flex items-center justify-center p-4 text-center text-white">
+          <p className="absolute inset-0 flex items-center justify-center px-4 py-[64px] text-center text-white">
             Kamera wird gestartet …
           </p>
         )}
@@ -308,21 +284,24 @@ export function ScanPage() {
           <button
             type="button"
             onClick={restart}
-            className="pressable absolute inset-0 p-4 text-xl font-semibold text-white"
+            className="pressable absolute inset-0 px-4 py-[64px] text-xl font-semibold text-white"
           >
             Tippen zum Fortsetzen
           </button>
         )}
         {phase === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center text-white">
-            <p>{cameraErrorText(cameraError)}</p>
-            <button
-              type="button"
-              onClick={restart}
-              className="pressable min-h-11 rounded-lg bg-surface px-4 font-medium text-ink"
-            >
-              Erneut versuchen
-            </button>
+          // Scrolls if the text does not fit (large text size).
+          <div className="absolute inset-0 flex flex-col overflow-y-auto px-4 py-[64px] text-center text-white">
+            <div className="my-auto flex flex-col items-center gap-4">
+              <p>{cameraErrorText(cameraError)}</p>
+              <button
+                type="button"
+                onClick={restart}
+                className="pressable min-h-11 rounded-lg bg-surface px-4 font-medium text-ink"
+              >
+                Erneut versuchen
+              </button>
+            </div>
           </div>
         )}
         <TorchButton track={track} />
@@ -330,14 +309,14 @@ export function ScanPage() {
           type="button"
           aria-label="Kamera-Einstellungen"
           onClick={() => setSettingsOpen(true)}
-          className="pressable absolute top-2 right-2 flex size-12 items-center justify-center rounded-full bg-black/60 text-white shadow-md ring-1 ring-white/40"
+          className="pressable absolute top-[8px] right-[8px] flex size-[48px] items-center justify-center rounded-full bg-black/60 text-white shadow-md ring-1 ring-white/40"
         >
           <GearIcon />
         </button>
       </div>
       <button
         type="button"
-        onClick={openManual}
+        onClick={() => setManualOpen(true)}
         className="pressable min-h-11 self-center rounded-lg border border-line-strong bg-surface px-4 font-medium text-ink-secondary"
       >
         Code eintippen
@@ -347,14 +326,19 @@ export function ScanPage() {
         role="status"
         className={`flex min-h-16 items-center justify-center gap-2 rounded-xl px-3 text-center text-2xl font-bold ${shown ? messageClass[shown.feedback.color] : ""}`}
       >
-        {shown && <FeedbackSymbol icon={feedbackIcon(shown.feedback)} />}
-        {shown?.feedback.text}
+        {shown && (
+          <>
+            <FeedbackSymbol icon={feedbackIcon(shown.feedback)} />
+            <span className="min-w-0 break-words">{shown.feedback.text}</span>
+          </>
+        )}
       </p>
       {content?.kind === "mark" && (
         <MarkResultCard
           mark={content}
           disabled={unmark.isPending}
           onUndo={() => undoMark(content.result.product)}
+          onClose={() => dispatchCard({ type: "close" })}
         />
       )}
       {content !== null && content.kind !== "mark" && (
@@ -365,7 +349,8 @@ export function ScanPage() {
           onPlusOne={() => plusOne(content.result.product.id, content.kind)}
           onUndo={() => undo(content.result.movement.id)}
           onProductChange={(product) => dispatchCard({ type: "update", product })}
-          onMerge={() => openMerge(content.result.product)}
+          onMerge={() => setMergeSource(content.result.product)}
+          onClose={() => dispatchCard({ type: "close" })}
         />
       )}
       {!soundReady && (
@@ -376,13 +361,13 @@ export function ScanPage() {
 
       <MergeDialog
         source={mergeSource}
-        onClose={closeMerge}
+        onClose={() => setMergeSource(null)}
         onMerged={merged}
       />
       <ManualCodeDialog
         open={manualOpen}
         mode={mode}
-        onClose={closeManual}
+        onClose={() => setManualOpen(false)}
         onSubmit={submitManual}
       />
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
@@ -413,7 +398,7 @@ function GearIcon() {
       viewBox="0 0 24 24"
       fill="currentColor"
       fillRule="evenodd"
-      className="size-6"
+      className="size-[24px]"
     >
       <path d="M10.31 4.69L10.44 2.12A10 10 0 0 1 13.56 2.12L13.69 4.69A7.5 7.5 0 0 1 15.97 5.64L17.88 3.91A10 10 0 0 1 20.09 6.12L18.36 8.03A7.5 7.5 0 0 1 19.31 10.31L21.88 10.44A10 10 0 0 1 21.88 13.56L19.31 13.69A7.5 7.5 0 0 1 18.36 15.97L20.09 17.88A10 10 0 0 1 17.88 20.09L15.97 18.36A7.5 7.5 0 0 1 13.69 19.31L13.56 21.88A10 10 0 0 1 10.44 21.88L10.31 19.31A7.5 7.5 0 0 1 8.03 18.36L6.12 20.09A10 10 0 0 1 3.91 17.88L5.64 15.97A7.5 7.5 0 0 1 4.69 13.69L2.12 13.56A10 10 0 0 1 2.12 10.44L4.69 10.31A7.5 7.5 0 0 1 5.64 8.03L3.91 6.12A10 10 0 0 1 6.12 3.91L8.03 5.64A7.5 7.5 0 0 1 10.31 4.69ZM15 12A3 3 0 1 0 9 12A3 3 0 1 0 15 12Z" />
     </svg>

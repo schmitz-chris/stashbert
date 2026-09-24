@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Movement } from "./movements";
 import type { Product } from "./products";
 import {
-  cardDuration,
   cardView,
   formatStockChange,
   hiddenCard,
@@ -67,117 +66,44 @@ function run(state: ResultCardState, ...actions: ResultCardAction[]): ResultCard
   return actions.reduce(resultCardReducer, state);
 }
 
-// The card showing first, shown at time 1000.
-const shown = run(hiddenCard, { type: "show", result: first, kind: "add", now: 1000 });
+// The card showing first.
+const shown = run(hiddenCard, { type: "show", result: first, kind: "add" });
 
 describe("resultCardReducer", () => {
   it("starts hidden", () => {
     expect(hiddenCard).toEqual({ status: "hidden" });
   });
 
-  it("shows a booking with its kind for cardDuration", () => {
-    expect(cardDuration).toBe(10_000);
+  it("shows a booking with its kind, without a time limit", () => {
     expect(shown).toEqual({
-      status: "running",
+      status: "shown",
       content: { result: first, kind: "add", merged: false },
-      hideAt: 11_000,
     });
   });
 
-  it("stays visible until the time is up", () => {
-    expect(run(shown, { type: "tick", now: 10_999 })).toBe(shown);
-  });
-
-  it("is hidden after 10 s", () => {
-    expect(run(shown, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
-    expect(run(shown, { type: "tick", now: 30_000 })).toEqual(hiddenCard);
-  });
-
-  it("replaces the card on a new booking and starts the 10 s again", () => {
-    const replaced = run(shown, {
-      type: "show",
-      result: second,
-      kind: "consume",
-      now: 9000,
-    });
-    expect(replaced).toEqual({
-      status: "running",
+  it("replaces the card on the next booking", () => {
+    expect(run(shown, { type: "show", result: second, kind: "consume" })).toEqual({
+      status: "shown",
       content: { result: second, kind: "consume", merged: false },
-      hideAt: 19_000,
     });
-    expect(run(replaced, { type: "tick", now: 11_000 })).toBe(replaced);
-    expect(run(replaced, { type: "tick", now: 19_000 })).toEqual(hiddenCard);
   });
 
-  it("shows a booking again after the card was hidden", () => {
-    const again = run(
-      shown,
-      { type: "tick", now: 11_000 },
-      { type: "show", result: second, kind: "add", now: 12_000 },
-    );
-    expect(again).toEqual({
-      status: "running",
+  it("hides the card on close", () => {
+    expect(run(shown, { type: "close" })).toEqual(hiddenCard);
+  });
+
+  it("shows the next booking after the card was closed", () => {
+    expect(
+      run(shown, { type: "close" }, { type: "show", result: second, kind: "add" }),
+    ).toEqual({
+      status: "shown",
       content: { result: second, kind: "add", merged: false },
-      hideAt: 22_000,
     });
   });
 
-  it("stops the time while paused", () => {
-    const paused = run(shown, { type: "pause", now: 4000 });
-    expect(paused).toEqual({
-      status: "paused",
-      content: { result: first, kind: "add", merged: false },
-      remaining: 7000,
-    });
-    expect(run(paused, { type: "tick", now: 60_000 })).toBe(paused);
-  });
-
-  it("continues with the time left when resumed", () => {
-    const resumed = run(
-      shown,
-      { type: "pause", now: 4000 },
-      { type: "resume", now: 50_000 },
-    );
-    expect(resumed).toEqual({
-      status: "running",
-      content: { result: first, kind: "add", merged: false },
-      hideAt: 57_000,
-    });
-    expect(run(resumed, { type: "tick", now: 56_999 })).toBe(resumed);
-    expect(run(resumed, { type: "tick", now: 57_000 })).toEqual(hiddenCard);
-  });
-
-  it("keeps no negative time left when paused after the time was up", () => {
-    const paused = run(shown, { type: "pause", now: 12_000 });
-    expect(paused).toMatchObject({ status: "paused", remaining: 0 });
-    const resumed = run(paused, { type: "resume", now: 20_000 });
-    expect(run(resumed, { type: "tick", now: 20_000 })).toEqual(hiddenCard);
-  });
-
-  it("ignores pause while paused and resume while running", () => {
-    const paused = run(shown, { type: "pause", now: 4000 });
-    expect(run(paused, { type: "pause", now: 8000 })).toBe(paused);
-    expect(run(shown, { type: "resume", now: 8000 })).toBe(shown);
-  });
-
-  it("starts a new booking running, also while paused", () => {
-    const replaced = run(
-      shown,
-      { type: "pause", now: 4000 },
-      { type: "show", result: second, kind: "add", now: 5000 },
-    );
-    expect(replaced).toEqual({
-      status: "running",
-      content: { result: second, kind: "add", merged: false },
-      hideAt: 15_000,
-    });
-  });
-
-  it("ignores tick, pause, resume and hide while hidden", () => {
+  it("ignores close and hide while hidden", () => {
     for (const action of [
-      { type: "tick", now: 1000 },
-      { type: "pause", now: 1000 },
-      { type: "resume", now: 1000 },
+      { type: "close" },
       { type: "hide", movementId: first.movement.id },
     ] as const) {
       expect(resultCardReducer(hiddenCard, action)).toBe(hiddenCard);
@@ -186,13 +112,6 @@ describe("resultCardReducer", () => {
 
   it("hides the card that shows the booking", () => {
     expect(run(shown, { type: "hide", movementId: first.movement.id })).toEqual(
-      hiddenCard,
-    );
-  });
-
-  it("hides a paused card that shows the booking", () => {
-    const paused = run(shown, { type: "pause", now: 4000 });
-    expect(run(paused, { type: "hide", movementId: first.movement.id })).toEqual(
       hiddenCard,
     );
   });
@@ -228,28 +147,16 @@ const mergeTarget: Product = {
   target: 4,
 };
 
-// The card of the new product, shown at time 1000.
-const shownNew = run(hiddenCard, { type: "show", result: created, kind: "add", now: 1000 });
+// The card of the new product.
+const shownNew = run(hiddenCard, { type: "show", result: created, kind: "add" });
 
 describe("resultCardReducer with a new product", () => {
   const changed = { ...created.product, target: 3 };
 
-  it("shows the changed product and keeps the time", () => {
-    const updated = run(shownNew, { type: "update", product: changed }, { type: "tick", now: 10_999 });
-    expect(updated).toEqual({
-      status: "running",
+  it("shows the changed product", () => {
+    expect(run(shownNew, { type: "update", product: changed })).toEqual({
+      status: "shown",
       content: { result: { ...created, product: changed }, kind: "add", merged: false },
-      hideAt: 11_000,
-    });
-    expect(run(updated, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
-  });
-
-  it("updates a paused card and keeps it paused", () => {
-    const paused = run(shownNew, { type: "pause", now: 4000 });
-    expect(run(paused, { type: "update", product: changed })).toEqual({
-      status: "paused",
-      content: { result: { ...created, product: changed }, kind: "add", merged: false },
-      remaining: 7000,
     });
   });
 
@@ -257,15 +164,14 @@ describe("resultCardReducer with a new product", () => {
     expect(run(shownNew, { type: "update", product: mergeTarget })).toBe(shownNew);
   });
 
-  it("shows the target after a merge, with the booking, and keeps the time", () => {
-    const merged = run(
-      shownNew,
-      { type: "pause", now: 4000 },
-      { type: "merge", sourceId: created.product.id, target: mergeTarget },
-      { type: "resume", now: 20_000 },
-    );
+  it("shows the target after a merge, with the booking", () => {
+    const merged = run(shownNew, {
+      type: "merge",
+      sourceId: created.product.id,
+      target: mergeTarget,
+    });
     expect(merged).toEqual({
-      status: "running",
+      status: "shown",
       content: {
         result: {
           ...created,
@@ -276,7 +182,6 @@ describe("resultCardReducer with a new product", () => {
         kind: "add",
         merged: true,
       },
-      hideAt: 27_000,
     });
   });
 
@@ -286,7 +191,6 @@ describe("resultCardReducer with a new product", () => {
       sourceId: created.product.id,
       target: mergeTarget,
     });
-    expect(merged).toMatchObject({ status: "running", hideAt: 11_000 });
     if (merged.status === "hidden" || merged.content.kind === "mark") {
       throw new Error("no booking card");
     }
@@ -314,10 +218,9 @@ describe("resultCardReducer with a new product", () => {
       sourceId: created.product.id,
       target: mergeTarget,
     });
-    expect(run(merged, { type: "show", result: first, kind: "add", now: 5000 })).toEqual({
-      status: "running",
+    expect(run(merged, { type: "show", result: first, kind: "add" })).toEqual({
+      status: "shown",
       content: { result: first, kind: "add", merged: false },
-      hideAt: 15_000,
     });
   });
 });
@@ -392,62 +295,41 @@ const listed: MarkResult = {
   message: "Schon auf der Liste: Nudeln",
 };
 
-// The card of the mark, shown at time 1000.
-const shownMark = run(hiddenCard, { type: "show", result: marked, kind: "mark", now: 1000 });
+// The card of the mark.
+const shownMark = run(hiddenCard, { type: "show", result: marked, kind: "mark" });
 
 describe("resultCardReducer with a mark", () => {
-  it("shows a mark for cardDuration", () => {
+  it("shows a mark, without a time limit", () => {
     expect(shownMark).toEqual({
-      status: "running",
+      status: "shown",
       content: { result: marked, kind: "mark" },
-      hideAt: 11_000,
     });
-    expect(run(shownMark, { type: "tick", now: 10_999 })).toBe(shownMark);
-    expect(run(shownMark, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
-  });
-
-  it("stops the time while paused and continues with the time left", () => {
-    const paused = run(shownMark, { type: "pause", now: 4000 });
-    expect(paused).toEqual({
-      status: "paused",
-      content: { result: marked, kind: "mark" },
-      remaining: 7000,
-    });
-    expect(run(paused, { type: "tick", now: 60_000 })).toBe(paused);
-    const resumed = run(paused, { type: "resume", now: 50_000 });
-    expect(resumed).toMatchObject({ status: "running", hideAt: 57_000 });
   });
 
   it("replaces a booking card with a mark and a mark card with a booking", () => {
-    expect(run(shown, { type: "show", result: listed, kind: "mark", now: 5000 })).toEqual({
-      status: "running",
+    expect(run(shown, { type: "show", result: listed, kind: "mark" })).toEqual({
+      status: "shown",
       content: { result: listed, kind: "mark" },
-      hideAt: 15_000,
     });
-    expect(run(shownMark, { type: "show", result: first, kind: "add", now: 5000 })).toEqual({
-      status: "running",
+    expect(run(shownMark, { type: "show", result: first, kind: "add" })).toEqual({
+      status: "shown",
       content: { result: first, kind: "add", merged: false },
-      hideAt: 15_000,
     });
   });
 
-  it("replaces a mark with the next mark, also while paused", () => {
-    const replaced = run(
-      shownMark,
-      { type: "pause", now: 4000 },
-      { type: "show", result: listed, kind: "mark", now: 5000 },
-    );
-    expect(replaced).toEqual({
-      status: "running",
+  it("replaces a mark with the next mark", () => {
+    expect(run(shownMark, { type: "show", result: listed, kind: "mark" })).toEqual({
+      status: "shown",
       content: { result: listed, kind: "mark" },
-      hideAt: 15_000,
     });
+  });
+
+  it("hides the card of a mark on close", () => {
+    expect(run(shownMark, { type: "close" })).toEqual(hiddenCard);
   });
 
   it("hides the card of the mark after the mark of its product was undone", () => {
     expect(run(shownMark, { type: "hideMark", productId: product.id })).toEqual(hiddenCard);
-    const paused = run(shownMark, { type: "pause", now: 4000 });
-    expect(run(paused, { type: "hideMark", productId: product.id })).toEqual(hiddenCard);
   });
 
   it("keeps the card of a mark of another product on hideMark", () => {

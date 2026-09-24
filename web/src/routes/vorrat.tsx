@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { CartIcon } from "../components/CartIcon";
 import { problemCode } from "../lib/api/client";
@@ -26,12 +26,11 @@ const filters: { value: ProductFilter; label: string }[] = [
   { value: "review", label: "Prüfen" },
 ];
 
-// How long the notice of a failed booking or mark stays visible.
-const noticeDuration = 2000;
-
-// The buttons of a row: 44 × 44 px, above the link of the row.
+// The buttons of a row, above the link of the row: 44 × 44 px, growing with
+// the text size up to 48 px, so the stepper still fits into the row of a
+// 320 px wide screen at 200 % text size.
 const rowButtonClass =
-  "pressable relative z-10 flex size-11 shrink-0 items-center justify-center disabled:opacity-40";
+  "pressable relative z-10 flex size-[min(2.75rem,48px)] shrink-0 items-center justify-center disabled:opacity-40";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
@@ -51,7 +50,9 @@ export function StockPage() {
       <h1 className="text-2xl font-semibold">Vorrat</h1>
       {/* Search and filters stay at the top while the list scrolls, below the
           safe area. They lie above the buttons of the rows (z-10) and below
-          the update banner and the navigation bar (z-20). */}
+          the update banner and the navigation bar (z-20). Their minimum
+          height grows only up to 48 px, so with a large text size they take
+          up less than a third of the screen. */}
       <div className="sticky top-[env(safe-area-inset-top)] z-15 bg-canvas pt-4 pb-3">
         <div className="relative">
           <SearchIcon />
@@ -62,7 +63,7 @@ export function StockPage() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Name oder Marke suchen"
             aria-label="Vorrat durchsuchen"
-            className="min-h-11 w-full rounded-lg border border-line-strong bg-surface pr-11 pl-10 text-base [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-h-[min(2.75rem,48px)] w-full rounded-lg border border-line-strong bg-surface pr-11 pl-10 text-base [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query !== "" && (
             <button
@@ -75,7 +76,13 @@ export function StockPage() {
             </button>
           )}
         </div>
-        <div role="radiogroup" aria-label="Filter" className="mt-3 flex flex-wrap gap-2">
+        {/* One row, which scrolls sideways when the filters do not fit (large
+            text size, narrow screen), so the sticky header stays low. */}
+        <div
+          role="radiogroup"
+          aria-label="Filter"
+          className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4"
+        >
           {filters.map(({ value, label }) => (
             <button
               key={value}
@@ -83,7 +90,7 @@ export function StockPage() {
               role="radio"
               aria-checked={filter === value}
               onClick={() => setFilter(value)}
-              className="pressable min-h-11 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-checked:border-accent aria-checked:bg-accent aria-checked:text-white"
+              className="pressable min-h-[min(2.75rem,48px)] shrink-0 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-checked:border-accent aria-checked:bg-accent aria-checked:text-white"
             >
               {label}
             </button>
@@ -152,9 +159,6 @@ function StockRow({ product }: { product: Product }) {
   const movement = useMutation(productMovementMutation(queryClient));
   const mark = useMutation(markProductMutation(queryClient));
   const unmark = useMutation(unmarkMutation(queryClient));
-  useResetAfterError(movement);
-  useResetAfterError(mark);
-  useResetAfterError(unmark);
 
   let notice = "";
   if (movement.isError) {
@@ -168,13 +172,25 @@ function StockRow({ product }: { product: Product }) {
     notice = "Entfernen fehlgeschlagen";
   }
 
+  // The notice of a failure has no time limit (ADR-0016): it stays until
+  // the next action in the row.
+  function clearNotice() {
+    for (const mutation of [movement, mark, unmark]) {
+      if (mutation.isError) {
+        mutation.reset();
+      }
+    }
+  }
+
   function book(kind: ProductMovement["kind"]) {
+    clearNotice();
     movement.mutate({ productId: product.id, kind });
   }
 
   const cart = cartToggle(product);
 
   function toggleCart() {
+    clearNotice();
     if (cart.action === "mark") {
       mark.mutate(product.id);
     } else {
@@ -193,12 +209,12 @@ function StockRow({ product }: { product: Product }) {
         <div className="min-w-0 flex-1">
           <Link
             to={`/produkt/${encodeURIComponent(product.id)}`}
-            className="pressable-row line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
+            className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
           >
             {product.name}
           </Link>
           {product.brand !== null && (
-            <p className="truncate text-sm text-ink-tertiary">{product.brand}</p>
+            <p className="text-sm break-words hyphens-auto text-ink-tertiary">{product.brand}</p>
           )}
           <p role="status" className="text-sm font-medium text-danger">
             {notice}
@@ -224,7 +240,7 @@ function StockRow({ product }: { product: Product }) {
             disabled={movement.isPending}
             onClick={() => book("consume")}
             aria-label={`Eins entnehmen: ${product.name}`}
-            className={`${rowButtonClass} rounded-l-lg text-xl`}
+            className={`${rowButtonClass} rounded-l-lg text-xl leading-none`}
           >
             −
           </button>
@@ -242,7 +258,7 @@ function StockRow({ product }: { product: Product }) {
             disabled={movement.isPending}
             onClick={() => book("add")}
             aria-label={`Eins einlagern: ${product.name}`}
-            className={`${rowButtonClass} rounded-r-lg text-xl`}
+            className={`${rowButtonClass} rounded-r-lg text-xl leading-none`}
           >
             +
           </button>
@@ -250,18 +266,6 @@ function StockRow({ product }: { product: Product }) {
       </div>
     </li>
   );
-}
-
-// Resets a failed mutation of a row after noticeDuration, which hides its
-// notice.
-function useResetAfterError({ isError, reset }: { isError: boolean; reset: () => void }) {
-  useEffect(() => {
-    if (!isError) {
-      return;
-    }
-    const timer = setTimeout(reset, noticeDuration);
-    return () => clearTimeout(timer);
-  }, [isError, reset]);
 }
 
 // The magnifier at the start of the search field.
@@ -298,6 +302,10 @@ function ClearIcon() {
   );
 }
 
+// The picture of a row: 40 px, growing with the text size only up to 48 px,
+// so the name keeps the width.
+const imageClass = "size-[min(2.5rem,48px)] shrink-0 rounded-lg";
+
 function ProductImage({ product }: { product: Product }) {
   const imageUrl = productImageUrl(product);
   if (imageUrl !== null) {
@@ -306,16 +314,16 @@ function ProductImage({ product }: { product: Product }) {
         src={imageUrl}
         loading="lazy"
         alt=""
-        className="size-10 shrink-0 rounded-lg bg-fill object-cover"
+        className={`${imageClass} bg-fill object-cover`}
       />
     );
   }
   return (
     <div
       aria-hidden="true"
-      className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-fill"
+      className={`${imageClass} flex items-center justify-center bg-fill`}
     >
-      <div className="size-5 rounded-md border-2 border-ink-tertiary" />
+      <div className="size-1/2 rounded-md border-2 border-ink-tertiary" />
     </div>
   );
 }

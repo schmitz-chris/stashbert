@@ -15,7 +15,7 @@ const beans: RemovedItem = {
 
 const shown: UndoBarState = { status: "shown", item: flour, hideAt: 1000 + undoBarDuration };
 const undoing: UndoBarState = { status: "undoing", item: flour };
-const failed: UndoBarState = { status: "failed", item: flour, hideAt: 5000 + undoBarDuration };
+const failed: UndoBarState = { status: "failed", item: flour };
 
 describe("undoBarReducer", () => {
   it("shows a removed item for undoBarDuration", () => {
@@ -51,17 +51,15 @@ describe("undoBarReducer", () => {
     );
   });
 
-  it("shows a failed undo for undoBarDuration and offers it again", () => {
-    const state = undoBarReducer(undoing, {
-      type: "undoFailed",
-      productId: flour.productId,
-      now: 5000,
-    });
+  it("shows a failed undo without a time limit and offers it again", () => {
+    const state = undoBarReducer(undoing, { type: "undoFailed", productId: flour.productId });
     expect(state).toEqual(failed);
+    expect(undoBarReducer(state, { type: "tick", now: 1_000_000 })).toBe(state);
     expect(undoBarReducer(state, { type: "undo" })).toEqual(undoing);
-    expect(undoBarReducer(state, { type: "tick", now: 5000 + undoBarDuration })).toEqual(
-      hiddenUndoBar,
-    );
+  });
+
+  it("hides a failed undo on close", () => {
+    expect(undoBarReducer(failed, { type: "close" })).toEqual(hiddenUndoBar);
   });
 
   it("ignores the result of an undo whose bar a removal replaced", () => {
@@ -69,9 +67,9 @@ describe("undoBarReducer", () => {
     expect(undoBarReducer(replaced, { type: "undone", productId: flour.productId })).toBe(
       replaced,
     );
-    expect(
-      undoBarReducer(replaced, { type: "undoFailed", productId: flour.productId, now: 3500 }),
-    ).toBe(replaced);
+    expect(undoBarReducer(replaced, { type: "undoFailed", productId: flour.productId })).toBe(
+      replaced,
+    );
   });
 
   it("ignores actions that do not apply", () => {
@@ -79,8 +77,11 @@ describe("undoBarReducer", () => {
     expect(undoBarReducer(hiddenUndoBar, { type: "undo" })).toBe(hiddenUndoBar);
     expect(undoBarReducer(undoing, { type: "undo" })).toBe(undoing);
     expect(undoBarReducer(shown, { type: "undone", productId: flour.productId })).toBe(shown);
-    expect(
-      undoBarReducer(shown, { type: "undoFailed", productId: flour.productId, now: 2000 }),
-    ).toBe(shown);
+    expect(undoBarReducer(shown, { type: "undoFailed", productId: flour.productId })).toBe(
+      shown,
+    );
+    for (const state of [hiddenUndoBar, shown, undoing]) {
+      expect(undoBarReducer(state, { type: "close" })).toBe(state);
+    }
   });
 });

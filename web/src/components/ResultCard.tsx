@@ -10,12 +10,14 @@ import {
   type CardBooking,
   type CardMark,
 } from "../lib/resultCard";
+import { CloseIcon } from "./CloseIcon";
 
-// How long the message of a target change stays visible.
+// How long the message of a saved target stays visible. A failure stays
+// until the next choice (ADR-0016).
 const noticeDuration = 2000;
 
 const actionClass =
-  "pressable inline-flex min-h-11 items-center rounded-lg border border-line-strong bg-surface px-3 font-medium text-ink";
+  "pressable inline-flex min-h-11 items-center rounded-lg border border-line-strong bg-surface px-3 font-medium hyphens-auto text-ink";
 
 const undoClass =
   "pressable min-h-11 shrink-0 rounded-lg bg-fill px-3 font-medium text-ink disabled:opacity-40";
@@ -30,13 +32,16 @@ interface ResultCardProps {
   onProductChange: (product: Product) => void;
   /** Called by "Stattdessen zu vorhandenem Produkt". */
   onMerge: () => void;
+  /** Called by "Karte schließen". */
+  onClose: () => void;
 }
 
 /**
  * The result card of the scan view: the product of the booking, its
  * stock before and after, and the buttons [+1] and [Rückgängig]. For a
  * booking that created its product it also offers the target chips, a
- * link to the product page and the merge into another product.
+ * link to the product page and the merge into another product. The card
+ * has no time limit; [×] closes it.
  */
 export function ResultCard({
   booking,
@@ -45,6 +50,7 @@ export function ResultCard({
   onUndo,
   onProductChange,
   onMerge,
+  onClose,
 }: ResultCardProps) {
   const nameId = useId();
   const view = cardView(booking);
@@ -52,18 +58,15 @@ export function ResultCard({
 
   return (
     <section aria-labelledby={nameId} className="rounded-xl bg-surface p-3 shadow">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
-            {view.title}
-          </h2>
-          {view.review && (
-            <p className="w-fit rounded bg-warning px-1.5 text-sm font-medium text-ink">
-              Bitte prüfen
-            </p>
-          )}
-          <p className="text-xl font-bold tabular-nums">{view.stock}</p>
-        </div>
+      <CardTitle id={nameId} title={view.title} onClose={onClose} />
+      {view.review && (
+        <p className="w-fit rounded bg-warning px-1.5 text-sm font-medium text-ink">
+          Bitte prüfen
+        </p>
+      )}
+      {/* The buttons move below the stock when the text is large. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <p className="mr-auto text-xl font-bold tabular-nums">{view.stock}</p>
         <button
           type="button"
           disabled={disabled}
@@ -92,26 +95,24 @@ interface MarkResultCardProps {
   /** Locks [Rückgängig], while it runs. */
   disabled: boolean;
   onUndo: () => void;
+  /** Called by "Karte schließen". */
+  onClose: () => void;
 }
 
 /**
  * The result card of the scan view in mode mark (docs/plan.md, F15): the
  * product, "vorgemerkt" or "schon auf der Liste", and [Rückgängig] only if
- * this scan marked the product.
+ * this scan marked the product. The card has no time limit; [×] closes it.
  */
-export function MarkResultCard({ mark, disabled, onUndo }: MarkResultCardProps) {
+export function MarkResultCard({ mark, disabled, onUndo, onClose }: MarkResultCardProps) {
   const nameId = useId();
   const view = markCardView(mark);
 
   return (
     <section aria-labelledby={nameId} className="rounded-xl bg-surface p-3 shadow">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
-            {view.title}
-          </h2>
-          <p className="text-xl font-bold text-marked">{view.status}</p>
-        </div>
+      <CardTitle id={nameId} title={view.title} onClose={onClose} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <p className="mr-auto text-xl font-bold text-marked">{view.status}</p>
         {view.undo && (
           <button type="button" disabled={disabled} onClick={onUndo} className={undoClass}>
             Rückgängig
@@ -119,6 +120,26 @@ export function MarkResultCard({ mark, disabled, onUndo }: MarkResultCardProps) 
         )}
       </div>
     </section>
+  );
+}
+
+// The name of the product on a card, in full, and [×], which closes the
+// card.
+function CardTitle({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
+  return (
+    <div className="-mt-1.5 -mr-1.5 flex items-start gap-2">
+      <h2 id={id} className="min-w-0 flex-1 self-center font-semibold break-words hyphens-auto">
+        {title}
+      </h2>
+      <button
+        type="button"
+        aria-label="Karte schließen"
+        onClick={onClose}
+        className="pressable flex size-11 shrink-0 items-center justify-center rounded-full text-ink-tertiary"
+      >
+        <CloseIcon />
+      </button>
+    </div>
   );
 }
 
@@ -136,10 +157,10 @@ function NewProductActions({
   const queryClient = useQueryClient();
   const update = useMutation(productUpdateMutation(queryClient));
 
-  // Hides the message of a target change after a short time.
+  // Hides the message of a saved target after a short time.
   const { status, reset } = update;
   useEffect(() => {
-    if (status !== "success" && status !== "error") {
+    if (status !== "success") {
       return;
     }
     const timer = setTimeout(reset, noticeDuration);
@@ -162,7 +183,7 @@ function NewProductActions({
 
   return (
     <div className="mt-3 border-t border-line pt-3">
-      <div role="group" aria-label="Soll" className="flex items-center gap-2">
+      <div role="group" aria-label="Soll" className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm font-medium text-ink-secondary">Soll</span>
         {targetChoices.map((value) => {
           const pressed = product.target === value;

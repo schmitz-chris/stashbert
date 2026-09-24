@@ -48,6 +48,24 @@
   html {
     color-scheme: light;
   }
+
+  /*
+   * Dynamic Type (ADR-0016): on iPhone and iPad the root font follows the
+   * text size of the system (17 px at the default size), and every size in
+   * rem grows with it. font: -apple-system-body is not standard and only
+   * known to WebKit. -webkit-touch-callout exists only in WebKit on iOS and
+   * iPadOS, so desktop Safari (13 px) and all other browsers keep their
+   * default size (16 px). The shorthand also sets the family and the line
+   * height; both are set back to the values of the preflight. No font-size
+   * here: it would cut the link to the system setting.
+   */
+  @supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+    html {
+      font: -apple-system-body;
+      font-family: var(--default-font-family);
+      line-height: 1.5;
+    }
+  }
 }
 
 /*

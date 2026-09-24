@@ -282,7 +282,7 @@ function ProductEditor({ product }: { product: Product }) {
         <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Löschen fehlgeschlagen" : ""}
         </p>
-        <div className="mt-4 flex justify-end gap-3">
+        <div className="mt-4 flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={() => setConfirmOpen(false)}
@@ -414,7 +414,8 @@ function BarcodeSection({ product }: { product: Product }) {
         <label htmlFor={inputId} className={labelClass}>
           Barcode hinzufügen
         </label>
-        <div className="mt-1 flex gap-2">
+        {/* The button moves below the field when the text is large. */}
+        <div className="mt-1 flex flex-wrap gap-2">
           <input
             id={inputId}
             value={code}
@@ -429,7 +430,7 @@ function BarcodeSection({ product }: { product: Product }) {
             autoComplete="off"
             aria-invalid={codeRejected}
             aria-describedby={hint !== "" ? hintId : undefined}
-            className="min-h-11 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
+            className="min-h-11 min-w-[8rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
           />
           <button
             type="submit"
@@ -461,7 +462,7 @@ function BarcodeSection({ product }: { product: Product }) {
             ? "Entfernen fehlgeschlagen"
             : ""}
         </p>
-        <div className="mt-4 flex justify-end gap-3">
+        <div className="mt-4 flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={() => setRemoving(null)}

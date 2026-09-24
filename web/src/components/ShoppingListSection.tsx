@@ -3,7 +3,8 @@ import { useEffect, useId, useState } from "react";
 import { markProductMutation, unmarkMutation } from "../lib/api/queries";
 import type { Product } from "../lib/products";
 
-// How long the message of a mark or its removal stays visible.
+// How long the message of a mark or its removal stays visible. A failure
+// stays until the next action (ADR-0016).
 const noticeDuration = 2000;
 
 // The message after a mark or its removal; failed ones are shown in red.
@@ -26,9 +27,9 @@ export function ShoppingListSection({ product }: { product: Product }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const headingId = useId();
 
-  // Hides the message after a short time.
+  // Hides the message of a success after a short time.
   useEffect(() => {
-    if (notice === null) {
+    if (notice === null || notice.failed) {
       return;
     }
     const timer = setTimeout(() => setNotice(null), noticeDuration);

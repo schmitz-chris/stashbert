@@ -64,7 +64,7 @@ export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
           <p role="status" className="mt-2 text-sm font-medium text-danger">
             {merge.isError ? "Zusammenführen fehlgeschlagen" : ""}
           </p>
-          <div className="mt-4 flex justify-end gap-3">
+          <div className="mt-4 flex flex-wrap justify-end gap-3">
             <button type="button" onClick={close} className={cancelClass}>
               Abbrechen
             </button>

@@ -87,7 +87,7 @@ function ManualCodeForm({
       <p id={errorId} role="status" className="mt-1 text-sm font-medium text-danger">
         {error}
       </p>
-      <div className="mt-4 flex justify-end gap-3">
+      <div className="mt-4 flex flex-wrap justify-end gap-3">
         <button
           type="button"
           onClick={onCancel}

@@ -1399,7 +1399,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F21: Dynamic Type und Meldungen ohne Zeitgrenze
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F20
 - **Referenzen:** ADR-0016; hig-pruefung.md H1, M6
 - **Umfang:**

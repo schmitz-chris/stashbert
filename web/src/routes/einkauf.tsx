@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useState } from "react";
 import { Link } from "react-router";
 import { CartIcon } from "../components/CartIcon";
+import { CloseIcon } from "../components/CloseIcon";
 import {
   markProductMutation,
   shoppingListQuery,
@@ -20,7 +21,8 @@ import {
   type UndoBarState,
 } from "../lib/undoBar";
 
-// How long the notice after sharing or after a failed removal stays visible.
+// How long the notice after copying the list stays visible. Failures stay
+// until the next action (ADR-0016).
 const noticeDuration = 2000;
 
 // How often the undo bar checks whether its time is up, in ms.
@@ -39,9 +41,9 @@ export function ShoppingPage() {
   const list = useQuery(shoppingListQuery);
   const [bar, dispatchBar] = useReducer(undoBarReducer, hiddenUndoBar);
 
-  // While the bar runs, reports the time to the reducer, which hides the
-  // bar when its time is up.
-  const barRunning = bar.status === "shown" || bar.status === "failed";
+  // While the bar is shown, reports the time to the reducer, which hides
+  // the bar when its time is up.
+  const barRunning = bar.status === "shown";
   useEffect(() => {
     if (!barRunning) {
       return;
@@ -117,20 +119,11 @@ function ShoppingRow({
 }) {
   const queryClient = useQueryClient();
   const unmark = useMutation(unmarkMutation(queryClient));
-  const { isError, reset } = unmark;
   const quantity = shoppingQuantity(item);
 
-  // Hides the notice of a failed removal after a short time.
-  useEffect(() => {
-    if (!isError) {
-      return;
-    }
-    const timer = setTimeout(reset, noticeDuration);
-    return () => clearTimeout(timer);
-  }, [isError, reset]);
-
   // The link covers the whole row with its ::after box, so a tap anywhere
-  // outside the button opens the product. The button lies above it.
+  // outside the button opens the product. The button lies above it; like
+  // the buttons of the stock list it grows with the text only up to 48 px.
   return (
     <li className="relative flex min-h-11 items-center gap-3 px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -154,7 +147,7 @@ function ShoppingRow({
           <p className="text-xs font-medium text-marked">vorgemerkt</p>
         )}
         <p role="status" className="text-sm font-medium text-danger">
-          {isError ? "Entfernen fehlgeschlagen" : ""}
+          {unmark.isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
       </div>
       {item.marked && (
@@ -167,7 +160,7 @@ function ShoppingRow({
             })
           }
           aria-label={`Von der Liste nehmen: ${item.name}`}
-          className="pressable relative z-10 flex size-11 shrink-0 items-center justify-center rounded-lg bg-marked text-white disabled:opacity-40"
+          className="pressable relative z-10 flex size-[min(2.75rem,48px)] shrink-0 items-center justify-center rounded-lg bg-marked text-white disabled:opacity-40"
         >
           <CartIcon checked />
         </button>
@@ -177,9 +170,10 @@ function ShoppingRow({
 }
 
 // The bar after removing an item: "Entfernt: <Name>" and [Rückgängig],
-// which marks the product again. It floats above the navigation bar (4 rem
-// high, the scan button rises 0.75 rem above it) and its safe area, and
-// leaves the rest of the screen tappable.
+// which marks the product again; after a failed undo also [×], which
+// closes it. It floats above the navigation bar (64 px high, the scan
+// button rises 12 px above it) and its safe area, and leaves the rest of
+// the screen tappable.
 function UndoBar({
   state,
   dispatch,
@@ -194,19 +188,19 @@ function UndoBar({
     dispatch({ type: "undo" });
     mark.mutate(productId, {
       onSuccess: () => dispatch({ type: "undone", productId }),
-      onError: () => dispatch({ type: "undoFailed", productId, now: Date.now() }),
+      onError: () => dispatch({ type: "undoFailed", productId }),
     });
   }
 
   return (
     <div
       role="status"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+88px)] z-30 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]"
     >
       {state.status !== "hidden" && (
-        <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-3 rounded-xl border border-line bg-surface py-2 pr-2 pl-4 shadow-lg">
+        <div className="pointer-events-auto mx-auto flex max-w-md flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-xl border border-line bg-surface py-2 pr-2 pl-4 shadow-lg">
           <p
-            className={`min-w-0 flex-1 break-words hyphens-auto ${state.status === "failed" ? "font-medium text-danger" : "text-ink"}`}
+            className={`min-w-[8rem] flex-1 break-words hyphens-auto ${state.status === "failed" ? "font-medium text-danger" : "text-ink"}`}
           >
             {state.status === "failed"
               ? `Rückgängig fehlgeschlagen: ${state.item.name}`
@@ -220,6 +214,16 @@ function UndoBar({
           >
             Rückgängig
           </button>
+          {state.status === "failed" && (
+            <button
+              type="button"
+              aria-label="Meldung schließen"
+              onClick={() => dispatch({ type: "close" })}
+              className="pressable flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-tertiary"
+            >
+              <CloseIcon />
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -229,9 +233,10 @@ function UndoBar({
 function ShareButton({ items }: { items: ShoppingItem[] }) {
   const [notice, setNotice] = useState<ShareNotice>("");
 
-  // Hides the notice after a short time.
+  // Hides the notice after copying after a short time; a failure stays
+  // until the next tap.
   useEffect(() => {
-    if (notice === "") {
+    if (notice !== "copied") {
       return;
     }
     const timer = setTimeout(() => setNotice(""), noticeDuration);

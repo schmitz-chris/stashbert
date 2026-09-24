@@ -55,7 +55,8 @@ export function StockSection({ product }: { product: Product }) {
         <label htmlFor={inputId} className="block text-sm font-medium text-ink-secondary">
           Neuer Bestand
         </label>
-        <div className="mt-1 flex gap-2">
+        {/* The button moves below the field when the text is large. */}
+        <div className="mt-1 flex flex-wrap gap-2">
           <input
             id={inputId}
             type="number"
@@ -71,7 +72,7 @@ export function StockSection({ product }: { product: Product }) {
                 inventory.reset();
               }
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base"
+            className="min-h-11 min-w-[8rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base"
           />
           <button
             type="submit"

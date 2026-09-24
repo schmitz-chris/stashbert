@@ -1,7 +1,8 @@
 /**
  * The shopping cart of the cart buttons in the stock and shopping lists,
  * drawn with the color of the text like the symbols of the navigation bar;
- * checked, with a tick in the basket.
+ * checked, with a tick in the basket. It grows with the text size up to
+ * 40 px, so it keeps a margin in the row buttons of the stock list.
  */
 export function CartIcon({ checked }: { checked: boolean }) {
   return (
@@ -13,7 +14,7 @@ export function CartIcon({ checked }: { checked: boolean }) {
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="size-6"
+      className="size-[min(1.5rem,40px)]"
     >
       <path d="M2 3h2.5l2.6 12.2a1 1 0 0 0 1 .8h9.4a1 1 0 0 0 1-.76L21 7H5.6" />
       <circle cx="9" cy="20" r="1.5" />

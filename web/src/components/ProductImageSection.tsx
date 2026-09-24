@@ -90,7 +90,7 @@ export function ProductImageSection({ product }: { product: Product }) {
         <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
-        <div className="mt-4 flex justify-end gap-3">
+        <div className="mt-4 flex flex-wrap justify-end gap-3">
           <button
             type="button"
             onClick={() => setConfirmOpen(false)}
