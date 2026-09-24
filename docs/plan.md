@@ -1534,7 +1534,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F28: Frage „Flasche oder Kasten" beim Einlagern
 
-- **Status:** wartet auf Nutzer
+- **Status:** erledigt (vom Nutzer am 24.09.2026 geprüft: Kastenware bei Flensburger eingeschaltet, der Scan fragte und buchte einen Kasten)
 - **Abhängig von:** F27
 - **Referenzen:** ADR-0017; F08 bis F11
 - **Umfang:**
@@ -1549,7 +1549,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F29: Schalter „Kastenware" am Produkt, „War ein Kasten" entfällt
 
-- **Status:** wartet auf Nutzer
+- **Status:** erledigt (vom Nutzer am 24.09.2026 geprüft: Kastenware bei Flensburger eingeschaltet, der Scan fragte und buchte einen Kasten)
 - **Abhängig von:** F28
 - **Referenzen:** ADR-0017 (geändert am 24.09.2026); Nutzer-Rückmeldung vom 24.09.2026 („Das sollte man im Produkt selbst aktivieren können")
 - **Umfang:**
