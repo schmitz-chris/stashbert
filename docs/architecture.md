@@ -109,6 +109,7 @@ Festgelegt in ADR-0008:
 - Import `barcode-detector/ponyfill`, nie das Polyfill.
 - Das WASM (zxing-wasm) wird selbst gehostet und vom Service Worker vorab gecacht.
 - Formate: `ean_13`, `ean_8`, `upc_a`. UPC-E wird nicht unterstützt (7.1).
+- Kamerawahl: ohne manuelle Wahl automatisch die virtuelle Triple- bzw. Dual-Weitwinkel-Kamera, damit iOS für nahe Barcodes ins Makro wechseln kann (AGENTS.md, Kamera).
 - Der Kamera-Stream bleibt offen, solange die Scanner-Ansicht offen ist. Bei `visibilitychange` auf `hidden` werden die Tracks gestoppt.
 - Derselbe Code wird nur einmal verarbeitet, solange er im Bild bleibt; erst nach 2 s ohne ihn zählt er wieder (gleitendes Fenster).
 - Rückmeldung: farbige Fläche und Ton über Web Audio. `navigator.audioSession.type = "playback"` wird gesetzt, falls verfügbar.

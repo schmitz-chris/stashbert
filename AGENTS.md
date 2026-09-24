@@ -201,10 +201,10 @@ web/src/lib/*.ts               reine Funktionen mit *.test.ts daneben
 - Farben nur über die Rollen aus `src/index.css` (`@theme`, z. B. `bg-accent`, `text-danger`, `border-line-strong`), keine Palettenfarben wie `emerald-600` oder `stone-300` direkt. Ausgenommen sind Weiß auf Farbflächen und Schwarz oder Weiß über dem Kamerabild. Jede Rolle hat genau eine Bedeutung (ADR-0016).
 - Alles Tippbare bekommt den gemeinsamen Druckzustand aus `src/index.css`: `pressable` für Knöpfe und Links, `pressable-row` für Zeilen, die ein Link mit `::after` abdeckt.
 
-**Kamera** (bewährt im Test auf iPhone 15 und 16 Pro):
+**Kamera** (Nutzer-Rückmeldung vom 24.09.2026: die Standard-Rückkamera fokussiert nicht immer nah genug):
 
-- Standard ist die Standard-Rückkamera (`facingMode: "environment"`, ideal 1280 × 720), keine automatische Objektivwahl. Sie reicht auch auf dem 16 Pro aus der Nähe.
-- Eine manuell gewählte Kamera wird in `localStorage` gespeichert. Licht und Zoom nur anzeigen, wenn das Gerät sie kann.
+- Ohne manuelle Wahl sucht die App eine virtuelle Mehrfachkamera, die iOS selbst zwischen den Objektiven wechseln lässt (auch Makro): Triple, dann Dual-Weitwinkel, sonst die Standard-Rückkamera (`facingMode: "environment"`, ideal 1280 × 720). Die reine Dual-Kamera (Weitwinkel und Tele) wird nicht automatisch gewählt, weil sie kein Makro bietet. Erkannt wird über die Gerätebezeichnung (deutsch und englisch).
+- Eine manuell gewählte Kamera wird in `localStorage` gespeichert und hat Vorrang; „Automatisch" im Kamera-Menü hebt sie wieder auf. Licht und Zoom nur anzeigen, wenn das Gerät sie kann.
 
 **Tests und Lint:**
 

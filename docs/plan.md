@@ -1460,6 +1460,24 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
   1. Vitest-Tests für Titel-Zuordnung und Reiter-Merken.
   2. `make check` ist grün.
 
+## Phase 1h: Bessere Kamera für nahe Barcodes
+
+### F25: Automatische Kamerawahl
+
+- **Status:** offen
+- **Abhängig von:** F24
+- **Referenzen:** AGENTS.md (Kamera), architecture.md 4.3; Quellen: dominikschilling.de/notes/ios-access-all-back-cameras-mediadevices-api/, developer.apple.com/forums/thread/772553 und /thread/776460
+- **Umfang:**
+  - Reine Funktion `preferredCamera(devices)` in `web/src/lib/scanner/` (Eingabe: `videoinput`-Geräte mit `deviceId` und `label`): wählt eine Rückkamera in der Reihenfolge Triple, Dual-Weitwinkel; sonst keine (dann bleibt die Standard-Rückkamera). Erkennung über Schlüsselwörter in deutschen und englischen Bezeichnungen, ohne Frontkameras, ohne Ultraweitwinkel und Tele allein, ohne die reine Dual-Kamera.
+  - Ablauf im Scanner ohne manuelle Wahl: Kamera wie bisher mit `facingMode: "environment"` öffnen (nötig für Erlaubnis und Bezeichnungen), dann `enumerateDevices()`, `preferredCamera` anwenden; gibt es eine bessere Kamera, sauber auf sie umschalten (alte Spur stoppen, nur ein Stream gleichzeitig). Die automatisch gewählte `deviceId` wird getrennt von der manuellen Wahl gemerkt (eigener Schlüssel), damit der nächste Start direkt mit ihr beginnt; scheitert das (Gerät fehlt), zurück auf den Standard und neu wählen.
+  - Zoom: Bietet die gewählte virtuelle Kamera laut `getCapabilities().zoom` ein Minimum von 1 und ein Maximum von mindestens 2, wird beim Start Zoom 2 gesetzt (entspricht „1x" der Kamera-App mit Weitwinkel als Ausgangsbild; iOS wechselt beim Annähern trotzdem ins Makro). Liegt das Minimum unter 1, bleibt der Zoom bei 1. Die Entscheidung als reine Funktion mit Tests.
+  - Kamera-Menü: Eintrag „Automatisch" oben in der Auswahl (Standard, solange nichts manuell gewählt ist); die Auswahl einer Kamera speichert sie wie bisher als manuelle Wahl, „Automatisch" löscht sie. Unter der Auswahl klein die Bezeichnung der aktiven Kamera und der Zoombereich (hilft beim Test auf dem Gerät).
+- **Nicht im Umfang:** Objektivwechsel verhindern, eigene Fokus-Steuerung, Backend.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für `preferredCamera` mit realistischen deutschen und englischen Bezeichnungen (iPhone 15, iPhone 16 Pro, iPad ohne virtuelle Kameras, Android-ähnliche Bezeichnungen) und für die Zoom-Entscheidung.
+  2. `make check` ist grün.
+  3. (Nutzer) Nahe, kleine Barcodes werden auf beiden iPhones scharf gelesen; das Menü zeigt die gewählte Kamera.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
