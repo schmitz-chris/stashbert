@@ -1159,7 +1159,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### L01: Release-Binary für den LXC
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B29, F13b
 - **Referenzen:** ADR-0014, architecture.md 9.1
 - **Umfang:**

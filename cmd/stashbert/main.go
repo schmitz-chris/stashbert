@@ -4,7 +4,9 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -30,10 +32,41 @@ import (
 var version = "dev"
 
 func main() {
+	done, err := parseFlags(os.Args[1:], version, os.Stdout, os.Stderr)
+	if err != nil {
+		// Same exit codes as flag.ExitOnError: 0 for -h, otherwise 2.
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		os.Exit(2)
+	}
+	if done {
+		return
+	}
 	if err := run(); err != nil {
 		slog.New(slog.NewJSONHandler(os.Stdout, nil)).Error("stashbert stopped", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+// parseFlags parses the command line arguments without the program name.
+// It reports done when the program should end without starting the server,
+// which is the case after -version has written the version to stdout. Parse
+// errors and the usage go to stderr.
+func parseFlags(args []string, version string, stdout, stderr io.Writer) (done bool, err error) {
+	fs := flag.NewFlagSet("stashbert", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	showVersion := fs.Bool("version", false, "print the version and exit")
+	if err := fs.Parse(args); err != nil {
+		return false, err
+	}
+	if *showVersion {
+		if _, err := fmt.Fprintln(stdout, version); err != nil {
+			return false, fmt.Errorf("print version: %w", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func run() error {
