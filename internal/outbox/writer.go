@@ -1,7 +1,7 @@
 // Package outbox writes the domain events into the table outbox and delivers
 // them to the MQTT broker (ADR-0018, architecture.md 11.3 and 11.4). It also
-// publishes the summary, which does not go through the outbox
-// (architecture.md, 11.5).
+// publishes the summary and the discovery for Home Assistant, which do not
+// go through the outbox (architecture.md, 11.5 and 11.6).
 package outbox
 
 import (

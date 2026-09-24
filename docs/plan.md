@@ -1642,7 +1642,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B38: HA-Discovery
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B36, B37
 - **Referenzen:** ADR-0018; architecture.md 11.6
 - **Umfang:**

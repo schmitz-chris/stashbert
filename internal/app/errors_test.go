@@ -101,7 +101,7 @@ func TestRequestErrorHandler(t *testing.T) {
 func TestPanicReturnsInternal(t *testing.T) {
 	var logs bytes.Buffer
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking, http.NotFoundHandler())
+	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking, http.NotFoundHandler(), nil)
 	if err != nil {
 		t.Fatalf("newChain: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestPanicReturnsInternal(t *testing.T) {
 
 func TestWebPanicReturnsInternal(t *testing.T) {
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h, err := newChain(slog.New(slog.DiscardHandler), http.NotFoundHandler(), panicking)
+	h, err := newChain(slog.New(slog.DiscardHandler), http.NotFoundHandler(), panicking, nil)
 	if err != nil {
 		t.Fatalf("newChain: %v", err)
 	}

@@ -24,14 +24,15 @@ const summaryPayload = `{"product_count":8,"shopping_count":5,"empty_count":3,"r
 // emptySummaryPayload is the summary without products.
 const emptySummaryPayload = `{"product_count":0,"shopping_count":0,"empty_count":0,"review_count":0,"shopping":[],"shopping_truncated":false}`
 
-// runSummary starts s.Run with delay and ends it when the test ends.
-func runSummary(t *testing.T, s *outbox.SummaryPublisher, delay time.Duration) {
+// runSummary starts s.Run with delay and interval and ends it when the
+// test ends.
+func runSummary(t *testing.T, s *outbox.SummaryPublisher, delay, interval time.Duration) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		s.Run(ctx, delay)
+		s.Run(ctx, delay, interval)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -168,7 +169,7 @@ func TestSummaryPublisherCoalescesRequests(t *testing.T) {
 	client := newFakeClient(mqtt.StateConnected)
 	logger, logs := newLogger()
 	s := outbox.NewSummaryPublisher(sqlDB, client, "vorrat", logger)
-	runSummary(t, s, delay)
+	runSummary(t, s, delay, time.Hour)
 
 	s.Request()
 	time.Sleep(delay / 3)
@@ -202,7 +203,7 @@ func TestSummaryPublisherRequestBeforeRun(t *testing.T) {
 		s.Request()
 	}
 
-	runSummary(t, s, 10*time.Millisecond)
+	runSummary(t, s, 10*time.Millisecond, time.Hour)
 
 	checkSummaryCall(t, client, emptySummaryPayload)
 	checkNoCall(t, client, 100*time.Millisecond)
@@ -213,12 +214,32 @@ func TestSummaryPublisherWithoutConnection(t *testing.T) {
 	client := newFakeClient(mqtt.StateConnecting)
 	logger, logs := newLogger()
 	s := outbox.NewSummaryPublisher(openDB(t), client, "vorrat", logger)
-	runSummary(t, s, 10*time.Millisecond)
+	runSummary(t, s, 10*time.Millisecond, time.Hour)
 
 	s.Request()
 
 	receive(t, client.states, "a look at the state")
 	checkNoCall(t, client, 100*time.Millisecond)
+	if out := logs.String(); out != "" {
+		t.Errorf("log = %s, want none", out)
+	}
+}
+
+// Run also publishes the summary every interval, without requests.
+func TestSummaryPublisherPeriodic(t *testing.T) {
+	const interval = 100 * time.Millisecond
+	client := newFakeClient(mqtt.StateConnected)
+	logger, logs := newLogger()
+	s := outbox.NewSummaryPublisher(openDB(t), client, "vorrat", logger)
+	start := time.Now()
+	runSummary(t, s, time.Hour, interval)
+
+	for i := 1; i <= 3; i++ {
+		checkSummaryCall(t, client, emptySummaryPayload)
+		if d := time.Since(start); d < time.Duration(i)*interval {
+			t.Errorf("publish %d after %v, want at least %v", i, d, time.Duration(i)*interval)
+		}
+	}
 	if out := logs.String(); out != "" {
 		t.Errorf("log = %s, want none", out)
 	}

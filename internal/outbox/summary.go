@@ -16,6 +16,11 @@ import (
 // succession after which the summary is published (architecture.md, 11.5).
 const SummaryDelay = time.Second
 
+// SummaryInterval is the time between the periodic publishes of the
+// summary, which catch the changes of background jobs (architecture.md,
+// 11.5).
+const SummaryInterval = 5 * time.Minute
+
 // summaryMessage is the summary on <p>/state/summary, the same JSON as the
 // response of GET /summary (architecture.md, 11.5).
 type summaryMessage struct {
@@ -115,12 +120,15 @@ func (s *SummaryPublisher) publish(ctx context.Context) error {
 // Run publishes the summary delay after the last of several requests in
 // quick succession, until ctx ends: every request starts the delay anew,
 // and when it has passed without a request, Run calls Publish. A request
-// during Publish starts the next delay. A pending request is dropped when
-// ctx ends. Run blocks until ctx ends.
-func (s *SummaryPublisher) Run(ctx context.Context, delay time.Duration) {
+// during Publish starts the next delay. In addition, Run calls Publish
+// every interval, which must be greater than 0. A pending request is
+// dropped when ctx ends. Run blocks until ctx ends.
+func (s *SummaryPublisher) Run(ctx context.Context, delay, interval time.Duration) {
 	timer := time.NewTimer(delay)
 	timer.Stop()
 	defer timer.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -130,6 +138,8 @@ func (s *SummaryPublisher) Run(ctx context.Context, delay time.Duration) {
 			// delivered yet.
 			timer.Reset(delay)
 		case <-timer.C:
+			s.Publish(ctx)
+		case <-ticker.C:
 			s.Publish(ctx)
 		}
 	}

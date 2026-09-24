@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/schmitz-chris/stashbert/internal/app"
 	"github.com/schmitz-chris/stashbert/internal/config"
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/mqtt"
 	"github.com/schmitz-chris/stashbert/internal/outbox"
@@ -317,7 +319,7 @@ func TestSummaryOverMQTT(t *testing.T) {
 		}
 	})
 	startJob(t, func(ctx context.Context) { deliverer.Run(ctx, outbox.MinBackoff, outbox.MaxBackoff) })
-	startJob(t, func(ctx context.Context) { summary.Run(ctx, delay) })
+	startJob(t, func(ctx context.Context) { summary.Run(ctx, delay, time.Hour) })
 
 	// After the connection.
 	checkSummaryMessage(t, srv, h, msgs, summaryTestJSON)
@@ -397,4 +399,200 @@ func checkSummaryMessage(t *testing.T, srv *mochi.Server, h http.Handler, msgs <
 	if len(stored) != 1 || !stored[0].FixedHeader.Retain || string(stored[0].Payload) != m.payload {
 		t.Errorf("retained messages on vorrat/state/summary = %v, want exactly the last one", stored)
 	}
+}
+
+// subscribeAll subscribes the broker's inline client to the filters and
+// returns all messages it sees in one channel, including retained ones.
+func subscribeAll(t *testing.T, srv *mochi.Server, filters ...string) <-chan published {
+	t.Helper()
+	msgs := make(chan published, 32)
+	for i, filter := range filters {
+		if err := srv.Subscribe(filter, i+1, func(_ *mochi.Client, _ packets.Subscription, pk packets.Packet) {
+			msgs <- published{pk.TopicName, string(pk.Payload)}
+		}); err != nil {
+			t.Fatalf("subscribe %s: %v", filter, err)
+		}
+	}
+	return msgs
+}
+
+// checkMessage receives the next message from msgs and checks that it is
+// payload on topic.
+func checkMessage(t *testing.T, msgs <-chan published, topic, payload string) {
+	t.Helper()
+	select {
+	case m := <-msgs:
+		if m.topic != topic || m.payload != payload {
+			t.Fatalf("message on %s: %q\nwant on %s: %q", m.topic, m.payload, topic, payload)
+		}
+	case <-time.After(mqttWait):
+		t.Fatalf("timeout waiting for %s", topic)
+	}
+}
+
+// startDiscovery wires the client, the summary publisher and the discovery
+// for cfg as in main, and runs the client and the discovery with delay
+// until the test ends.
+func startDiscovery(t *testing.T, cfg config.MQTT, delay time.Duration) {
+	t.Helper()
+	db := newDB(t)
+	logger := slog.New(slog.DiscardHandler)
+	client, err := mqtt.New(cfg, logger)
+	if err != nil {
+		t.Fatalf("mqtt.New: %v", err)
+	}
+	summary := outbox.NewSummaryPublisher(db, client, cfg.TopicPrefix, logger)
+	discovery, err := outbox.NewDiscovery(client, cfg, "dev", summary.Publish, logger)
+	if err != nil {
+		t.Fatalf("NewDiscovery: %v", err)
+	}
+	client.OnConnect(discovery.Publish)
+	client.OnConnect(summary.Publish)
+	client.OnMessage(discovery.Receive)
+	// Stopped in reverse order: the discovery first, then the client.
+	startJob(t, func(ctx context.Context) {
+		if err := client.Run(ctx); err != nil {
+			t.Errorf("mqtt Run: %v", err)
+		}
+	})
+	startJob(t, func(ctx context.Context) { discovery.Run(ctx, delay, delay) })
+}
+
+// emptySummaryJSON is the summary on the broker without products.
+const emptySummaryJSON = `{"product_count":0,"shopping_count":0,"empty_count":0,"review_count":0,"shopping":[],"shopping_truncated":false}`
+
+// TestDiscoveryOverMQTT announces StashBert to Home Assistant with the
+// discovery wired as in main: retained after the connection, and after the
+// birth message online again together with the status and the summary
+// (architecture.md, 11.6).
+func TestDiscoveryOverMQTT(t *testing.T) {
+	const delay = 200 * time.Millisecond
+	srv, url := startBroker(t)
+	msgs := subscribeAll(t, srv, "homeassistant/device/#", "vorrat/status", "vorrat/state/#")
+	payload, err := outbox.DiscoveryPayload("vorrat", "dev")
+	if err != nil {
+		t.Fatalf("DiscoveryPayload: %v", err)
+	}
+	startDiscovery(t, config.MQTT{
+		URL: url, ClientID: "stashbert", TopicPrefix: "vorrat", HADiscovery: true, HAPrefix: "homeassistant",
+	}, delay)
+
+	// After the connection.
+	checkMessage(t, msgs, "vorrat/status", "online")
+	checkMessage(t, msgs, "homeassistant/device/vorrat/config", string(payload))
+	checkMessage(t, msgs, "vorrat/state/summary", emptySummaryJSON)
+	stored := srv.Topics.Messages("homeassistant/device/vorrat/config")
+	if len(stored) != 1 || !stored[0].FixedHeader.Retain || string(stored[0].Payload) != string(payload) {
+		t.Errorf("retained messages on homeassistant/device/vorrat/config = %v, want the discovery", stored)
+	}
+	checkNoMessage(t, msgs, 3*delay)
+
+	// Home Assistant goes offline: no answer.
+	if err := srv.Publish("homeassistant/status", []byte("offline"), false, 1); err != nil {
+		t.Fatalf("publish offline: %v", err)
+	}
+	checkNoMessage(t, msgs, 3*delay)
+
+	// Home Assistant is back: one answer after the delay for several birth
+	// messages.
+	start := time.Now()
+	for range 3 {
+		if err := srv.Publish("homeassistant/status", []byte("online"), false, 1); err != nil {
+			t.Fatalf("publish online: %v", err)
+		}
+	}
+	checkMessage(t, msgs, "homeassistant/device/vorrat/config", string(payload))
+	if elapsed := time.Since(start); elapsed < delay {
+		t.Errorf("discovery published %v after the birth message, want at least %v", elapsed, delay)
+	}
+	checkMessage(t, msgs, "vorrat/status", "online")
+	checkMessage(t, msgs, "vorrat/state/summary", emptySummaryJSON)
+	checkNoMessage(t, msgs, 3*delay)
+}
+
+// TestDiscoveryDisabledOverMQTT removes the announcement with
+// MQTT_HA_DISCOVERY=false: an empty retained payload after the connection,
+// and no answer to the birth message (architecture.md, 11.6).
+func TestDiscoveryDisabledOverMQTT(t *testing.T) {
+	const delay = 100 * time.Millisecond
+	srv, url := startBroker(t)
+	// From an earlier start with discovery.
+	if err := srv.Publish("homeassistant/device/vorrat/config", []byte(`{"dev": {}}`), true, 1); err != nil {
+		t.Fatalf("publish retained: %v", err)
+	}
+	msgs := subscribeAll(t, srv, "homeassistant/device/#", "vorrat/state/#")
+	checkMessage(t, msgs, "homeassistant/device/vorrat/config", `{"dev": {}}`)
+	startDiscovery(t, config.MQTT{
+		URL: url, ClientID: "stashbert", TopicPrefix: "vorrat", HADiscovery: false, HAPrefix: "homeassistant",
+	}, delay)
+
+	checkMessage(t, msgs, "homeassistant/device/vorrat/config", "")
+	checkMessage(t, msgs, "vorrat/state/summary", emptySummaryJSON)
+	if stored := srv.Topics.Messages("homeassistant/device/vorrat/config"); len(stored) != 0 {
+		t.Errorf("retained messages on homeassistant/device/vorrat/config = %v, want none", stored)
+	}
+
+	if err := srv.Publish("homeassistant/status", []byte("online"), false, 1); err != nil {
+		t.Fatalf("publish online: %v", err)
+	}
+	checkNoMessage(t, msgs, 5*delay)
+}
+
+// TestSummaryAfterChangeOverMQTT publishes the summary after a successful
+// changing API request without an event, but not after reading or failed
+// requests (architecture.md, 11.5).
+func TestSummaryAfterChangeOverMQTT(t *testing.T) {
+	const delay = 200 * time.Millisecond
+	srv, url := startBroker(t)
+	msgs := subscribeAll(t, srv, "vorrat/state/#")
+
+	db := newDB(t)
+	insertSummaryProducts(t, db, summaryTestProducts...)
+	logger := slog.New(slog.DiscardHandler)
+	client, err := mqtt.New(config.MQTT{URL: url, ClientID: "stashbert", TopicPrefix: "vorrat", HAPrefix: "homeassistant"}, logger)
+	if err != nil {
+		t.Fatalf("mqtt.New: %v", err)
+	}
+	summary := outbox.NewSummaryPublisher(db, client, "vorrat", logger)
+	client.OnConnect(summary.Publish)
+	// Without events, only the handler can request the summary.
+	h, _ := newAppWithDeps(t, app.Deps{
+		DB: db, Publisher: events.Nop{}, Lookuper: lookup.NewDisabledClient(), ImageDir: t.TempDir(),
+		OnChange: summary.Request,
+	})
+	// Stopped in reverse order: the summary publisher first, then the client.
+	startJob(t, func(ctx context.Context) {
+		if err := client.Run(ctx); err != nil {
+			t.Errorf("mqtt Run: %v", err)
+		}
+	})
+	startJob(t, func(ctx context.Context) { summary.Run(ctx, delay, time.Hour) })
+
+	// After the connection.
+	checkSummaryMessage(t, srv, h, msgs, summaryTestJSON)
+
+	// Reading and failed requests.
+	for _, tt := range []struct {
+		rec    *httptest.ResponseRecorder
+		status int
+	}{
+		{get(h, "/api/v1/products"), http.StatusOK},
+		{get(h, "/api/v1/summary"), http.StatusOK},
+		{patchProduct(h, "unknown", `{"name": "Vollmilch"}`), http.StatusNotFound},
+		{patchProduct(h, "s5", `{"name": " "}`), http.StatusBadRequest},
+	} {
+		if tt.rec.Code != tt.status {
+			t.Fatalf("status = %d, want %d, body %s", tt.rec.Code, tt.status, tt.rec.Body.String())
+		}
+	}
+	checkNoMessage(t, msgs, 3*delay)
+
+	// Renaming Milch: no event, but a new summary.
+	start := time.Now()
+	decodeProduct(t, patchProduct(h, "s5", `{"name": "Vollmilch"}`))
+	checkSummaryMessage(t, srv, h, msgs, strings.Replace(summaryTestJSON, `"Milch"`, `"Vollmilch"`, 1))
+	if elapsed := time.Since(start); elapsed < delay {
+		t.Errorf("summary published %v after the request, want at least %v", elapsed, delay)
+	}
+	checkNoMessage(t, msgs, 3*delay)
 }

@@ -140,14 +140,18 @@ func run() error {
 	// connection and every new event (architecture.md, 11.4). The
 	// snapshotter writes shopping.snapshot into the outbox on requests from
 	// <p>/in/snapshot and POST /shopping-list/snapshot (architecture.md, 11.3).
-	// The summary goes out retained after every connection and 1 s after the
-	// last of several events in quick succession, which the writer reports
-	// (architecture.md, 11.5).
+	// The summary goes out retained after every connection, 1 s after the
+	// last of several events or successful changing API requests in quick
+	// succession, which the writer and the handler report, and every 5 min
+	// (architecture.md, 11.5). The discovery for Home Assistant goes out after
+	// every connection, before the summary, and answers the birth message of
+	// Home Assistant (architecture.md, 11.6).
 	var (
 		mqttClient  *mqtt.Client
 		deliverer   *outbox.Deliverer
 		snapshotter *outbox.Snapshotter
 		summary     *outbox.SummaryPublisher
+		discovery   *outbox.Discovery
 		publisher   events.Publisher = events.Nop{}
 	)
 	if cfg.MQTT.URL != "" {
@@ -156,8 +160,13 @@ func run() error {
 		}
 		deliverer = outbox.NewDeliverer(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
 		summary = outbox.NewSummaryPublisher(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
+		if discovery, err = outbox.NewDiscovery(mqttClient, cfg.MQTT, version, summary.Publish, logger); err != nil {
+			return fmt.Errorf("create discovery: %w", err)
+		}
 		mqttClient.OnConnect(func(context.Context) { deliverer.Wake() })
+		mqttClient.OnConnect(discovery.Publish)
 		mqttClient.OnConnect(summary.Publish)
+		mqttClient.OnMessage(discovery.Receive)
 		writer := outbox.NewWriter(db, deliverer.Wake, summary.Request, logger)
 		publisher = writer
 		snapshotter = outbox.NewSnapshotter(writer, cfg.MQTT.TopicPrefix, logger)
@@ -168,9 +177,10 @@ func run() error {
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
 	}
 	// Without MQTT, Snapshots stays a nil interface, not one holding a nil
-	// pointer.
+	// pointer, and OnChange stays nil.
 	if snapshotter != nil {
 		deps.Snapshots = snapshotter
+		deps.OnChange = summary.Request
 	}
 	handler, err := app.NewHandler(cfg, deps)
 	if err != nil {
@@ -228,16 +238,17 @@ func run() error {
 			<-mqttDone
 		}()
 
-		// The deliverer, the snapshotter and the summary publisher also have
-		// their own context. Their deferred call runs before the one of the
-		// client, so they stop after the HTTP server and before the client
-		// publishes offline; undelivered events stay in the outbox for the
-		// next start.
+		// The deliverer, the snapshotter, the summary publisher and the
+		// discovery also have their own context. Their deferred call runs
+		// before the one of the client, so they stop after the HTTP server
+		// and before the client publishes offline; undelivered events stay in
+		// the outbox for the next start.
 		outboxCtx, stopOutbox := context.WithCancel(context.Background())
 		var outboxJobs sync.WaitGroup
 		outboxJobs.Go(func() { deliverer.Run(outboxCtx, outbox.MinBackoff, outbox.MaxBackoff) })
 		outboxJobs.Go(func() { snapshotter.Run(outboxCtx, outbox.SnapshotWindow) })
-		outboxJobs.Go(func() { summary.Run(outboxCtx, outbox.SummaryDelay) })
+		outboxJobs.Go(func() { summary.Run(outboxCtx, outbox.SummaryDelay, outbox.SummaryInterval) })
+		outboxJobs.Go(func() { discovery.Run(outboxCtx, outbox.MinBirthDelay, outbox.MaxBirthDelay) })
 		defer func() {
 			stopOutbox()
 			outboxJobs.Wait()
