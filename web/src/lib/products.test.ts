@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   brandAndSize,
   filterProducts,
+  findByBarcode,
   matches,
   mergeCandidates,
   replaceProduct,
@@ -253,5 +254,55 @@ describe("withoutBarcode", () => {
   it("keeps the barcodes for an unknown code", () => {
     const original = product({ barcodes: [nutella] });
     expect(withoutBarcode(original, "20004002").barcodes).toEqual([nutella]);
+  });
+});
+
+describe("findByBarcode", () => {
+  // Stored as the API delivers them: normalized, UPC-A with a leading "0".
+  const beer = product({
+    id: "beer",
+    name: "Jever Pilsener",
+    crate_size: 20,
+    barcodes: [
+      { code: "0034000470693", units: 1 },
+      { code: "4001686301265", units: 1 },
+    ],
+  });
+  const beans = product({
+    id: "beans",
+    name: "Kidneybohnen",
+    barcodes: [{ code: "20004002", units: 1 }],
+  });
+  const products = [beans, beer];
+
+  it("finds the product of an EAN-13 among its barcodes", () => {
+    expect(findByBarcode(products, "4001686301265")).toBe(beer);
+  });
+
+  it("finds the product of an EAN-8", () => {
+    expect(findByBarcode(products, "20004002")).toBe(beans);
+  });
+
+  it("finds a UPC-A code under its EAN-13 with a leading zero", () => {
+    expect(findByBarcode(products, "034000470693")).toBe(beer);
+    expect(findByBarcode(products, "0034000470693")).toBe(beer);
+  });
+
+  it("finds a GTIN-14 with a leading zero under its EAN-13", () => {
+    expect(findByBarcode(products, "00034000470693")).toBe(beer);
+  });
+
+  it("finds nothing for an unknown code", () => {
+    expect(findByBarcode(products, "3017620422003")).toBeUndefined();
+  });
+
+  it("finds nothing for an invalid code", () => {
+    expect(findByBarcode(products, "4001686301264")).toBeUndefined();
+    expect(findByBarcode(products, "")).toBeUndefined();
+  });
+
+  it("finds nothing without a loaded list", () => {
+    expect(findByBarcode(undefined, "4001686301265")).toBeUndefined();
+    expect(findByBarcode([], "4001686301265")).toBeUndefined();
   });
 });

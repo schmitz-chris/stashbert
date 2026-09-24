@@ -3,11 +3,15 @@ import type { Movement } from "./movements";
 import type { Product } from "./products";
 import {
   cardView,
+  crateChoices,
   formatStockChange,
   hiddenCard,
   markCardView,
+  offersCrate,
+  parseCrateSize,
   resultCardReducer,
   targetChoices,
+  undoOrder,
   type CardBooking,
   type ResultCardAction,
   type ResultCardState,
@@ -404,4 +408,191 @@ describe("formatStockChange", () => {
   ])("shows the stock before and after %s", (_name, booked, text) => {
     expect(formatStockChange(booked)).toBe(text);
   });
+
+  it("shows the stock before the first and after the last of two bookings", () => {
+    const bottle = movement({ delta: 1, stock_after: 4 });
+    const rest = movement({ delta: 19, stock_after: 23 });
+    expect(formatStockChange(bottle, rest)).toBe("3 → 23");
+  });
+});
+
+// The first bottle of a crate of beer (3 → 4) and, after "War ein Kasten"
+// with 20, the rest of the crate (4 → 23).
+const beer: Product = { ...product, name: "Jever Pilsener", stock: 4 };
+const bottle: MovementResult = {
+  ...result("01a0ce63-0000-7000-8000-000000000011"),
+  product: beer,
+  message: "Jever Pilsener 3 → 4",
+};
+const rest: MovementResult = {
+  movement: movement({ id: "01a0ce63-0000-7000-8000-000000000012", delta: 19, stock_after: 23 }),
+  product: { ...beer, stock: 23, crate_size: 20 },
+  product_created: false,
+  warnings: [],
+  message: "Jever Pilsener 4 → 23",
+};
+const shownBottle = run(hiddenCard, { type: "show", result: bottle, kind: "add" });
+const shownCrate = run(shownBottle, {
+  type: "crate",
+  movementId: bottle.movement.id,
+  rest,
+});
+
+describe("resultCardReducer with a crate", () => {
+  it("shows the bottle and the rest of the crate as one booking", () => {
+    expect(shownCrate).toEqual({
+      status: "shown",
+      content: {
+        result: { ...bottle, product: rest.product },
+        kind: "add",
+        merged: false,
+        rest,
+      },
+    });
+  });
+
+  it("ignores the rest of a crate for another booking", () => {
+    expect(run(shown, { type: "crate", movementId: bottle.movement.id, rest })).toBe(shown);
+  });
+
+  it("ignores a second rest and a rest while hidden or on a mark", () => {
+    expect(run(shownCrate, { type: "crate", movementId: bottle.movement.id, rest })).toBe(
+      shownCrate,
+    );
+    expect(run(hiddenCard, { type: "crate", movementId: bottle.movement.id, rest })).toBe(
+      hiddenCard,
+    );
+    expect(run(shownMark, { type: "crate", movementId: bottle.movement.id, rest })).toBe(
+      shownMark,
+    );
+  });
+
+  it("shows the first bottle alone once the rest was undone", () => {
+    const undone = run(shownCrate, { type: "hide", movementId: rest.movement.id });
+    if (undone.status === "hidden" || undone.content.kind === "mark") {
+      throw new Error("no booking card");
+    }
+    expect(undone.content.result.movement.id).toBe(bottle.movement.id);
+    expect(undone.content.rest).toBeUndefined();
+    expect(cardView(undone.content).stock).toBe("3 → 4");
+  });
+
+  it("hides the card once the first bottle was undone as well", () => {
+    expect(
+      run(
+        shownCrate,
+        { type: "hide", movementId: rest.movement.id },
+        { type: "hide", movementId: bottle.movement.id },
+      ),
+    ).toEqual(hiddenCard);
+  });
+
+  it("keeps the rest of the crate after a merge", () => {
+    const merged = run(shownCrate, {
+      type: "merge",
+      sourceId: product.id,
+      target: mergeTarget,
+    });
+    if (merged.status === "hidden" || merged.content.kind === "mark") {
+      throw new Error("no booking card");
+    }
+    expect(merged.content.rest).toBe(rest);
+    expect(merged.content.merged).toBe(true);
+  });
+});
+
+describe("cardView with a crate", () => {
+  it("shows the stock before the bottle and after the rest", () => {
+    if (shownCrate.status === "hidden" || shownCrate.content.kind === "mark") {
+      throw new Error("no booking card");
+    }
+    expect(cardView(shownCrate.content)).toEqual({
+      title: "Jever Pilsener",
+      stock: "3 → 23",
+      isNew: false,
+      review: false,
+    });
+  });
+
+  it("keeps a new product new after the rest of its crate", () => {
+    const shownNewCrate = run(
+      shownNew,
+      { type: "crate", movementId: created.movement.id, rest },
+    );
+    if (shownNewCrate.status === "hidden" || shownNewCrate.content.kind === "mark") {
+      throw new Error("no booking card");
+    }
+    expect(cardView(shownNewCrate.content)).toMatchObject({ isNew: true, stock: "0 → 23" });
+  });
+});
+
+describe("undoOrder", () => {
+  it("undoes a single booking alone", () => {
+    expect(undoOrder({ result: bottle, kind: "add", merged: false })).toEqual([
+      bottle.movement.id,
+    ]);
+  });
+
+  it("undoes the rest of a crate first and then its first bottle", () => {
+    expect(undoOrder({ result: bottle, kind: "add", merged: false, rest })).toEqual([
+      rest.movement.id,
+      bottle.movement.id,
+    ]);
+  });
+});
+
+describe("offersCrate", () => {
+  const single: CardBooking = { result: bottle, kind: "add", merged: false };
+
+  it("offers a crate for one bottle stored of a product without a crate size", () => {
+    expect(offersCrate(single)).toBe(true);
+  });
+
+  it("offers a crate for a new product", () => {
+    expect(offersCrate({ result: created, kind: "add", merged: false })).toBe(true);
+  });
+
+  it("does not offer a crate for a product with a crate size", () => {
+    const known = { ...bottle, product: { ...beer, crate_size: 20 } };
+    expect(offersCrate({ ...single, result: known })).toBe(false);
+  });
+
+  it("does not offer a crate once the rest was booked", () => {
+    expect(offersCrate({ ...single, rest })).toBe(false);
+  });
+
+  it("does not offer a crate for a booking in mode consume", () => {
+    const consumed = { ...bottle, movement: movement({ kind: "consume", delta: -1 }) };
+    expect(offersCrate({ result: consumed, kind: "consume", merged: false })).toBe(false);
+  });
+
+  it("does not offer a crate for a booking of more than one unit", () => {
+    const pack = { ...bottle, movement: movement({ delta: 6, stock_after: 9 }) };
+    expect(offersCrate({ ...single, result: pack })).toBe(false);
+  });
+});
+
+describe("crateChoices", () => {
+  it("offers 6, 12, 20 and 24", () => {
+    expect(crateChoices).toEqual([6, 12, 20, 24]);
+  });
+});
+
+describe("parseCrateSize", () => {
+  it.each([
+    ["2", 2],
+    ["11", 11],
+    ["100", 100],
+    [" 24 ", 24],
+    ["024", 24],
+  ])("accepts %j as %i", (input, size) => {
+    expect(parseCrateSize(input)).toBe(size);
+  });
+
+  it.each(["", " ", "0", "1", "101", "1000", "2.5", "-6", "12a", "1e1"])(
+    "rejects %j",
+    (input) => {
+      expect(parseCrateSize(input)).toBeNull();
+    },
+  );
 });

@@ -1,6 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
+import { CrateSheet } from "../components/CrateSheet";
+import { CrateSizeDialog } from "../components/CrateSizeDialog";
 import { Dialog } from "../components/Dialog";
 import { FeedbackSymbol } from "../components/FeedbackSymbol";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
@@ -13,16 +15,26 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useScanner } from "../hooks/useScanner";
 import {
   markScanMutation,
+  productListQuery,
+  productUpdateMutation,
   repeatMovementMutation,
   reversalMutation,
   scanMovementMutation,
   unmarkMutation,
+  type ScanMovement,
 } from "../lib/api/queries";
 import { pageTitle } from "../lib/pageTitle";
-import type { Product } from "../lib/products";
-import { hiddenCard, resultCardReducer } from "../lib/resultCard";
+import { findByBarcode, type Product } from "../lib/products";
+import {
+  hiddenCard,
+  resultCardReducer,
+  undoOrder,
+  type CardBooking,
+} from "../lib/resultCard";
 import {
   cameraErrorText,
+  combinedResult,
+  crateQuestion,
   feedbackFor,
   feedbackIcon,
   loadScanMode,
@@ -30,6 +42,7 @@ import {
   undoFeedbackFor,
   unmarkFeedbackFor,
   type BookingMode,
+  type CrateQuestion,
   type Feedback,
   type FeedbackColor,
   type MovementResult,
@@ -93,6 +106,10 @@ export function ScanPage() {
   const reversal = useMutation(reversalMutation(queryClient));
   const { mutateAsync: mark } = useMutation(markScanMutation(queryClient));
   const unmark = useMutation(unmarkMutation(queryClient));
+  const saveProduct = useMutation(productUpdateMutation(queryClient));
+  // The product list finds the product of a code before it is booked, to
+  // ask "Flasche oder Kasten" (F28); without it every code is booked at once.
+  const { data: products } = useQuery(productListQuery);
   const [card, dispatchCard] = useReducer(resultCardReducer, hiddenCard);
   const [mode, setMode] = useState(loadScanMode);
   // False when the view was loaded directly: iOS plays sound only after a tap.
@@ -102,6 +119,10 @@ export function ScanPage() {
   // The new product of the card while its merge dialog is open.
   const [mergeSource, setMergeSource] = useState<Product | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  // The open question "Flasche oder Kasten" and the booking whose crate
+  // size "War ein Kasten" asks for (F28).
+  const [question, setQuestion] = useState<CrateQuestion | null>(null);
+  const [crateBooking, setCrateBooking] = useState<CardBooking | null>(null);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
   // From reading the last code to the answer of the server, for the camera
   // menu (F25); a ref, so that measuring renders nothing.
@@ -132,7 +153,8 @@ export function ScanPage() {
   }
 
   // Books code in the mode that is set now, or marks it for shopping in
-  // mode mark, and reports the result.
+  // mode mark, and reports the result. In mode add a code of a product
+  // with a crate size asks "Flasche oder Kasten" first.
   function handleCode(code: string, detectedAt?: number) {
     const kind = mode;
     if (kind === "mark") {
@@ -145,14 +167,34 @@ export function ScanPage() {
       );
       return;
     }
-    timed(book({ barcode: code, kind }), detectedAt).then(
-      (result) => showBooking(result, kind),
+    const crate = crateQuestion(kind, code, findByBarcode(products, code));
+    if (crate !== null) {
+      setQuestion(crate);
+      return;
+    }
+    bookCode({ barcode: code, kind }, detectedAt);
+  }
+
+  // Books movement and reports the result.
+  function bookCode(movement: ScanMovement, detectedAt?: number) {
+    timed(book(movement), detectedAt).then(
+      (result) => showBooking(result, movement.kind),
       (error: unknown) => show(feedbackFor({ ok: false, error }), true),
     );
   }
 
-  // Books or marks every accepted code. While the merge dialog or the
-  // dialog for typing in a code lies over the camera, codes are ignored.
+  // The answer to "Flasche oder Kasten": books quantity of the code.
+  function answer(quantity: number) {
+    if (question === null) {
+      return;
+    }
+    setQuestion(null);
+    bookCode({ barcode: question.code, kind: "add", quantity });
+  }
+
+  // Books or marks every accepted code. While a dialog or a sheet lies over
+  // the camera (merge, typing in a code, the questions of a crate), codes
+  // are ignored.
   const {
     videoRef,
     phase,
@@ -165,7 +207,7 @@ export function ScanPage() {
     selectAutomatic,
     timings,
   } = useScanner((code) => {
-    if (mergeSource !== null || manualOpen) {
+    if (mergeSource !== null || manualOpen || question !== null || crateBooking !== null) {
       return;
     }
     handleCode(code, performance.now());
@@ -179,15 +221,50 @@ export function ScanPage() {
     );
   }
 
-  // [Rückgängig]: reverses the booking on the card and hides the card.
-  function undo(movementId: string) {
-    reversal.mutateAsync(movementId).then(
-      (result) => {
+  // [Rückgängig]: reverses the bookings on the card, the latest first (the
+  // rest of a crate, then its first bottle), and hides the card. Each
+  // reversal takes its booking off the card, so after a failure another
+  // tap reverses only what is left.
+  async function undo(booking: CardBooking) {
+    const reversals: MovementResult[] = [];
+    try {
+      for (const movementId of undoOrder(booking)) {
+        const result = await reversal.mutateAsync(movementId);
+        reversals.push(result);
         dispatchCard({ type: "hide", movementId });
-        show(undoFeedbackFor({ ok: true, result }));
-      },
-      (error: unknown) => show(undoFeedbackFor({ ok: false, error }), true),
-    );
+        dispatchCard({ type: "update", product: result.product });
+      }
+    } catch (error) {
+      show(undoFeedbackFor({ ok: false, error }), true);
+      return;
+    }
+    const result = combinedResult(reversals[0], reversals[reversals.length - 1]);
+    show(undoFeedbackFor({ ok: true, result }));
+  }
+
+  // "War ein Kasten" with size (F28): saves size as the crate size of the
+  // product of the bottle on the card, books the rest of the crate and
+  // shows bottle and rest as one booking.
+  function bookCrateRest(size: number) {
+    const bottle = crateBooking;
+    if (bottle === null) {
+      return;
+    }
+    setCrateBooking(null);
+    const { product, movement } = bottle.result;
+    saveProduct
+      .mutateAsync({ id: product.id, patch: { crate_size: size } })
+      .then((saved) => {
+        dispatchCard({ type: "update", product: saved });
+        return repeat.mutateAsync({ productId: saved.id, kind: "add", quantity: size - 1 });
+      })
+      .then(
+        (rest) => {
+          dispatchCard({ type: "crate", movementId: movement.id, rest });
+          show(feedbackFor({ ok: true, mode: "add", result: combinedResult(bottle.result, rest) }));
+        },
+        (error: unknown) => show(feedbackFor({ ok: false, error }), true),
+      );
   }
 
   // [Rückgängig] on the card of a mark: removes the mark of product and
@@ -378,9 +455,10 @@ export function ScanPage() {
         <ResultCard
           key={content.result.movement.id}
           booking={content}
-          disabled={repeat.isPending || reversal.isPending}
+          disabled={repeat.isPending || reversal.isPending || saveProduct.isPending}
           onPlusOne={() => plusOne(content.result.product.id, content.kind)}
-          onUndo={() => undo(content.result.movement.id)}
+          onUndo={() => void undo(content)}
+          onCrate={() => setCrateBooking(content)}
           onProductChange={(product) => dispatchCard({ type: "update", product })}
           onMerge={() => setMergeSource(content.result.product)}
           onClose={() => dispatchCard({ type: "close" })}
@@ -402,6 +480,16 @@ export function ScanPage() {
         mode={mode}
         onClose={() => setManualOpen(false)}
         onSubmit={submitManual}
+      />
+      <CrateSheet
+        question={question}
+        onClose={() => setQuestion(null)}
+        onAnswer={answer}
+      />
+      <CrateSizeDialog
+        open={crateBooking !== null}
+        onClose={() => setCrateBooking(null)}
+        onChoose={bookCrateRest}
       />
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
         <CameraSettings

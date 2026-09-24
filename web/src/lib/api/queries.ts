@@ -100,10 +100,14 @@ export function productMovementMutation(queryClient: QueryClient) {
   });
 }
 
-/** A scanned code, booked with the kind of the scan mode. */
+/**
+ * A scanned code, booked with the kind of the scan mode; quantity is 1 if
+ * not set (a bottle or a crate, docs/plan.md, F28).
+ */
 export interface ScanMovement {
   barcode: string;
   kind: "add" | "consume";
+  quantity?: number;
 }
 
 // How long a scan booking may take before it counts as a network error.
@@ -123,10 +127,10 @@ const scanTimeout = 10_000;
  */
 export function scanMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: async ({ barcode, kind }: ScanMovement) => {
+    mutationFn: async ({ barcode, kind, quantity }: ScanMovement) => {
       const { data, error, response } = await api.POST("/movements", {
         params: { header: { "Idempotency-Key": crypto.randomUUID() } },
-        body: { barcode, kind },
+        body: { barcode, kind, quantity },
         signal: AbortSignal.timeout(scanTimeout),
       });
       if (!response.ok || data === undefined) {
@@ -139,18 +143,24 @@ export function scanMovementMutation(queryClient: QueryClient) {
   });
 }
 
+/** A ProductMovement of quantity units, 1 if not set. */
+export interface RepeatMovement extends ProductMovement {
+  quantity?: number;
+}
+
 /**
  * Books one more unit of a product for the result card of the scan view
- * ([+1]): POST /movements with product_id, like scanMovementMutation with
- * a new Idempotency-Key, the same timeout, the same errors and the same
- * cache updates.
+ * ([+1]), or the rest of a crate ("War ein Kasten", docs/plan.md, F28):
+ * POST /movements with product_id, like scanMovementMutation with a new
+ * Idempotency-Key, the same timeout, the same errors and the same cache
+ * updates.
  */
 export function repeatMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: async ({ productId, kind }: ProductMovement) => {
+    mutationFn: async ({ productId, kind, quantity }: RepeatMovement) => {
       const { data, error, response } = await api.POST("/movements", {
         params: { header: { "Idempotency-Key": crypto.randomUUID() } },
-        body: { product_id: productId, kind },
+        body: { product_id: productId, kind, quantity },
         signal: AbortSignal.timeout(scanTimeout),
       });
       if (!response.ok || data === undefined) {

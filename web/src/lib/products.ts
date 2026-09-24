@@ -1,4 +1,5 @@
 import type { components } from "./api/schema";
+import { normalizeGtin } from "./gtin";
 
 export type Product = components["schemas"]["Product"];
 export type Barcode = components["schemas"]["Barcode"];
@@ -94,6 +95,26 @@ export function replaceProduct(
   product: Product,
 ): Product[] | undefined {
   return products?.map((entry) => (entry.id === product.id ? product : entry));
+}
+
+/**
+ * Returns the product in products that has the barcode code. code is
+ * compared in its canonical form (normalizeGtin), in which the API
+ * delivers the barcodes of a product, so a UPC-A code finds its EAN-13
+ * with a leading "0". Returns undefined for an invalid or unknown code and
+ * without a list (nothing cached yet).
+ */
+export function findByBarcode(
+  products: readonly Product[] | undefined,
+  code: string,
+): Product | undefined {
+  const canonical = normalizeGtin(code);
+  if (products === undefined || canonical === null) {
+    return undefined;
+  }
+  return products.find((product) =>
+    product.barcodes.some((barcode) => barcode.code === canonical),
+  );
 }
 
 /**

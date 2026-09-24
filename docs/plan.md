@@ -1534,7 +1534,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F28: Frage „Flasche oder Kasten" beim Einlagern
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F27
 - **Referenzen:** ADR-0017; F08 bis F11
 - **Umfang:**

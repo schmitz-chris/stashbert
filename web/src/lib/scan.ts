@@ -40,6 +40,56 @@ export function saveScanMode(mode: ScanMode): void {
 }
 
 /**
+ * The question "Flasche oder Kasten" before a code is booked in mode add
+ * (docs/plan.md, F28).
+ */
+export interface CrateQuestion {
+  /** The scanned or typed-in code, booked after the answer. */
+  code: string;
+  /** The name of the product of the code. */
+  name: string;
+  /** The bottles of a crate of the product, booked for "Kasten". */
+  crateSize: number;
+}
+
+/**
+ * Returns the question to ask before booking code in mode, given the
+ * product the cached product list holds for code (see findByBarcode):
+ * only in mode add and only for a product with a crate size. Returns null
+ * to book one unit at once: in the modes consume and mark, for a product
+ * without a crate size, and for a code without a product in the list
+ * (undefined: unknown, new, or the list is not loaded).
+ */
+export function crateQuestion(
+  mode: ScanMode,
+  code: string,
+  product: Product | undefined,
+): CrateQuestion | null {
+  if (mode !== "add" || product === undefined || product.crate_size === null) {
+    return null;
+  }
+  return { code, name: product.name, crateSize: product.crate_size };
+}
+
+/**
+ * Returns last with the message of the bookings of its product from first
+ * to last, in the format of the server (architecture.md 6.3): "<name>
+ * <stock before first> → <stock after last>". The scan view reports the
+ * rest of a crate booked after its first bottle, and undoing both, as one
+ * booking (docs/plan.md, F28). If first is last, last is returned as it is.
+ */
+export function combinedResult(first: MovementResult, last: MovementResult): MovementResult {
+  if (first === last) {
+    return last;
+  }
+  const before = first.movement.stock_after - first.movement.delta;
+  return {
+    ...last,
+    message: `${last.product.name} ${before} → ${last.movement.stock_after}`,
+  };
+}
+
+/**
  * The outcome of a scanned code: the result of a booking in mode, the
  * result of marking it in mode mark, or the error the booking or the mark
  * failed with (see scanMovementMutation and markScanMutation).
