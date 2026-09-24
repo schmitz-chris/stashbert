@@ -1092,7 +1092,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F14: Oberfläche nachbessern
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F13b
 - **Referenzen:** Rückmeldung des Nutzers vom 24.09.2026 („sieht nicht schön aus, der Knopf für das Licht ist weg")
 - **Umfang:**

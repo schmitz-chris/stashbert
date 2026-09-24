@@ -5,6 +5,7 @@ import { Dialog } from "../components/Dialog";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
 import { ResultCard } from "../components/ResultCard";
+import { TorchButton } from "../components/TorchButton";
 import { useScanner } from "../hooks/useScanner";
 import {
   repeatMovementMutation,
@@ -289,13 +290,14 @@ export function ScanPage() {
             </button>
           </div>
         )}
+        <TorchButton track={track} />
         <button
           type="button"
           aria-label="Kamera-Einstellungen"
           onClick={() => setSettingsOpen(true)}
-          className="absolute top-2 right-2 flex size-11 items-center justify-center rounded-full bg-black/50 text-2xl text-white"
+          className="absolute top-2 right-2 flex size-12 items-center justify-center rounded-full bg-black/60 text-white shadow-md ring-1 ring-white/40"
         >
-          {"\u2699\uFE0E"}
+          <GearIcon />
         </button>
       </div>
       <button
@@ -357,5 +359,20 @@ export function ScanPage() {
         </div>
       </Dialog>
     </div>
+  );
+}
+
+// A gear with eight teeth, drawn with the color of the text.
+function GearIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      fillRule="evenodd"
+      className="size-6"
+    >
+      <path d="M10.31 4.69L10.44 2.12A10 10 0 0 1 13.56 2.12L13.69 4.69A7.5 7.5 0 0 1 15.97 5.64L17.88 3.91A10 10 0 0 1 20.09 6.12L18.36 8.03A7.5 7.5 0 0 1 19.31 10.31L21.88 10.44A10 10 0 0 1 21.88 13.56L19.31 13.69A7.5 7.5 0 0 1 18.36 15.97L20.09 17.88A10 10 0 0 1 17.88 20.09L15.97 18.36A7.5 7.5 0 0 1 13.69 19.31L13.56 21.88A10 10 0 0 1 10.44 21.88L10.31 19.31A7.5 7.5 0 0 1 8.03 18.36L6.12 20.09A10 10 0 0 1 3.91 17.88L5.64 15.97A7.5 7.5 0 0 1 4.69 13.69L2.12 13.56A10 10 0 0 1 2.12 10.44L4.69 10.31A7.5 7.5 0 0 1 5.64 8.03L3.91 6.12A10 10 0 0 1 6.12 3.91L8.03 5.64A7.5 7.5 0 0 1 10.31 4.69ZM15 12A3 3 0 1 0 9 12A3 3 0 1 0 15 12Z" />
+    </svg>
   );
 }

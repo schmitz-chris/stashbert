@@ -1,8 +1,6 @@
 import { useId, useState } from "react";
 import {
   currentZoom,
-  hasTorch,
-  setTorch,
   setZoom,
   zoomRange,
   type CameraOption,
@@ -16,13 +14,12 @@ interface CameraSettingsProps {
 }
 
 /**
- * Camera choice, zoom and light of the scanner. Each is shown only if
- * the device offers it.
+ * Camera choice and zoom of the scanner. Each is shown only if the device
+ * offers it. The light has its own button on the camera image (TorchButton).
  */
 export function CameraSettings({ track, cameras, onSelectCamera }: CameraSettingsProps) {
-  // Zoom and light belong to one track; a new track starts without them.
+  // Zoom belongs to one track; a new track starts without it.
   const [zoom, setZoomState] = useState<{ track: MediaStreamTrack; value: number } | null>(null);
-  const [torchTrack, setTorchTrack] = useState<MediaStreamTrack | null>(null);
   const cameraId = useId();
   const zoomId = useId();
 
@@ -31,10 +28,8 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
   }
   const range = zoomRange(track);
   const zoomValue = zoom?.track === track ? zoom.value : (currentZoom(track) ?? range?.min);
-  const torchOn = torchTrack === track;
-  const torch = hasTorch(track);
 
-  if (cameras.length < 2 && range === null && !torch) {
+  if (cameras.length < 2 && range === null) {
     return <p className="mt-2 text-stone-700">Diese Kamera hat keine Einstellungen.</p>;
   }
 
@@ -44,17 +39,6 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
     }
     setZoomState({ track, value });
     setZoom(track, value).catch((error: unknown) => console.warn("Zoom:", error));
-  }
-
-  function toggleTorch() {
-    if (track === null) {
-      return;
-    }
-    const next = !torchOn;
-    setTorch(track, next).then(
-      () => setTorchTrack(next ? track : null),
-      (error: unknown) => console.warn("Licht:", error),
-    );
   }
 
   return (
@@ -94,16 +78,6 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
             className="mt-1 min-h-11 w-full"
           />
         </div>
-      )}
-      {torch && (
-        <button
-          type="button"
-          aria-pressed={torchOn}
-          onClick={toggleTorch}
-          className="min-h-11 rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-700 aria-pressed:border-amber-400 aria-pressed:bg-amber-400 aria-pressed:text-stone-900"
-        >
-          Licht
-        </button>
       )}
     </div>
   );

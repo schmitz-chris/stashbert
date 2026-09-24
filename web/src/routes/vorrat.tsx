@@ -157,11 +157,16 @@ function StockRow({ product }: { product: Product }) {
           {notice}
         </p>
       </div>
-      <p className="shrink-0 text-stone-700 tabular-nums">
-        <span className="sr-only">Bestand </span>
-        {product.stock} / <span className="sr-only">Soll </span>
-        {product.target}
-      </p>
+      {/* The stock large, below it the target; without a target only the stock. */}
+      <div className="min-w-12 shrink-0 text-center tabular-nums">
+        <p className="text-xl font-semibold text-stone-900">
+          <span className="sr-only">Bestand </span>
+          {product.stock}
+        </p>
+        {product.target > 0 && (
+          <p className="text-xs text-stone-500">Soll {product.target}</p>
+        )}
+      </div>
       <div className="relative z-10 flex shrink-0 gap-2">
         <button
           type="button"
