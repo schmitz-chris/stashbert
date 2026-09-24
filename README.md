@@ -22,6 +22,7 @@ Umsetzung von M1 läuft. Der Stand jedes Tasks steht in [docs/plan.md](docs/plan
 | [docs/architecture.md](docs/architecture.md) | aktueller, verbindlicher Stand (M1) |
 | [docs/plan.md](docs/plan.md) | kleinteiliger Umsetzungsplan |
 | [docs/adr/](docs/adr/) | Architekturentscheidungen |
+| [docs/betrieb.md](docs/betrieb.md) | Betriebsanleitung für den Proxmox-LXC |
 | [docs/research.md](docs/research.md) | Recherche, Fakten und Quellen |
 | [AGENTS.md](AGENTS.md) | Regeln für KI-Agenten |
 

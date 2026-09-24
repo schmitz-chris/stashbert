@@ -1189,7 +1189,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### L03: Betriebsanleitung für den LXC
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** L02
 - **Referenzen:** ADR-0014, architecture.md 8, 9
 - **Umfang:** `docs/betrieb.md` auf Deutsch:
