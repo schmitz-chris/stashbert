@@ -5,7 +5,7 @@
 | Stand | 24.09.2026 |
 | Grundlagen | [ADR-0014](adr/0014-betrieb-im-lxc.md), [ADR-0013](adr/0013-keine-anmeldung-in-m1.md), [architecture.md](architecture.md) Kapitel 8 und 9 |
 
-Diese Anleitung beschreibt den Hauptweg: StashBert läuft als systemd-Dienst in einem unprivilegierten Debian-LXC auf Proxmox (amd64), gebaut wird auf dem Mac. Docker als Alternative kommt später mit R01 bis R03 dazu.
+Diese Anleitung beschreibt den Hauptweg: StashBert läuft als systemd-Dienst in einem unprivilegierten Debian-LXC auf Proxmox (amd64), gebaut wird auf dem Mac. Docker als Alternative beschreibt Abschnitt 13.
 
 Befehle mit `ssh` und `scp` laufen auf dem Mac im Wurzelverzeichnis des Repositorys, alle anderen als `root` im Container, sofern nicht anders angegeben. `<container-ip>` steht für die Adresse des Containers.
 
@@ -258,3 +258,136 @@ rm -r /var/lib/stashbert
 | `install.sh` bricht ab | Die Meldung nennt den Grund. Häufig: das falsche Binary (es muss `stashbert-linux-amd64` aus `make release` sein) oder `stashbert.service` bzw. `stashbert.env.example` fehlen neben dem Skript. |
 | Kamera geht nicht | StashBert über die HTTPS-Adresse des Proxys mit gültigem Zertifikat öffnen, nicht über `http://<container-ip>:8080`. Die Kamera-Freigabe in Safari prüfen (Abschnitt 6). |
 | Keine Produktnamen, nur `Neues Produkt <code>` | `OFF_CONTACT` ist leer (`grep OFF_CONTACT /etc/stashbert/stashbert.env`). Setzen und neu starten. Platzhalter, die auf das Nachladen warten, ergänzt StashBert danach im Hintergrund, meist ein Produkt pro Minute. Die Angaben übernimmt es nur, solange weder Name noch Marke noch Packungsgröße von Hand geändert wurden. Der Container braucht dafür Zugang ins Internet. Ist ein Produkt bei Open Food Facts nicht erfasst, bleibt es beim Platzhalter. |
+
+## 13. Alternative: Docker
+
+Statt im LXC kann StashBert auch als Container mit Docker Compose laufen (ADR-0010, ADR-0014). Der Hauptweg bleibt der LXC; dieser Abschnitt nennt nur, was unter Docker anders ist. Reverse Proxy (Abschnitt 5) und iPhone (Abschnitt 6) gelten unverändert, mit `http://<docker-host>:8080` als Ziel des Proxys.
+
+### Voraussetzungen
+
+- Ein Linux-Host (amd64 oder arm64) mit Docker Engine und dem Compose-Plugin (`docker compose`). Docker in einem LXC braucht Nesting; Proxmox empfiehlt dafür eher eine VM (ADR-0014).
+- Die Befehle laufen auf dem Docker-Host, die mit `docker compose` im Verzeichnis `~/stashbert`. Nur `scp` läuft auf dem Mac im Wurzelverzeichnis des Repositorys.
+- Befehle mit `sudo` brauchen root, weil die Dateien in `data/` dem Benutzer 65532 des Containers gehören. Als root entfällt `sudo`.
+
+| Was | Wo |
+|---|---|
+| Dienst | `compose.yaml` aus `deploy/compose.yaml`, ein Dienst `stashbert` |
+| Konfiguration | `.env` aus `deploy/.env.example` |
+| Daten | `data/`, im Container `/data`: `stashbert.db` (dazu `-wal` und `-shm`), `backups/`, `images/` |
+| Port | 8080 auf allen Adressen des Hosts |
+| Logs | `docker compose logs`, eine JSON-Zeile pro Eintrag |
+
+Docker veröffentlicht den Port an Firewall-Regeln wie ufw vorbei. Es gilt dasselbe wie in Abschnitt 1: nur im Heimnetz erreichbar, keine Portfreigabe am Router.
+
+### Verzeichnis anlegen
+
+Auf dem Docker-Host:
+
+```sh
+mkdir -p ~/stashbert/data
+```
+
+Auf dem Mac die beiden Dateien kopieren; `.env.example` wird dabei zu `.env`. Läuft Docker auf dem Mac selbst, genügt `cp` statt `scp`.
+
+```sh
+scp deploy/compose.yaml <benutzer>@<docker-host>:stashbert/compose.yaml
+scp deploy/.env.example <benutzer>@<docker-host>:stashbert/.env
+```
+
+Auf dem Docker-Host das Datenverzeichnis dem Benutzer des Containers geben:
+
+```sh
+cd ~/stashbert
+sudo chown 65532:65532 data
+```
+
+Das Image läuft als Benutzer 65532. Gehört `data/` einem anderen Benutzer (auch wenn es beim ersten Start fehlt, dann legt Docker es für root an), beendet sich StashBert mit `unable to open database file`, und Docker startet es immer wieder neu. Unter Docker Desktop auf dem Mac entfällt `chown`: Dort darf der Container in eingebundenen Verzeichnissen schreiben, und die Dateien gehören auf dem Mac dem eigenen Benutzer.
+
+### Image
+
+**Aus GHCR:** Die Images liegen unter `ghcr.io/schmitz-chris/stashbert`, im privaten Repository. Die CI baut sie für amd64 und arm64 bei jedem Versions-Tag (R03); der Image-Tag ist die Version ohne das führende `v`, dazu `latest`. Einmal auf dem Docker-Host anmelden, mit dem GitHub-Benutzernamen und als Passwort einem Personal Access Token (classic) mit dem Recht `read:packages`. Fein granulierte Tokens nimmt GHCR nicht an.
+
+```sh
+docker login ghcr.io -u <github-benutzer>
+```
+
+**Lokal gebaut:** Solange es in GHCR kein Image gibt, oder ohne Zugang dazu, baut man es selbst, und zwar auf dem Docker-Host in einem Klon des Repositorys. `make docker` baut für die Architektur des Rechners, auf dem es läuft; ein Image vom Mac (arm64) läuft nicht auf einem amd64-Host.
+
+```sh
+make docker
+docker tag stashbert:dev ghcr.io/schmitz-chris/stashbert:dev
+```
+
+In `.env` dann `STASHBERT_VERSION=dev` setzen. Compose nimmt das lokale Image; `docker compose pull` entfällt bei diesem Weg.
+
+### Konfigurieren und starten
+
+`.env` mit einem Editor öffnen, z. B. `nano .env`. Die Variablen sind dieselben wie in Abschnitt 4 (`OFF_CONTACT`, `BACKUP_KEEP`, `LOG_LEVEL`), dazu `STASHBERT_VERSION` für den Image-Tag, Standard `latest`. Mindestens `OFF_CONTACT` setzen. `DATA_DIR` und `PORT` gehören nicht in `.env`: Die Daten liegen im Container fest unter `/data`, und StashBert lauscht dort auf 8080.
+
+```sh
+cd ~/stashbert
+docker compose up -d
+docker compose ps
+curl http://127.0.0.1:8080/api/v1/health
+```
+
+- Die Antwort ist `{"status":"ok","version":"<version>"}`.
+- `docker compose ps` zeigt nach wenigen Sekunden `(healthy)` in der Spalte `STATUS`. Docker ruft dafür alle 30 Sekunden `/stashbert -healthcheck` im Container auf; nach drei Fehlschlägen in Folge steht dort `(unhealthy)`. Einen ungesunden Container startet Docker nicht neu.
+- `restart: unless-stopped` startet StashBert neu, wenn es sich beendet (etwa bei einem ungültigen Wert in `.env`), und nach einem Neustart des Hosts, außer nach `docker compose stop`.
+- Ist Port 8080 auf dem Host belegt, in `compose.yaml` unter `ports` die linke Zahl ändern, z. B. `"9000:8080"`, und das Ziel im Proxy anpassen.
+- Nach jeder Änderung an `.env` oder `compose.yaml` wieder `docker compose up -d`; Compose ersetzt dann den Container. `docker compose restart` übernimmt Änderungen an `.env` nicht.
+- `docker compose down` hält StashBert an und entfernt den Container; die Daten in `data/` bleiben.
+
+### Update
+
+Die neue Version in `.env` bei `STASHBERT_VERSION` eintragen, dann:
+
+```sh
+cd ~/stashbert
+docker compose pull
+docker compose up -d
+```
+
+- Compose ersetzt den Container, die Daten in `data/` bleiben.
+- Bei `STASHBERT_VERSION=latest` entfällt die Änderung in `.env`; `docker compose pull` holt das neueste Image.
+- Bei einem lokal gebauten Image statt `docker compose pull` im Repository wieder `make docker` und `docker tag stashbert:dev ghcr.io/schmitz-chris/stashbert:dev`, dann `docker compose up -d`. Compose bemerkt das neue Image und ersetzt den Container.
+- Stehen Migrationen an, schreibt StashBert vorher automatisch `backups/pre-migration-<YYYYMMDD-HHMMSS>.db`.
+
+### Logs
+
+```sh
+docker compose logs                 # alle Einträge
+docker compose logs -f              # live mitlesen
+docker compose logs --tail 50       # die letzten 50 Zeilen
+```
+
+Die Logs gehören zum Container. Nach einem Update, einer Änderung an `.env` oder `docker compose down` beginnen sie neu.
+
+### Backup
+
+Wie in Abschnitt 9, nur liegen die Dateien auf dem Host in `~/stashbert/data/backups`. Jeder Start des Containers schreibt ein Backup, auch `docker compose up -d` nach einer Änderung.
+
+```sh
+cd ~/stashbert
+sudo ls -l data/backups
+```
+
+Außerhalb des Hosts regelmäßig `data/backups` und `data/images` sichern, nicht die laufende `data/stashbert.db`.
+
+### Restore
+
+Nach architecture.md 9.3, mit dem Container statt systemd:
+
+```sh
+cd ~/stashbert
+sudo ls -l data/backups
+docker compose stop
+sudo rm -f data/stashbert.db data/stashbert.db-wal data/stashbert.db-shm
+sudo cp data/backups/stashbert-<YYYYMMDD-HHMMSS>.db data/stashbert.db
+sudo chown 65532:65532 data/stashbert.db
+docker compose start
+docker compose ps
+```
+
+- Unter Docker Desktop auf dem Mac gehen dieselben Befehle ohne `sudo`, und `chown` entfällt.
+- Die Hinweise aus Abschnitt 10 gelten genauso.

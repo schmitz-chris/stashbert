@@ -1,0 +1,17 @@
+# Docker Compose für StashBert, der optionale Weg neben dem LXC (ADR-0014).
+# Anleitung: docs/betrieb.md, Abschnitt 13. Neben dieser Datei liegen .env
+# (aus .env.example) und das Datenverzeichnis data/ mit Besitzer 65532:65532.
+services:
+  stashbert:
+    image: ghcr.io/schmitz-chris/stashbert:${STASHBERT_VERSION:-latest}
+    ports:
+      # Host:Container. Im Container lauscht StashBert immer auf 8080. Für
+      # einen anderen Port auf dem Host nur die linke Zahl ändern.
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    healthcheck:
+      # Intervall, Zeitlimit und Wiederholungen kommen aus dem Image.
+      test: ["CMD", "/stashbert", "-healthcheck"]

@@ -1132,7 +1132,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R02: Compose und Betriebsanleitung
 
-- **Status:** offen (optionaler Weg nach ADR-0014)
+- **Status:** wartet auf Nutzer (optionaler Weg nach ADR-0014)
 - **Abhängig von:** R01
 - **Referenzen:** architecture.md 9
 - **Umfang:**
