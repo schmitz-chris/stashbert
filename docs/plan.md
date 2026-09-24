@@ -1699,7 +1699,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### H02: Prüfung gegen den Broker im Heimnetz
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer (Lead-Prüfung am 24.09.2026 bestanden, siehe `docs/m2-pruefung.md`)
 - **Abhängig von:** F30, H01
 - **Referenzen:** ADR-0018; architecture.md Kapitel 11
 - **Umfang:**
