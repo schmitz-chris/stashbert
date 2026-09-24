@@ -1219,7 +1219,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R05: Inbetriebnahme und Abnahme M1
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer (Vorlage `docs/m1-abnahme.md` liegt bereit)
 - **Wer:** Nutzer, mit Unterstützung durch einen Agenten
 - **Abhängig von:** alle anderen Tasks
 - **Umfang:**
