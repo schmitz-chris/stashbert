@@ -9,6 +9,53 @@ import (
 	"context"
 )
 
+const listShoppingSnapshotProducts = `-- name: ListShoppingSnapshotProducts :many
+SELECT id, name, stock, target, min_stock, marked, crate_size FROM products
+WHERE target > 0 OR marked = 1
+ORDER BY name COLLATE NOCASE, id
+`
+
+type ListShoppingSnapshotProductsRow struct {
+	ID        string
+	Name      string
+	Stock     int64
+	Target    int64
+	MinStock  *int64
+	Marked    int64
+	CrateSize *int64
+}
+
+func (q *Queries) ListShoppingSnapshotProducts(ctx context.Context) ([]ListShoppingSnapshotProductsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listShoppingSnapshotProducts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShoppingSnapshotProductsRow
+	for rows.Next() {
+		var i ListShoppingSnapshotProductsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Stock,
+			&i.Target,
+			&i.MinStock,
+			&i.Marked,
+			&i.CrateSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setProductMarked = `-- name: SetProductMarked :one
 UPDATE products
 SET marked = ?, updated_at = ?

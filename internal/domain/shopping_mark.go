@@ -37,6 +37,9 @@ type MarkResult struct {
 // updated_at only if the product was not marked yet, never changes the stock
 // and books no movement. The message is "Vorgemerkt: <name>", or "Schon auf
 // der Liste: <name>" if the product was on the shopping list before.
+// Otherwise marking puts it on the list, and after the commit
+// shopping.changed is published to pub with missing_before and
+// missing_after both the current missing (architecture.md, 6.6).
 //
 // An unknown barcode creates a product for it like Book does for add
 // (architecture.md, 7.2), but without a movement: lookupProduct determines
@@ -45,7 +48,8 @@ type MarkResult struct {
 // cache entry of the lookup, and marks it. If the barcode is known by then,
 // its product is marked. A created product results in product_created and
 // the message "Neu vorgemerkt: <name>"; after the commit, product.created is
-// published to pub. Marking publishes no other events.
+// published to pub before shopping.changed. Marking publishes no other
+// events.
 //
 // Invalid input results in an *httpx.Error and nothing is changed: 400
 // invalid_request if not exactly one of product_id and barcode is set, 422
@@ -129,6 +133,9 @@ func mark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID, c
 	case listed:
 		message = "Schon auf der Liste: " + p.Name
 	}
+	if !listed {
+		publishListingChanged(ctx, pub, p.ID, p.Name, p.Missing)
+	}
 	return MarkResult{
 		Product:        p,
 		ProductCreated: created,
@@ -140,9 +147,11 @@ func mark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID, c
 // Unmark ends the marking for shopping of the product with productID
 // (ADR-0015): in one transaction it stores marked 0 and updated_at. A product
 // that is not marked stays unchanged, including its updated_at; something
-// missing keeps it on the shopping list. An unknown product results in 404
-// not_found.
-func Unmark(ctx context.Context, sqlDB *sql.DB, productID string) error {
+// missing keeps it on the shopping list. If nothing is missing, unmarking
+// takes it off the list, and after the commit shopping.changed is published
+// to pub with missing_before and missing_after 0 (architecture.md, 6.6). An
+// unknown product results in 404 not_found.
+func Unmark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID string) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("unmark product: begin transaction: %w", err)
@@ -170,5 +179,21 @@ func Unmark(ctx context.Context, sqlDB *sql.DB, productID string) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("unmark product: commit: %w", err)
 	}
+	if missing := Missing(cur.Stock, cur.Target, cur.MinStock); missing == 0 {
+		publishListingChanged(ctx, pub, cur.ID, cur.Name, missing)
+	}
 	return nil
+}
+
+// publishListingChanged publishes shopping.changed for marking or unmarking
+// the product id with name that has changed whether it is on the shopping
+// list. Its missing is unchanged, so missing_before and missing_after are
+// both missing (architecture.md, 6.6).
+func publishListingChanged(ctx context.Context, pub events.Publisher, id, name string, missing int64) {
+	pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
+		ProductID:     id,
+		Name:          name,
+		MissingBefore: missing,
+		MissingAfter:  missing,
+	}))
 }

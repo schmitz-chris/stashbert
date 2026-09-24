@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/schmitz-chris/stashbert/internal/domain"
+	"github.com/schmitz-chris/stashbert/internal/httpx"
 )
 
 // GetShoppingList returns the products of which something is missing or
@@ -51,8 +53,18 @@ func (s *Server) MarkShoppingItem(ctx context.Context, request MarkShoppingItemR
 
 // UnmarkShoppingItem ends the marking for shopping of a product.
 func (s *Server) UnmarkShoppingItem(ctx context.Context, request UnmarkShoppingItemRequestObject) (UnmarkShoppingItemResponseObject, error) {
-	if err := domain.Unmark(ctx, s.deps.DB, request.ProductId); err != nil {
+	if err := domain.Unmark(ctx, s.deps.DB, s.deps.Publisher, request.ProductId); err != nil {
 		return nil, err
 	}
 	return UnmarkShoppingItem204Response{}, nil
+}
+
+// SendShoppingSnapshot requests shopping.snapshot over MQTT. Without MQTT it
+// returns 409 mqtt_disabled.
+func (s *Server) SendShoppingSnapshot(ctx context.Context, request SendShoppingSnapshotRequestObject) (SendShoppingSnapshotResponseObject, error) {
+	if s.deps.Snapshots == nil {
+		return nil, httpx.NewError(http.StatusConflict, "mqtt_disabled", "MQTT ist nicht eingerichtet")
+	}
+	s.deps.Snapshots.Request()
+	return SendShoppingSnapshot202Response{}, nil
 }

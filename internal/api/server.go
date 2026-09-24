@@ -17,6 +17,15 @@ type ServerDeps struct {
 	Lookuper domain.Lookuper
 	// ImageDir is the directory of the product image files.
 	ImageDir string
+	// Snapshots takes the requests for shopping.snapshot; nil without MQTT.
+	Snapshots SnapshotRequester
+}
+
+// SnapshotRequester takes requests for shopping.snapshot over MQTT
+// (architecture.md, 11.3). *outbox.Snapshotter implements it.
+type SnapshotRequester interface {
+	// Request asks for a snapshot without blocking.
+	Request()
 }
 
 // Server implements StrictServerInterface.

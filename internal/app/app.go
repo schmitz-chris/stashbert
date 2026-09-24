@@ -36,12 +36,17 @@ type Deps struct {
 	// WebUI holds the built web UI served under / (architecture.md, 4.2).
 	// nil means the web UI embedded in the binary (webui.Dist).
 	WebUI fs.FS
+	// Snapshots takes the requests of POST /shopping-list/snapshot
+	// (architecture.md, 11.3). It is nil without MQTT; the endpoint then
+	// answers 409 mqtt_disabled.
+	Snapshots api.SnapshotRequester
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 	server := api.NewServer(api.ServerDeps{
 		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
+		Snapshots: d.Snapshots,
 	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,

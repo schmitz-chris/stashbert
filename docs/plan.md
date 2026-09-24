@@ -1603,7 +1603,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B36: Einkaufsereignisse beim Vormerken und Abgleich
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B35
 - **Referenzen:** ADR-0018; architecture.md 11.3, 6.2, 6.4, 6.6; ADR-0015
 - **Umfang:**

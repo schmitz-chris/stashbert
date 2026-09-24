@@ -281,6 +281,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shopping-list/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Einkaufsliste per MQTT neu senden
+         * @description Fordert das Ereignis shopping.snapshot an: alle Produkte mit Soll größer 0 oder mit Vormerkung, für die gewählte Zielliste. Es geht über die Outbox per MQTT hinaus. Mehrere Anfragen innerhalb von 2 s ergeben einen Snapshot. Fehler-code: mqtt_disabled (409, ohne MQTT).
+         */
+        post: operations["sendShoppingSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1048,6 +1068,33 @@ export interface operations {
         responses: {
             /** @description Das Produkt ist nicht vorgemerkt. */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    sendShoppingSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Der Snapshot ist angefordert. */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

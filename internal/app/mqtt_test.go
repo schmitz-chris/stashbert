@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -134,6 +135,111 @@ func TestMovementEventsOverMQTT(t *testing.T) {
 			t.Fatal("outbox not empty after delivery")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestShoppingSnapshotOverMQTT requests shopping.snapshot through the HTTP
+// API and on <p>/in/snapshot with the outbox and the snapshotter wired as in
+// main, and receives it on the broker (architecture.md, 11.3).
+func TestShoppingSnapshotOverMQTT(t *testing.T) {
+	const window = 100 * time.Millisecond
+	srv, url := startBroker(t)
+	// Stored before StashBert subscribes, so it arrives with the retain flag
+	// and is ignored.
+	if err := srv.Publish("vorrat/in/snapshot", []byte("{}"), true, 1); err != nil {
+		t.Fatalf("publish retained: %v", err)
+	}
+	msgs := make(chan published, 16)
+	if err := srv.Subscribe("vorrat/events/#", 1, func(_ *mochi.Client, _ packets.Subscription, pk packets.Packet) {
+		msgs <- published{pk.TopicName, string(pk.Payload)}
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	db := newDB(t)
+	// See insertProducts: all products but p1 "Zucker" have a target; p1 is
+	// marked here.
+	insertProducts(t, db)
+	setMarked(t, db, "p1", 1)
+	if _, err := db.ExecContext(t.Context(), "INSERT INTO settings (key, value) VALUES ('shopping_target_id', 'todo.bring_zuhause')"); err != nil {
+		t.Fatalf("store target list: %v", err)
+	}
+	logger := slog.New(slog.DiscardHandler)
+	client, err := mqtt.New(config.MQTT{URL: url, ClientID: "stashbert", TopicPrefix: "vorrat", HAPrefix: "homeassistant"}, logger)
+	if err != nil {
+		t.Fatalf("mqtt.New: %v", err)
+	}
+	deliverer := outbox.NewDeliverer(db, client, "vorrat", logger)
+	client.OnConnect(func(context.Context) { deliverer.Wake() })
+	writer := outbox.NewWriter(db, deliverer.Wake, logger)
+	snapshotter := outbox.NewSnapshotter(writer, "vorrat", logger)
+	client.OnMessage(snapshotter.Receive)
+	incoming := make(chan mqtt.Message, 16)
+	client.OnMessage(func(m mqtt.Message) {
+		select {
+		case incoming <- m:
+		default:
+		}
+	})
+	h, _ := newAppWithDeps(t, app.Deps{
+		DB: db, Publisher: writer, Lookuper: lookup.NewDisabledClient(), ImageDir: t.TempDir(), Snapshots: snapshotter,
+	})
+	// Stopped in reverse order: the snapshotter and the deliverer first,
+	// then the client.
+	startJob(t, func(ctx context.Context) {
+		if err := client.Run(ctx); err != nil {
+			t.Errorf("mqtt Run: %v", err)
+		}
+	})
+	startJob(t, func(ctx context.Context) { deliverer.Run(ctx, outbox.MinBackoff, outbox.MaxBackoff) })
+	startJob(t, func(ctx context.Context) { snapshotter.Run(ctx, window) })
+
+	select {
+	case m := <-incoming:
+		if m.Topic != "vorrat/in/snapshot" || !m.Retained {
+			t.Fatalf("message = %s, retained %v, want the retained one on vorrat/in/snapshot", m.Topic, m.Retained)
+		}
+	case <-time.After(mqttWait):
+		t.Fatal("timeout waiting for the retained message")
+	}
+	checkNoMessage(t, msgs, 5*window)
+
+	var data map[string]any
+	if err := json.Unmarshal([]byte(`{"list": "todo.bring_zuhause", "items": [
+		{"product_id": "p2", "name": "kidneybohnen", "on_list": true, "missing": 3, "quantity": 3, "unit": "piece"},
+		{"product_id": "p3", "name": "Kidneybohnen", "on_list": true, "missing": 4, "quantity": 4, "unit": "piece"},
+		{"product_id": "p4", "name": "Mehl", "on_list": false, "missing": 0, "quantity": 0, "unit": "piece"},
+		{"product_id": "p1", "name": "Zucker", "on_list": true, "missing": 0, "quantity": 0, "unit": "piece"}
+	]}`), &data); err != nil {
+		t.Fatalf("decode want: %v", err)
+	}
+
+	// Two requests within the window result in one snapshot.
+	start := time.Now()
+	for range 2 {
+		if rec := sendSnapshot(h); rec.Code != http.StatusAccepted {
+			t.Fatalf("status = %d, want %d, body %s", rec.Code, http.StatusAccepted, rec.Body.String())
+		}
+	}
+	checkEventMessage(t, msgs, start, "vorrat/events/shopping.snapshot", "shopping.snapshot", data)
+	checkNoMessage(t, msgs, 5*window)
+
+	// Any payload on vorrat/in/snapshot requests one.
+	start = time.Now()
+	if err := srv.Publish("vorrat/in/snapshot", []byte("resend"), false, 1); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	checkEventMessage(t, msgs, start, "vorrat/events/shopping.snapshot", "shopping.snapshot", data)
+	checkNoMessage(t, msgs, 5*window)
+}
+
+// checkNoMessage asserts that msgs receives nothing for d.
+func checkNoMessage(t *testing.T, msgs <-chan published, d time.Duration) {
+	t.Helper()
+	select {
+	case m := <-msgs:
+		t.Fatalf("message on %s: %s, want none", m.topic, m.payload)
+	case <-time.After(d):
 	}
 }
 

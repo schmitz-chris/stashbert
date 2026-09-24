@@ -84,6 +84,18 @@ func checkNoEvents(t *testing.T, recorder *events.Recorder) {
 	}
 }
 
+// checkListingChanged asserts that e is shopping.changed for the product id
+// with name and missing 0 before and after, as marking or unmarking publishes
+// it when that changes whether the product is on the shopping list
+// (architecture.md, 6.6).
+func checkListingChanged(t *testing.T, e events.Event, id, name string) {
+	t.Helper()
+	want := events.ShoppingChangedData{ProductID: id, Name: name, MissingBefore: 0, MissingAfter: 0}
+	if e.Type != events.TypeShoppingChanged || e.Source != events.Source || e.Data != want {
+		t.Errorf("event = %+v, want %s %#v", e, events.TypeShoppingChanged, want)
+	}
+}
+
 func TestMarkShoppingItem(t *testing.T) {
 	// See insertProducts: p1 "Zucker" has stock 0 and target 0, p4 "Mehl"
 	// stock 2, target 4 and min_stock 1, so nothing is missing of both. p2
@@ -150,7 +162,16 @@ func TestMarkShoppingItem(t *testing.T) {
 			if calls := f.calls(); len(calls) != 0 {
 				t.Errorf("lookups = %q, want none", calls)
 			}
-			checkNoEvents(t, &recorder)
+			// Only marking a product that is neither marked nor missing
+			// anything puts it on the list.
+			name, _ := before["name"].(string)
+			if tt.marked || tt.missing > 0 {
+				checkNoEvents(t, &recorder)
+			} else if recorded := recorder.Events(); len(recorded) != 1 {
+				t.Errorf("events = %+v, want only %s", recorded, events.TypeShoppingChanged)
+			} else {
+				checkListingChanged(t, recorded[0], tt.id, name)
+			}
 		})
 	}
 }
@@ -252,15 +273,19 @@ func TestMarkShoppingItemUnknownBarcode(t *testing.T) {
 				}
 			}
 
-			// Only product.created, no movement events.
+			// product.created, then shopping.changed for the new product on
+			// the list, no movement events.
 			origin, _ := product["origin"].(string)
 			name, _ := product["name"].(string)
 			want := events.ProductCreatedData{ProductID: id, Name: name, Origin: origin}
 			recorded := recorder.Events()
-			if len(recorded) != 1 || recorded[0].Type != events.TypeProductCreated ||
-				recorded[0].Source != events.Source || recorded[0].Data != want {
-				t.Errorf("events = %+v, want only %s %#v", recorded, events.TypeProductCreated, want)
+			if len(recorded) != 2 {
+				t.Fatalf("events = %+v, want %s and %s", recorded, events.TypeProductCreated, events.TypeShoppingChanged)
 			}
+			if recorded[0].Type != events.TypeProductCreated || recorded[0].Source != events.Source || recorded[0].Data != want {
+				t.Errorf("event = %+v, want %s %#v", recorded[0], events.TypeProductCreated, want)
+			}
+			checkListingChanged(t, recorded[1], id, name)
 		})
 	}
 }
@@ -295,7 +320,11 @@ func TestMarkShoppingItemUnknownBarcodeStoredDuringLookup(t *testing.T) {
 	if calls := f.calls(); len(calls) != 1 {
 		t.Errorf("lookups = %q, want one", calls)
 	}
-	checkNoEvents(t, &recorder)
+	if recorded := recorder.Events(); len(recorded) != 1 {
+		t.Errorf("events = %+v, want only %s", recorded, events.TypeShoppingChanged)
+	} else {
+		checkListingChanged(t, recorded[0], "p4", "Mehl")
+	}
 }
 
 func TestMarkShoppingItemErrors(t *testing.T) {
@@ -405,6 +434,7 @@ func TestUnmarkShoppingItem(t *testing.T) {
 			}
 			before := decodeProduct(t, get(h, "/api/v1/products/"+tt.id))
 			start := time.Now().UTC().Truncate(time.Millisecond)
+			published := len(recorder.Events())
 
 			rec := unmarkItem(h, tt.id)
 
@@ -432,16 +462,31 @@ func TestUnmarkShoppingItem(t *testing.T) {
 			if n := countRows(t, db, "movements"); n != 0 {
 				t.Errorf("movements = %d, want 0", n)
 			}
-			checkNoEvents(t, &recorder)
+			// Only unmarking a product that misses nothing takes it off the
+			// list.
+			recorded := recorder.Events()[published:]
+			name, _ := before["name"].(string)
+			switch {
+			case !tt.marked || tt.listed:
+				if len(recorded) != 0 {
+					t.Errorf("events = %+v, want none", recorded)
+				}
+			case len(recorded) != 1:
+				t.Errorf("events = %+v, want only %s", recorded, events.TypeShoppingChanged)
+			default:
+				checkListingChanged(t, recorded[0], tt.id, name)
+			}
 		})
 	}
 }
 
 func TestUnmarkShoppingItemUnknownProduct(t *testing.T) {
-	h, db := newApp(t)
+	var recorder events.Recorder
+	h, db := newAppWithPublisher(t, &recorder)
 	insertProducts(t, db)
 
 	rec := unmarkItem(h, "unbekannt")
 
 	checkProblemCode(t, rec, http.StatusNotFound, "not_found")
+	checkNoEvents(t, &recorder)
 }

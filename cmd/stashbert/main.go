@@ -137,11 +137,14 @@ func run() error {
 	// Without MQTT_URL, StashBert runs without MQTT and without outbox, and
 	// the events go to events.Nop (architecture.md, 11). With it, the events
 	// go into the outbox, and the deliverer publishes them after every
-	// connection and every new event (architecture.md, 11.4).
+	// connection and every new event (architecture.md, 11.4). The
+	// snapshotter writes shopping.snapshot into the outbox on requests from
+	// <p>/in/snapshot and POST /shopping-list/snapshot (architecture.md, 11.3).
 	var (
-		mqttClient *mqtt.Client
-		deliverer  *outbox.Deliverer
-		publisher  events.Publisher = events.Nop{}
+		mqttClient  *mqtt.Client
+		deliverer   *outbox.Deliverer
+		snapshotter *outbox.Snapshotter
+		publisher   events.Publisher = events.Nop{}
 	)
 	if cfg.MQTT.URL != "" {
 		if mqttClient, err = mqtt.New(cfg.MQTT, logger); err != nil {
@@ -149,12 +152,21 @@ func run() error {
 		}
 		deliverer = outbox.NewDeliverer(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
 		mqttClient.OnConnect(func(context.Context) { deliverer.Wake() })
-		publisher = outbox.NewWriter(db, deliverer.Wake, logger)
+		writer := outbox.NewWriter(db, deliverer.Wake, logger)
+		publisher = writer
+		snapshotter = outbox.NewSnapshotter(writer, cfg.MQTT.TopicPrefix, logger)
+		mqttClient.OnMessage(snapshotter.Receive)
 	}
 
-	handler, err := app.NewHandler(cfg, app.Deps{
+	deps := app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
-	})
+	}
+	// Without MQTT, Snapshots stays a nil interface, not one holding a nil
+	// pointer.
+	if snapshotter != nil {
+		deps.Snapshots = snapshotter
+	}
+	handler, err := app.NewHandler(cfg, deps)
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
 	}
@@ -210,19 +222,17 @@ func run() error {
 			<-mqttDone
 		}()
 
-		// The deliverer also has its own context. Its deferred call runs
-		// before the one of the client, so it stops after the HTTP server and
-		// before the client publishes offline; undelivered events stay in the
-		// outbox for the next start.
-		deliverCtx, stopDeliverer := context.WithCancel(context.Background())
-		delivererDone := make(chan struct{})
-		go func() {
-			defer close(delivererDone)
-			deliverer.Run(deliverCtx, outbox.MinBackoff, outbox.MaxBackoff)
-		}()
+		// The deliverer and the snapshotter also have their own context.
+		// Their deferred call runs before the one of the client, so they stop
+		// after the HTTP server and before the client publishes offline;
+		// undelivered events stay in the outbox for the next start.
+		outboxCtx, stopOutbox := context.WithCancel(context.Background())
+		var outboxJobs sync.WaitGroup
+		outboxJobs.Go(func() { deliverer.Run(outboxCtx, outbox.MinBackoff, outbox.MaxBackoff) })
+		outboxJobs.Go(func() { snapshotter.Run(outboxCtx, outbox.SnapshotWindow) })
 		defer func() {
-			stopDeliverer()
-			<-delivererDone
+			stopOutbox()
+			outboxJobs.Wait()
 		}()
 	}
 
