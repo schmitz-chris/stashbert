@@ -1,6 +1,6 @@
 # ADR-0017: Kästen (Wasser, Bier) ohne eigenen Barcode
 
-- Status: angenommen
+- Status: angenommen, geändert am 2026-09-24 (Kastenware am Produkt statt „War ein Kasten")
 - Datum: 2026-09-24
 
 ## Kontext
@@ -13,20 +13,20 @@
 
 ## Entscheidung
 
-- **Kastengröße am Produkt:** neue Spalte `products.crate_size` (NULL oder 2 bis 100, Flaschen pro Kasten). Bestand, Soll und Buchungen bleiben in Flaschen.
+- **Kastengröße am Produkt:** neue Spalte `products.crate_size` (NULL oder 2 bis 100, Flaschen pro Kasten). Bestand, Soll und Buchungen bleiben in Flaschen. Ein Produkt mit Kastengröße heißt in der Oberfläche „Kastenware".
 - **Scannen im Modus Einlagern:**
   - Hat das Produkt eine Kastengröße, fragt die App vor dem Buchen: „Flasche" oder „Kasten (N Flaschen)". Gebucht wird 1 bzw. N. Solange die Frage offen ist, werden weitere Scans ignoriert.
-  - Hat das Produkt keine Kastengröße (auch bei neu angelegten Produkten), wird wie bisher sofort 1 gebucht. Die Ergebniskarte bietet „War ein Kasten": Auswahl der Größe (6, 12, 20, 24 oder eine andere Zahl), dann wird die Kastengröße am Produkt gespeichert und der Rest (N − 1) gebucht. Beim nächsten Scan kommt die Frage von selbst.
+  - Hat das Produkt keine Kastengröße (auch bei neu angelegten Produkten), wird wie bisher sofort 1 gebucht. Die Ergebniskarte bietet dafür nichts an. Ob ein Produkt Kastenware ist, legt man nur auf der Produktseite fest. Den ersten Kasten eines neuen Produkts korrigiert man einmal mit „Bestand setzen"; ab dem nächsten Scan kommt die Frage von selbst.
   - Im Modus Entnehmen gibt es keine Frage; gebucht wird eine Flasche. Größere Änderungen laufen über „Bestand setzen" (Inventur).
   - Im Modus Einkaufen gibt es keine Frage.
 - **Welches Produkt vor dem Buchen?** Die Scan-Ansicht findet das Produkt zum Barcode in der zwischengespeicherten Produktliste (die Barcodes stehen dort schon); ein neuer API-Endpunkt ist dafür nicht nötig. Ist die Liste nicht geladen oder der Barcode unbekannt, wird wie bisher sofort gebucht.
-- **Produktseite:** Feld „Kastengröße" (Flaschen pro Kasten, leer für „kein Kasten").
+- **Produktseite:** Schalter „Kastenware". Eingeschaltet erscheint darunter das Pflichtfeld „Flaschen pro Kasten" (2 bis 100); ausgeschaltet hat das Produkt keine Kastengröße (NULL).
 - **Einkaufsliste:** Bei Produkten mit Kastengröße wird die fehlende Menge in Kästen aufgerundet angezeigt, z. B. „1 Kasten · fehlen 17 Flaschen"; der geteilte Text lautet „1 Kasten Jever Pilsener". Vorgemerkte Produkte ohne Fehlbestand bleiben ohne Menge.
 
 ## Konsequenzen
 
 - Migration, ein Feld in `Product`, `ProductCreate`, `ProductPatch` und `ShoppingItem`.
-- Drei kleine Tasks: B33 (Datenmodell und API), F27 (Produktseite und Einkaufsliste), F28 (Frage beim Scannen).
+- Drei kleine Tasks: B33 (Datenmodell und API), F27 (Produktseite und Einkaufsliste), F28 (Frage beim Scannen); dazu F29 (Schalter „Kastenware", „War ein Kasten" entfällt).
 - Der Scan-Ablauf bleibt für alle Produkte ohne Kastengröße „scannen, Piep, fertig".
 
 ## Alternativen
@@ -34,3 +34,4 @@
 - **Eigener Barcode je Kasten mit `units`:** Kästen haben keinen eigenen Barcode.
 - **Kästen statt Flaschen zählen:** zu grob für Bier, das flaschenweise korrigiert werden soll.
 - **Immer fragen, auch ohne Kastengröße:** stört bei allen anderen Produkten.
+- **„War ein Kasten" auf der Ergebniskarte:** mit F28 gebaut und vom Nutzer verworfen, weil der Knopf bei jedem Produkt ohne Kastengröße erscheint und dort keinen Sinn ergibt.

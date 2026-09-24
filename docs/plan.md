@@ -1539,13 +1539,29 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 - **Referenzen:** ADR-0017; F08 bis F11
 - **Umfang:**
   - Im Modus Einlagern sucht die Scan-Ansicht das Produkt zum (normalisierten) Barcode in der zwischengespeicherten Produktliste (reine Funktion). Hat es eine Kastengröße, erscheint vor dem Buchen ein Sheet mit zwei großen Knöpfen „Flasche" und „Kasten (N Flaschen)"; gebucht wird `quantity` 1 bzw. N. Solange das Sheet offen ist, werden Scans ignoriert; „Abbrechen" bucht nichts. „Code eintippen" verhält sich gleich.
-  - Ohne Kastengröße (oder Produkt nicht im Cache, oder neu angelegt) wird wie bisher sofort 1 gebucht. Die Ergebniskarte im Modus Einlagern zeigt dann „War ein Kasten": Auswahl 6, 12, 20, 24 oder eine andere Zahl (2 bis 100); danach wird die Kastengröße per PATCH gespeichert und `N − 1` per `product_id` nachgebucht (mit Idempotency-Key). Die Karte zeigt danach das neue Ergebnis.
+  - Ohne Kastengröße (oder Produkt nicht im Cache, oder neu angelegt) wird wie bisher sofort 1 gebucht. (Mit F29 entfallen:) Die Ergebniskarte im Modus Einlagern zeigt dann „War ein Kasten": Auswahl 6, 12, 20, 24 oder eine andere Zahl (2 bis 100); danach wird die Kastengröße per PATCH gespeichert und `N − 1` per `product_id` nachgebucht (mit Idempotency-Key). Die Karte zeigt danach das neue Ergebnis.
   - Entnehmen und Einkaufen fragen nicht.
 - **Nicht im Umfang:** Kästen beim Entnehmen, Inventur-Ablauf (bleibt „Bestand setzen").
 - **Abnahmekriterien:**
   1. Vitest-Tests für die Produktsuche per Barcode im Cache und die Entscheidung Frage ja/nein.
   2. `make check` ist grün.
-  3. (Nutzer) Kasten Bier einlagern: erst „War ein Kasten" mit Größe, beim nächsten Kasten die Frage vorab.
+  3. (Nutzer) Kasten Bier einlagern: erst „War ein Kasten" mit Größe, beim nächsten Kasten die Frage vorab. Ersetzt durch Kriterium 4 von F29.
+
+### F29: Schalter „Kastenware" am Produkt, „War ein Kasten" entfällt
+
+- **Status:** offen
+- **Abhängig von:** F28
+- **Referenzen:** ADR-0017 (geändert am 24.09.2026); Nutzer-Rückmeldung vom 24.09.2026 („Das sollte man im Produkt selbst aktivieren können")
+- **Umfang:**
+  - Produktseite: das Zahlenfeld „Kastengröße" aus F27 wird ein Schalter (Checkbox) „Kastenware". Eingeschaltet erscheint darunter das Pflichtfeld „Flaschen pro Kasten" (Zahl, 2 bis 100, beim Einschalten leer); ausgeschaltet wird `crate_size: null` gespeichert und das Feld verschwindet. Gespeichert wird weiter über den bestehenden PATCH mit `diffPatch`.
+  - Ergebniskarte der Scan-Ansicht: „War ein Kasten" entfällt mit dem Größen-Dialog, dem Speichern der Kastengröße von dort, dem Nachbuchen von N − 1 und dem Rückgängig über zwei Buchungen. Code, der dadurch nicht mehr gebraucht wird, wird entfernt.
+  - Unverändert bleiben: die Frage „Flasche oder Kasten" für Produkte mit Kastengröße (F28), das Laden der Produktliste in der Scan-Ansicht, die Einkaufsliste (F27).
+- **Nicht im Umfang:** API und Backend, Einkaufsliste, Vorrat-Liste.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für das Formular: einschalten mit Größe ergibt die Größe im Patch, ausschalten ergibt `null`, unverändert ergibt keinen Patch, ein Produkt mit Kastengröße startet eingeschaltet.
+  2. Kein „War ein Kasten" mehr in Code und Tests; die Tests der Ergebniskarte sind entsprechend angepasst.
+  3. `make check` ist grün.
+  4. (Nutzer) Bei Jever „Kastenware" mit 20 einschalten: der nächste Scan im Modus Einlagern fragt „Flasche oder Kasten". Andere Produkte fragen nie, und ihre Karte zeigt keinen Kasten-Knopf.
 
 ---
 
