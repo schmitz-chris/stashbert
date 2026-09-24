@@ -20,6 +20,7 @@ check:
 	fi
 	go vet ./...
 	go test ./...
+	sh -n deploy/install.sh
 	@if [ -f web/package.json ]; then \
 		(cd web && npm ci && npm run check && npm run lint && npm test) || exit 1; \
 	fi

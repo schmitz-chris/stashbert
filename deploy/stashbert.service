@@ -1,0 +1,42 @@
+# systemd-Unit für StashBert im Debian-LXC (ADR-0014, architecture.md 9).
+# install.sh kopiert sie bei jedem Lauf nach /etc/systemd/system/. Eigene
+# Anpassungen daher mit "systemctl edit stashbert" als Drop-in anlegen.
+
+[Unit]
+Description=StashBert Vorratsinventar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=stashbert
+Group=stashbert
+# Legt /var/lib/stashbert an und gibt es dem Benutzer stashbert.
+StateDirectory=stashbert
+Environment=DATA_DIR=/var/lib/stashbert
+EnvironmentFile=/etc/stashbert/stashbert.env
+ExecStart=/usr/local/bin/stashbert
+Restart=on-failure
+RestartSec=5
+
+# Schutzoptionen ohne eigene Namensräume. Sie laufen auch im unprivilegierten
+# LXC ohne Nesting. LockPersonality und die beiden Restrict-Optionen nutzen
+# seccomp; fehlt seccomp, überspringt systemd sie.
+NoNewPrivileges=yes
+UMask=0027
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+# Weitergehende Schutzoptionen brauchen Namensräume. Sie funktionieren im LXC
+# nur mit Nesting; zum Aktivieren Kommentar entfernen und prüfen.
+#ProtectSystem=strict
+#ProtectHome=yes
+#PrivateTmp=yes
+#PrivateDevices=yes
+#ProtectKernelTunables=yes
+#ProtectKernelModules=yes
+#ProtectKernelLogs=yes
+#ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

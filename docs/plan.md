@@ -1174,7 +1174,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### L02: systemd-Unit und Installationsskript
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** L01
 - **Referenzen:** ADR-0014, architecture.md 9
 - **Umfang:**
