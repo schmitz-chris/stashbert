@@ -9,8 +9,11 @@ import type { Product } from "../lib/products";
 import { ConfirmActions, Dialog } from "./Dialog";
 
 // Secondary buttons (docs/plan.md, F22); "Bild entfernen" in red text.
+// Both are equally wide: side by side, each half of the row, or, when a
+// half is narrower than 9rem (large text, narrow screen), one below the
+// other at full width.
 const buttonClass =
-  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 font-medium disabled:opacity-40";
+  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 py-2 font-medium disabled:opacity-40";
 
 /**
  * The image of product on the product page, if it has one, and below it
@@ -46,7 +49,7 @@ export function ProductImageSection({ product }: { product: Product }) {
           className="mb-2 h-48 w-full rounded-xl bg-surface object-contain"
         />
       )}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3">
         <button
           type="button"
           disabled={pending}
