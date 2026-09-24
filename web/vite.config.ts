@@ -25,8 +25,9 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         scope: '/',
-        theme_color: '#15803d',
-        // stone-50, the background of the body.
+        // stone-50, the background of html and body, like theme-color in
+        // index.html.
+        theme_color: '#fafaf9',
         background_color: '#fafaf9',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -40,6 +41,10 @@ export default defineConfig({
         // All build files, including zxing_reader.wasm for the scanner
         // (architecture.md 4.3). The default limit of 2 MiB per file applies.
         globPatterns: ['**/*.{js,css,html,wasm,png,svg}'],
+        // The startup images are loaded by iOS itself when the app is added
+        // to the Home Screen, never by the page. Each iPhone needs only one
+        // of them, so the service worker does not download both.
+        globIgnores: ['startup-*.png'],
         navigateFallback: 'index.html',
         // The API is never answered from the service worker. There is no
         // runtime caching, so API requests always go to the network.

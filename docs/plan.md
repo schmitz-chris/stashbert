@@ -1430,7 +1430,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F23: App-Icon, Favicon, Startbild und Statusleiste
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F13a
 - **Referenzen:** ADR-0016; hig-pruefung.md M8, N4, N3, N2
 - **Umfang:**
