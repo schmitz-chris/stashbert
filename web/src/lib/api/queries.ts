@@ -657,3 +657,63 @@ export function productMergeMutation(queryClient: QueryClient) {
     },
   });
 }
+
+/**
+ * The connection to the MQTT broker, the lists offered by Home Assistant
+ * and the chosen list (architecture.md, 11.7). Without MQTT the status is
+ * disabled.
+ */
+export const mqttStatusQuery = queryOptions({
+  queryKey: ["integrations", "mqtt"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET("/integrations/mqtt");
+    if (!response.ok || data === undefined) {
+      throw error ?? new Error(`GET /integrations/mqtt: status ${response.status}`);
+    }
+    return data;
+  },
+});
+
+/**
+ * Chooses the list in Home Assistant that the shopping list goes to with
+ * PUT /integrations/mqtt/target, or removes the choice with null. A failed
+ * choice throws the Problem Details of the response. On success the status
+ * from the response replaces the cached status. On unknown_target the
+ * offer in the cache is out of date, so the status is fetched again.
+ */
+export function shoppingTargetMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (id: string | null) => {
+      const { data, error, response } = await api.PUT("/integrations/mqtt/target", {
+        body: { id },
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`PUT /integrations/mqtt/target: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (status) => {
+      queryClient.setQueryData(mqttStatusQuery.queryKey, status);
+    },
+    onError: (error) => {
+      if (problemCode(error) === "unknown_target") {
+        void queryClient.invalidateQueries({ queryKey: mqttStatusQuery.queryKey });
+      }
+    },
+  });
+}
+
+/**
+ * Asks the server to send the shopping list to Home Assistant again with
+ * POST /shopping-list/snapshot (shopping.snapshot, architecture.md 11.3).
+ * A failed request throws the Problem Details of the response. The cache
+ * does not change.
+ */
+export const shoppingSnapshotMutation = mutationOptions({
+  mutationFn: async () => {
+    const { error, response } = await api.POST("/shopping-list/snapshot");
+    if (!response.ok) {
+      throw error ?? new Error(`POST /shopping-list/snapshot: status ${response.status}`);
+    }
+  },
+});

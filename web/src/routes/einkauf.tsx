@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useId, useReducer, useState } from "react";
 import { Link } from "react-router";
 import { CartButton } from "../components/CartButton";
 import { CloseIcon } from "../components/CloseIcon";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { problemCode } from "../lib/api/client";
 import {
   markProductMutation,
+  mqttStatusQuery,
   shoppingListQuery,
+  shoppingSnapshotMutation,
+  shoppingTargetMutation,
   unmarkMutation,
 } from "../lib/api/queries";
 import { pageTitle } from "../lib/pageTitle";
@@ -20,6 +24,7 @@ import {
   shoppingText,
   type ShoppingItem,
 } from "../lib/shopping";
+import { noTarget, targetChoice } from "../lib/shoppingTarget";
 import {
   hiddenUndoBar,
   undoBarReducer,
@@ -28,8 +33,8 @@ import {
   type UndoBarState,
 } from "../lib/undoBar";
 
-// How long the notice after copying the list stays visible. Failures stay
-// until the next action (ADR-0016).
+// How long the notice after copying or sending the list stays visible.
+// Failures stay until the next action (ADR-0016).
 const noticeDuration = 2000;
 
 // How often the undo bar checks whether its time is up, in ms.
@@ -91,6 +96,7 @@ export function ShoppingPage() {
           />
         )}
       </div>
+      <HomeAssistantSection />
       <UndoBar state={bar} dispatch={dispatchBar} />
     </>
   );
@@ -303,4 +309,116 @@ async function shareOrCopy(text: string): Promise<ShareNotice> {
   } catch {
     return "failed";
   }
+}
+
+// The status line of the Home Assistant section.
+const connectionText = {
+  connecting: "Keine Verbindung zum Broker",
+  connected: "Verbunden",
+} as const;
+
+// Secondary buttons (docs/plan.md, F22).
+const secondaryButtonClass =
+  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 py-2 font-medium text-accent disabled:opacity-40";
+
+/**
+ * The section "Home Assistant" below the shopping list (docs/plan.md, F30),
+ * shown only when the MQTT status could be loaded and MQTT is not
+ * disabled: the state of the connection, the choice of the list in Home
+ * Assistant and "Liste neu senden", which asks the server to send the
+ * shopping list again.
+ */
+function HomeAssistantSection() {
+  const queryClient = useQueryClient();
+  const mqtt = useQuery(mqttStatusQuery);
+  const setTarget = useMutation(shoppingTargetMutation(queryClient));
+  const snapshot = useMutation(shoppingSnapshotMutation);
+  const headingId = useId();
+  const selectId = useId();
+
+  // Hides the notice after sending after a short time; a failure stays
+  // until the next tap (ADR-0016).
+  const { isSuccess: sent, reset: resetSnapshot } = snapshot;
+  useEffect(() => {
+    if (!sent) {
+      return;
+    }
+    const timer = setTimeout(resetSnapshot, noticeDuration);
+    return () => clearTimeout(timer);
+  }, [sent, resetSnapshot]);
+
+  const status = mqtt.data;
+  if (status === undefined || status.status === "disabled") {
+    return null;
+  }
+
+  const choice = targetChoice(status);
+  // While a choice is saved, the select shows it instead of the stored one.
+  const selected = setTarget.isPending
+    ? (setTarget.variables ?? noTarget)
+    : choice.selected;
+
+  let targetError = "";
+  if (setTarget.isError) {
+    targetError =
+      problemCode(setTarget.error) === "unknown_target"
+        ? "Liste wird nicht mehr angeboten"
+        : "Speichern fehlgeschlagen";
+  }
+
+  let sendNotice = "";
+  if (snapshot.isSuccess) {
+    sendNotice = "Wird gesendet";
+  } else if (snapshot.isError) {
+    sendNotice = "Senden fehlgeschlagen";
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="mt-8">
+      <h2 id={headingId} className="text-lg font-semibold">
+        Home Assistant
+      </h2>
+      <div className="mt-2 rounded-xl bg-surface px-4 py-3">
+        <p className="text-ink-secondary">{connectionText[status.status]}</p>
+        <label
+          htmlFor={selectId}
+          className="mt-3 block text-sm font-medium text-ink-secondary"
+        >
+          Liste in Home Assistant
+        </label>
+        <select
+          id={selectId}
+          value={selected}
+          disabled={setTarget.isPending}
+          onChange={(event) =>
+            setTarget.mutate(event.target.value === noTarget ? null : event.target.value)
+          }
+          className="mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-2 text-base disabled:opacity-40"
+        >
+          {choice.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <p role="status" className="mt-1 text-sm font-medium text-danger">
+          {targetError}
+        </p>
+        <button
+          type="button"
+          disabled={snapshot.isPending}
+          onClick={() => snapshot.mutate()}
+          className={`mt-3 w-full ${secondaryButtonClass}`}
+        >
+          Liste neu senden
+        </button>
+        <p
+          role="status"
+          className={`mt-1 text-sm font-medium ${snapshot.isError ? "text-danger" : "text-accent"}`}
+        >
+          {sendNotice}
+        </p>
+      </div>
+    </section>
+  );
 }
