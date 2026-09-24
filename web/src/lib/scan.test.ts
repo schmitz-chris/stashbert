@@ -224,9 +224,10 @@ describe("feedbackFor in mode mark", () => {
     [statusError(502), "Server nicht erreichbar"],
     [statusError(503), "Server nicht erreichbar"],
     [statusError(504), "Server nicht erreichbar"],
-    [problem(500, "internal"), "Buchung fehlgeschlagen"],
+    [problem(500, "internal"), "Vormerken fehlgeschlagen"],
+    [new Error("unexpected"), "Vormerken fehlgeschlagen"],
   ])("shows the error %o of a mark red with the error tone", (error, text) => {
-    expect(feedbackFor({ ok: false, error })).toEqual({ color: "red", sound: "error", text });
+    expect(feedbackFor({ ok: false, error, mode: "mark" })).toEqual({ color: "red", sound: "error", text });
   });
 });
 

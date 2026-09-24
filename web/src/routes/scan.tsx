@@ -114,7 +114,7 @@ export function ScanPage() {
           show(feedbackFor({ ok: true, mode: kind, result }));
           dispatchCard({ type: "show", result, kind, now: Date.now() });
         },
-        (error: unknown) => show(feedbackFor({ ok: false, error })),
+        (error: unknown) => show(feedbackFor({ ok: false, error, mode: kind })),
       );
       return;
     }

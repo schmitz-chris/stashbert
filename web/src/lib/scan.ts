@@ -47,7 +47,7 @@ export function saveScanMode(mode: ScanMode): void {
 export type ScanResult =
   | { ok: true; mode: BookingMode; result: MovementResult }
   | { ok: true; mode: "mark"; result: MarkResult }
-  | { ok: false; error: unknown };
+  | { ok: false; error: unknown; mode?: ScanMode };
 
 export type FeedbackColor = "green" | "blue" | "orange" | "yellow" | "red";
 
@@ -119,7 +119,7 @@ export function feedbackFor(scan: ScanResult): Feedback {
   if (errorStatus(error) === 422) {
     return failure("Ungültiger Barcode");
   }
-  return failure("Buchung fehlgeschlagen");
+  return failure(scan.mode === "mark" ? "Vormerken fehlgeschlagen" : "Buchung fehlgeschlagen");
 }
 
 // Returns the feedback for marking a scanned code: its message orange with
