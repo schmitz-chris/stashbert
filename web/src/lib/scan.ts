@@ -72,24 +72,6 @@ export function crateQuestion(
 }
 
 /**
- * Returns last with the message of the bookings of its product from first
- * to last, in the format of the server (architecture.md 6.3): "<name>
- * <stock before first> → <stock after last>". The scan view reports the
- * rest of a crate booked after its first bottle, and undoing both, as one
- * booking (docs/plan.md, F28). If first is last, last is returned as it is.
- */
-export function combinedResult(first: MovementResult, last: MovementResult): MovementResult {
-  if (first === last) {
-    return last;
-  }
-  const before = first.movement.stock_after - first.movement.delta;
-  return {
-    ...last,
-    message: `${last.product.name} ${before} → ${last.movement.stock_after}`,
-  };
-}
-
-/**
  * The outcome of a scanned code: the result of a booking in mode, the
  * result of marking it in mode mark, or the error the booking or the mark
  * failed with (see scanMovementMutation and markScanMutation).

@@ -7,7 +7,6 @@ import type { Product } from "../lib/products";
 import {
   cardView,
   markCardView,
-  offersCrate,
   targetChoices,
   type CardBooking,
   type CardMark,
@@ -26,12 +25,10 @@ const undoClass =
 
 interface ResultCardProps {
   booking: CardBooking;
-  /** Locks the buttons of the booking, while an action of the card runs. */
+  /** Locks both buttons, while an action of the card runs. */
   disabled: boolean;
   onPlusOne: () => void;
   onUndo: () => void;
-  /** Called by "War ein Kasten" (docs/plan.md, F28). */
-  onCrate: () => void;
   /** Called with the product from the response after its target changed. */
   onProductChange: (product: Product) => void;
   /** Called by "Stattdessen zu vorhandenem Produkt". */
@@ -42,18 +39,16 @@ interface ResultCardProps {
 
 /**
  * The result card of the scan view: the product of the booking, its
- * stock before and after, and the buttons [+1] and [Rückgängig]. For one
- * bottle of a product without a crate size it offers "War ein Kasten"
- * (offersCrate). For a booking that created its product it also offers
- * the target chips, a link to the product page and the merge into another
- * product. The card has no time limit; [×] closes it.
+ * stock before and after, and the buttons [+1] and [Rückgängig]. For a
+ * booking that created its product it also offers the target chips, a
+ * link to the product page and the merge into another product. The card
+ * has no time limit; [×] closes it.
  */
 export function ResultCard({
   booking,
   disabled,
   onPlusOne,
   onUndo,
-  onCrate,
   onProductChange,
   onMerge,
   onClose,
@@ -85,16 +80,6 @@ export function ResultCard({
           Rückgängig
         </button>
       </div>
-      {offersCrate(booking) && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onCrate}
-          className={`mt-2 ${actionClass} disabled:opacity-40`}
-        >
-          War ein Kasten
-        </button>
-      )}
       {view.isNew && (
         <NewProductActions
           product={booking.result.product}

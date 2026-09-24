@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "./products";
 import {
   cameraErrorText,
-  combinedResult,
   crateQuestion,
   feedbackFor,
   feedbackIcon,
@@ -377,43 +376,5 @@ describe("crateQuestion", () => {
 
   it.each(["consume", "mark"] as const)("never asks in mode %s", (mode) => {
     expect(crateQuestion(mode, "4001234567890", beer)).toBeNull();
-  });
-});
-
-describe("combinedResult", () => {
-  const beer: Product = { ...product, name: "Jever Pilsener", stock: 23, crate_size: 20 };
-  // The first bottle, 3 → 4, and the rest of the crate, 4 → 23.
-  const bottle = result("add", {
-    movement: { ...result("add").movement, delta: 1, stock_after: 4 },
-    message: "Jever Pilsener 3 → 4",
-  });
-  const rest = result("add", {
-    movement: { ...result("add").movement, id: "rest", delta: 19, stock_after: 23 },
-    product: beer,
-    message: "Jever Pilsener 4 → 23",
-  });
-
-  it("reports the rest of a crate from the stock before its first bottle", () => {
-    expect(combinedResult(bottle, rest)).toEqual({
-      ...rest,
-      message: "Jever Pilsener 3 → 23",
-    });
-  });
-
-  it("reports undoing a crate from the stock before the first reversal", () => {
-    const undoRest = result("add", {
-      movement: { ...rest.movement, id: "r1", kind: "reversal", delta: -19, stock_after: 4 },
-      message: "Jever Pilsener 23 → 4",
-    });
-    const undoBottle = result("add", {
-      movement: { ...rest.movement, id: "r2", kind: "reversal", delta: -1, stock_after: 3 },
-      product: { ...beer, stock: 3 },
-      message: "Jever Pilsener 4 → 3",
-    });
-    expect(combinedResult(undoRest, undoBottle).message).toBe("Jever Pilsener 23 → 3");
-  });
-
-  it("keeps a single booking as it is", () => {
-    expect(combinedResult(bottle, bottle)).toBe(bottle);
   });
 });

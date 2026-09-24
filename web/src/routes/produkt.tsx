@@ -19,7 +19,7 @@ import {
 } from "../lib/api/queries";
 import { normalizeGtin } from "../lib/gtin";
 import { pageTitle } from "../lib/pageTitle";
-import { diffPatch, toForm, type ProductForm } from "../lib/productForm";
+import { diffPatch, toForm, withCrate, type ProductForm } from "../lib/productForm";
 import { productBack } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
 import { sourceNote } from "../lib/sourceNote";
@@ -185,8 +185,9 @@ function ProductEditor({ product }: { product: Product }) {
     );
   }
 
-  // Returns the props that connect an input or a textarea to field.
-  function bind(field: keyof ProductForm) {
+  // Returns the props that connect an input or a textarea to field, a text
+  // of the form (every field but the checkbox crate).
+  function bind(field: Exclude<keyof ProductForm, "crate">) {
     return {
       value: form[field],
       onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -267,22 +268,35 @@ function ProductEditor({ product }: { product: Product }) {
             step={1}
           />
         </label>
-        {/* Empty means the product is not bought in crates (ADR-0017). */}
-        <label className="block">
-          <span className={labelClass}>Kastengröße</span>
+        {/* Only a product with a crate size asks "Flasche oder Kasten" when
+            storing (ADR-0017). The whole row, 44 px high, toggles it. */}
+        <label className="pressable -mx-2 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2">
           <input
-            {...bind("crate_size")}
-            type="number"
-            inputMode="numeric"
-            min={2}
-            max={100}
-            step={1}
-            aria-describedby="product-crate-size-hint"
+            type="checkbox"
+            checked={form.crate}
+            onChange={(event) => {
+              const { checked } = event.target;
+              setUnchanged(false);
+              setForm((current) => withCrate(current, checked));
+            }}
+            className="size-5 shrink-0 accent-accent"
           />
+          <span className="font-medium">Kastenware</span>
         </label>
-        <p id="product-crate-size-hint" className="-mt-3 text-sm text-ink-tertiary">
-          Flaschen pro Kasten
-        </p>
+        {form.crate && (
+          <label className="block">
+            <span className={labelClass}>Flaschen pro Kasten</span>
+            <input
+              {...bind("crate_size")}
+              type="number"
+              inputMode="numeric"
+              required
+              min={2}
+              max={100}
+              step={1}
+            />
+          </label>
+        )}
         <label className="block">
           <span className={labelClass}>Notiz</span>
           <textarea {...bind("note")} rows={3} maxLength={500} />

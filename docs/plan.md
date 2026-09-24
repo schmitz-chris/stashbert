@@ -1549,7 +1549,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F29: Schalter „Kastenware" am Produkt, „War ein Kasten" entfällt
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F28
 - **Referenzen:** ADR-0017 (geändert am 24.09.2026); Nutzer-Rückmeldung vom 24.09.2026 („Das sollte man im Produkt selbst aktivieren können")
 - **Umfang:**

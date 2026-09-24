@@ -10,7 +10,12 @@ export interface ProductForm {
   package_size: string;
   /** The text of the number input for the target. */
   target: string;
-  /** The text of the number input for the crate size; "" for no crate. */
+  /** The checkbox "Kastenware": the product is bought in crates (ADR-0017). */
+  crate: boolean;
+  /**
+   * The text of the number input "Flaschen pro Kasten", which the form
+   * shows only while crate is set.
+   */
   crate_size: string;
   note: string;
 }
@@ -22,8 +27,8 @@ export type ProductFormFields = Pick<
 >;
 
 /**
- * Returns the form values for product. A missing text and a missing crate
- * size become "".
+ * Returns the form values for product. A missing text becomes "". A
+ * product with a crate size starts with crate set and its size as text.
  */
 export function toForm(product: ProductFormFields): ProductForm {
   return {
@@ -31,9 +36,18 @@ export function toForm(product: ProductFormFields): ProductForm {
     brand: product.brand ?? "",
     package_size: product.package_size ?? "",
     target: String(product.target),
+    crate: product.crate_size !== null,
     crate_size: product.crate_size === null ? "" : String(product.crate_size),
     note: product.note ?? "",
   };
+}
+
+/**
+ * Returns form with the checkbox "Kastenware" set to crate. The field
+ * "Flaschen pro Kasten" is empty whenever it appears (docs/plan.md, F29).
+ */
+export function withCrate(form: ProductForm, crate: boolean): ProductForm {
+  return { ...form, crate, crate_size: "" };
 }
 
 /**
@@ -41,11 +55,11 @@ export function toForm(product: ProductFormFields): ProductForm {
  * that differ from original. Texts are compared and sent trimmed; an
  * optional text that is empty after trimming becomes null. The target is
  * only compared if its text is a number; the number input checks that it
- * is a whole number from 0 to 100000. The crate size is compared like the
- * target, except that an empty text becomes null (no crate); the number
- * input checks that it is a whole number from 2 to 100. Without changes the
- * patch is empty. An empty name is part of the patch; the form must catch
- * it.
+ * is a whole number from 0 to 100000. Without crate the crate size is null
+ * (no crate); with crate it is compared like the target, and the required
+ * number input checks that it is a whole number from 2 to 100. Without
+ * changes the patch is empty. An empty name is part of the patch; the form
+ * must catch it.
  */
 export function diffPatch(
   original: ProductFormFields,
@@ -67,8 +81,10 @@ export function diffPatch(
   if (Number.isFinite(target) && target !== original.target) {
     patch.target = target;
   }
-  const crateText = form.crate_size.trim();
-  const crateSize = crateText === "" ? null : Number(crateText);
+  let crateSize: number | null = null;
+  if (form.crate) {
+    crateSize = form.crate_size.trim() === "" ? NaN : Number(form.crate_size);
+  }
   if (
     (crateSize === null || Number.isFinite(crateSize)) &&
     crateSize !== original.crate_size

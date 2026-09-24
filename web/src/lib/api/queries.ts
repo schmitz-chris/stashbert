@@ -143,24 +143,18 @@ export function scanMovementMutation(queryClient: QueryClient) {
   });
 }
 
-/** A ProductMovement of quantity units, 1 if not set. */
-export interface RepeatMovement extends ProductMovement {
-  quantity?: number;
-}
-
 /**
  * Books one more unit of a product for the result card of the scan view
- * ([+1]), or the rest of a crate ("War ein Kasten", docs/plan.md, F28):
- * POST /movements with product_id, like scanMovementMutation with a new
- * Idempotency-Key, the same timeout, the same errors and the same cache
- * updates.
+ * ([+1]): POST /movements with product_id, like scanMovementMutation with
+ * a new Idempotency-Key, the same timeout, the same errors and the same
+ * cache updates.
  */
 export function repeatMovementMutation(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: async ({ productId, kind, quantity }: RepeatMovement) => {
+    mutationFn: async ({ productId, kind }: ProductMovement) => {
       const { data, error, response } = await api.POST("/movements", {
         params: { header: { "Idempotency-Key": crypto.randomUUID() } },
-        body: { product_id: productId, kind, quantity },
+        body: { product_id: productId, kind },
         signal: AbortSignal.timeout(scanTimeout),
       });
       if (!response.ok || data === undefined) {

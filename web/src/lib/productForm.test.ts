@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   diffPatch,
   toForm,
+  withCrate,
   type ProductForm,
   type ProductFormFields,
 } from "./productForm";
@@ -29,13 +30,37 @@ describe("toForm", () => {
       brand: "Ferrero",
       package_size: "450 g",
       target: "2",
+      crate: false,
       crate_size: "",
       note: "",
     });
   });
 
-  it("turns the crate size into text", () => {
-    expect(toForm(crated).crate_size).toBe("20");
+  it("starts a product with a crate size switched on, with its size", () => {
+    expect(toForm(crated)).toMatchObject({ crate: true, crate_size: "20" });
+  });
+});
+
+describe("withCrate", () => {
+  it("switches the crate on with an empty size", () => {
+    expect(withCrate(toForm(original), true)).toEqual({
+      ...toForm(original),
+      crate: true,
+      crate_size: "",
+    });
+  });
+
+  it("switches the crate off and empties the size", () => {
+    expect(withCrate(toForm(crated), false)).toEqual({
+      ...toForm(crated),
+      crate: false,
+      crate_size: "",
+    });
+  });
+
+  it("starts with an empty size when switched on again", () => {
+    const again = withCrate(withCrate(toForm(crated), false), true);
+    expect(again).toMatchObject({ crate: true, crate_size: "" });
   });
 });
 
@@ -84,10 +109,9 @@ describe("diffPatch", () => {
     expect(diffPatch(original, form({ target: " " }))).toEqual({});
   });
 
-  it("contains a crate size set for the first time as a number", () => {
-    expect(diffPatch(original, form({ crate_size: "20" }))).toEqual({
-      crate_size: 20,
-    });
+  it("contains the size of a crate switched on", () => {
+    const switchedOn = { ...withCrate(toForm(original), true), crate_size: "20" };
+    expect(diffPatch(original, switchedOn)).toEqual({ crate_size: 20 });
   });
 
   it("contains a changed crate size as a number", () => {
@@ -95,22 +119,30 @@ describe("diffPatch", () => {
     expect(diffPatch(crated, changed)).toEqual({ crate_size: 24 });
   });
 
-  it("sends a cleared crate size as null", () => {
-    const cleared = { ...toForm(crated), crate_size: "" };
-    expect(diffPatch(crated, cleared)).toEqual({ crate_size: null });
+  it("sends a crate switched off as null", () => {
+    expect(diffPatch(crated, withCrate(toForm(crated), false))).toEqual({
+      crate_size: null,
+    });
+    // The size in the hidden field does not count.
+    expect(diffPatch(crated, { ...toForm(crated), crate: false })).toEqual({
+      crate_size: null,
+    });
   });
 
-  it("sends a crate size of only spaces as null", () => {
-    const cleared = { ...toForm(crated), crate_size: "  " };
-    expect(diffPatch(crated, cleared)).toEqual({ crate_size: null });
-  });
-
-  it("does not count an unchanged crate size as a change", () => {
+  it("does not count an unchanged crate as a change", () => {
     expect(diffPatch(crated, toForm(crated))).toEqual({});
     expect(diffPatch(crated, { ...toForm(crated), crate_size: " 20 " })).toEqual(
       {},
     );
-    expect(diffPatch(original, form({ crate_size: " " }))).toEqual({});
+    const onAndOff = withCrate(withCrate(toForm(original), true), false);
+    expect(diffPatch(original, onAndOff)).toEqual({});
+  });
+
+  it("ignores an empty size of a crate switched on, which the form must catch", () => {
+    expect(diffPatch(original, withCrate(toForm(original), true))).toEqual({});
+    expect(diffPatch(crated, { ...toForm(crated), crate_size: " " })).toEqual(
+      {},
+    );
   });
 
   it("ignores a crate size that is not a number", () => {
@@ -141,6 +173,7 @@ describe("diffPatch", () => {
       brand: "",
       package_size: "1 kg",
       target: "3",
+      crate: true,
       crate_size: "6",
       note: "Für das Frühstück",
     });

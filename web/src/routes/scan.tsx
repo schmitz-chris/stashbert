@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { CrateSheet } from "../components/CrateSheet";
-import { CrateSizeDialog } from "../components/CrateSizeDialog";
 import { Dialog } from "../components/Dialog";
 import { FeedbackSymbol } from "../components/FeedbackSymbol";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
@@ -16,7 +15,6 @@ import { useScanner } from "../hooks/useScanner";
 import {
   markScanMutation,
   productListQuery,
-  productUpdateMutation,
   repeatMovementMutation,
   reversalMutation,
   scanMovementMutation,
@@ -25,15 +23,9 @@ import {
 } from "../lib/api/queries";
 import { pageTitle } from "../lib/pageTitle";
 import { findByBarcode, type Product } from "../lib/products";
-import {
-  hiddenCard,
-  resultCardReducer,
-  undoOrder,
-  type CardBooking,
-} from "../lib/resultCard";
+import { hiddenCard, resultCardReducer } from "../lib/resultCard";
 import {
   cameraErrorText,
-  combinedResult,
   crateQuestion,
   feedbackFor,
   feedbackIcon,
@@ -106,7 +98,6 @@ export function ScanPage() {
   const reversal = useMutation(reversalMutation(queryClient));
   const { mutateAsync: mark } = useMutation(markScanMutation(queryClient));
   const unmark = useMutation(unmarkMutation(queryClient));
-  const saveProduct = useMutation(productUpdateMutation(queryClient));
   // The product list finds the product of a code before it is booked, to
   // ask "Flasche oder Kasten" (F28); without it every code is booked at once.
   const { data: products } = useQuery(productListQuery);
@@ -119,10 +110,8 @@ export function ScanPage() {
   // The new product of the card while its merge dialog is open.
   const [mergeSource, setMergeSource] = useState<Product | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
-  // The open question "Flasche oder Kasten" and the booking whose crate
-  // size "War ein Kasten" asks for (F28).
+  // The open question "Flasche oder Kasten" (F28).
   const [question, setQuestion] = useState<CrateQuestion | null>(null);
-  const [crateBooking, setCrateBooking] = useState<CardBooking | null>(null);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
   // From reading the last code to the answer of the server, for the camera
   // menu (F25); a ref, so that measuring renders nothing.
@@ -193,8 +182,8 @@ export function ScanPage() {
   }
 
   // Books or marks every accepted code. While a dialog or a sheet lies over
-  // the camera (merge, typing in a code, the questions of a crate), codes
-  // are ignored.
+  // the camera (merge, typing in a code, "Flasche oder Kasten"), codes are
+  // ignored.
   const {
     videoRef,
     phase,
@@ -207,7 +196,7 @@ export function ScanPage() {
     selectAutomatic,
     timings,
   } = useScanner((code) => {
-    if (mergeSource !== null || manualOpen || question !== null || crateBooking !== null) {
+    if (mergeSource !== null || manualOpen || question !== null) {
       return;
     }
     handleCode(code, performance.now());
@@ -221,50 +210,15 @@ export function ScanPage() {
     );
   }
 
-  // [Rückgängig]: reverses the bookings on the card, the latest first (the
-  // rest of a crate, then its first bottle), and hides the card. Each
-  // reversal takes its booking off the card, so after a failure another
-  // tap reverses only what is left.
-  async function undo(booking: CardBooking) {
-    const reversals: MovementResult[] = [];
-    try {
-      for (const movementId of undoOrder(booking)) {
-        const result = await reversal.mutateAsync(movementId);
-        reversals.push(result);
+  // [Rückgängig]: reverses the booking on the card and hides the card.
+  function undo(movementId: string) {
+    reversal.mutateAsync(movementId).then(
+      (result) => {
         dispatchCard({ type: "hide", movementId });
-        dispatchCard({ type: "update", product: result.product });
-      }
-    } catch (error) {
-      show(undoFeedbackFor({ ok: false, error }), true);
-      return;
-    }
-    const result = combinedResult(reversals[0], reversals[reversals.length - 1]);
-    show(undoFeedbackFor({ ok: true, result }));
-  }
-
-  // "War ein Kasten" with size (F28): saves size as the crate size of the
-  // product of the bottle on the card, books the rest of the crate and
-  // shows bottle and rest as one booking.
-  function bookCrateRest(size: number) {
-    const bottle = crateBooking;
-    if (bottle === null) {
-      return;
-    }
-    setCrateBooking(null);
-    const { product, movement } = bottle.result;
-    saveProduct
-      .mutateAsync({ id: product.id, patch: { crate_size: size } })
-      .then((saved) => {
-        dispatchCard({ type: "update", product: saved });
-        return repeat.mutateAsync({ productId: saved.id, kind: "add", quantity: size - 1 });
-      })
-      .then(
-        (rest) => {
-          dispatchCard({ type: "crate", movementId: movement.id, rest });
-          show(feedbackFor({ ok: true, mode: "add", result: combinedResult(bottle.result, rest) }));
-        },
-        (error: unknown) => show(feedbackFor({ ok: false, error }), true),
-      );
+        show(undoFeedbackFor({ ok: true, result }));
+      },
+      (error: unknown) => show(undoFeedbackFor({ ok: false, error }), true),
+    );
   }
 
   // [Rückgängig] on the card of a mark: removes the mark of product and
@@ -455,10 +409,9 @@ export function ScanPage() {
         <ResultCard
           key={content.result.movement.id}
           booking={content}
-          disabled={repeat.isPending || reversal.isPending || saveProduct.isPending}
+          disabled={repeat.isPending || reversal.isPending}
           onPlusOne={() => plusOne(content.result.product.id, content.kind)}
-          onUndo={() => void undo(content)}
-          onCrate={() => setCrateBooking(content)}
+          onUndo={() => undo(content.result.movement.id)}
           onProductChange={(product) => dispatchCard({ type: "update", product })}
           onMerge={() => setMergeSource(content.result.product)}
           onClose={() => dispatchCard({ type: "close" })}
@@ -485,11 +438,6 @@ export function ScanPage() {
         question={question}
         onClose={() => setQuestion(null)}
         onAnswer={answer}
-      />
-      <CrateSizeDialog
-        open={crateBooking !== null}
-        onClose={() => setCrateBooking(null)}
-        onChoose={bookCrateRest}
       />
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Kamera">
         <CameraSettings
