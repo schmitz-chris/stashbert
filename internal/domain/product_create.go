@@ -127,6 +127,9 @@ func CreateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in 
 		Name:      p.Name,
 		Origin:    p.Origin,
 	}))
+	// A target above 0 puts the new product on the shopping list at once
+	// (architecture.md, 6.6).
+	publishShoppingChanged(ctx, pub, p.ID, p.Name, listing{}, productListing(p))
 	return p, nil
 }
 

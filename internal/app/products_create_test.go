@@ -254,3 +254,19 @@ func TestCreateProductPublishesEvent(t *testing.T) {
 		t.Errorf("event data = %#v, want %#v", e.Data, want)
 	}
 }
+
+func TestCreateProductWithTargetPublishesShoppingChanged(t *testing.T) {
+	var recorder events.Recorder
+	h, _ := newAppWithPublisher(t, &recorder)
+
+	got := decodeCreated(t, post(h, "/api/v1/products", `{"name": "Kidneybohnen", "target": 3}`))
+
+	recorded := recorder.Events()
+	if len(recorded) != 2 || recorded[0].Type != events.TypeProductCreated {
+		t.Fatalf("events = %+v, want product.created and shopping.changed", recorded)
+	}
+	want := events.ShoppingChangedData{ProductID: got["id"].(string), Name: "Kidneybohnen", MissingBefore: 0, MissingAfter: 3}
+	if e := recorded[1]; e.Type != events.TypeShoppingChanged || e.Data != want {
+		t.Errorf("second event = %s %#v, want %s %#v", e.Type, e.Data, events.TypeShoppingChanged, want)
+	}
+}
