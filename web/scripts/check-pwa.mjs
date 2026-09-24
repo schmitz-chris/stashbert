@@ -16,7 +16,7 @@ const expectedManifest = {
   display: "standalone",
   start_url: "/",
   scope: "/",
-  theme_color: "#fafaf9",
+  theme_color: "#f4f3f1",
 };
 const expectedIcons = ["192x192", "512x512"];
 const expectedPrecache = ["zxing_reader.wasm", "index.html"];

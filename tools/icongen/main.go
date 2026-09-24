@@ -30,10 +30,10 @@ var (
 	// web/src/index.css, emerald-700).
 	iconGreen  = color.NRGBA{R: 0x00, G: 0x7a, B: 0x55, A: 0xff} // #007a55
 	motifWhite = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
-	// appBackground is stone-50, the background of html and body. The same
+	// appBackground is the canvas color, the background of html and body. The same
 	// value is theme-color in web/index.html and theme_color and
 	// background_color in web/vite.config.ts.
-	appBackground = color.NRGBA{R: 0xfa, G: 0xfa, B: 0xf9, A: 0xff} // #fafaf9
+	appBackground = color.NRGBA{R: 0xf4, G: 0xf3, B: 0xf1, A: 0xff} // #f4f3f1
 )
 
 // Geometry of the motif in thousandths of the side length, x to the right

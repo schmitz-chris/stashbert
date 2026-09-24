@@ -25,10 +25,10 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         scope: '/',
-        // stone-50, the background of html and body, like theme-color in
-        // index.html.
-        theme_color: '#fafaf9',
-        background_color: '#fafaf9',
+        // The canvas color, the background of html and body, like
+        // theme-color in index.html.
+        theme_color: '#f4f3f1',
+        background_color: '#f4f3f1',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

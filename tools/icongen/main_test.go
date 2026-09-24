@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	green   = color.NRGBA{R: 0x00, G: 0x7a, B: 0x55, A: 0xff} // #007a55
-	white   = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
-	stone50 = color.NRGBA{R: 0xfa, G: 0xfa, B: 0xf9, A: 0xff} // #fafaf9
+	green  = color.NRGBA{R: 0x00, G: 0x7a, B: 0x55, A: 0xff} // #007a55
+	white  = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+	canvas = color.NRGBA{R: 0xf4, G: 0xf3, B: 0xf1, A: 0xff} // #f4f3f1
 )
 
 // wantIcons and wantStartupImages list the files in web/public that icongen
@@ -134,8 +134,8 @@ func TestRenderStartup(t *testing.T) {
 		}
 		for y := range s.height {
 			for x := range s.width {
-				if got := img.NRGBAAt(x, y); got != stone50 {
-					t.Fatalf("%s: pixel (%d, %d) = %v, want %v", s.name, x, y, got, stone50)
+				if got := img.NRGBAAt(x, y); got != canvas {
+					t.Fatalf("%s: pixel (%d, %d) = %v, want %v", s.name, x, y, got, canvas)
 				}
 			}
 		}

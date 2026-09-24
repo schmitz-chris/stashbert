@@ -28,8 +28,9 @@
   /* Errors and destructive actions (red-700). */
   --color-danger: #c10007;
 
-  /* The page background (stone-50). */
-  --color-canvas: #fafaf9;
+  /* The page background, a warm gray between stone-100 and stone-200 that
+     sets white lists apart about as much as the grouped background of iOS. */
+  --color-canvas: #f4f3f1;
   /* Lists, cards, fields and dialogs (white). */
   --color-surface: #ffffff;
   /* Neutral buttons, the search field, the track of the filters and
@@ -39,8 +40,9 @@
   --color-ink: #1c1917;
   /* Labels and secondary text (stone-700). */
   --color-ink-secondary: #44403b;
-  /* Hints, brands and empty states (stone-500). */
-  --color-ink-tertiary: #79716b;
+  /* Hints, brands and empty states (between stone-500 and stone-600, at
+     least 4.5:1 on canvas). */
+  --color-ink-tertiary: #736b65;
   /* Separators between rows and around lists (stone-200). */
   --color-line: #e7e5e4;
   /* Borders of fields and bordered buttons, at least 3:1 (stone-500). */
