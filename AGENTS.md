@@ -95,6 +95,8 @@ Diese Befehle gibt es ab Task P0-1:
 - `modernc.org/sqlite`
 - `github.com/google/uuid`
 - `golang.org/x/time` (nur `rate`)
+- `github.com/eclipse/paho.golang` v0.23.0, Paket `autopaho` (MQTT 5, ADR-0018), nur in `internal/mqtt`
+- `github.com/mochi-mqtt/server/v2` v2.7.9, nur in Tests (eingebetteter MQTT-Broker, ADR-0018)
 
 **Frontend (npm), abschließende Liste (ADR-0007):**
 

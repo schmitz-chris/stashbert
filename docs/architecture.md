@@ -144,7 +144,9 @@ Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict
 
 Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Alle Zeitstempel: TEXT im festen Format RFC 3339 UTC mit Millisekunden, Go-Layout `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). Alle IDs: TEXT, UUIDv7 in Kleinbuchstaben.
 
-**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 ohne Einträge; vorgesehen für spätere Einstellungen (z. B. die Ziel-Einkaufsliste in M2).
+**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 ohne Einträge; ab M2 `shopping_target_id` und `shopping_target_name` (Zielliste, 11.7).
+
+**`outbox`** (M2): Warteschlange der MQTT-Nachrichten, siehe 11.4.
 
 **`products`**:
 
@@ -233,6 +235,10 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `GET /shopping-list` | `getShoppingList` | Einkaufsliste: Produkte mit `missing > 0` oder `marked`, sortiert nach Name | 200 `{items: ShoppingItem[]}` | |
 | `POST /shopping-list/items` | `markShoppingItem` | Produkt vormerken, per `{product_id}` oder `{barcode}` (genau eines); ändert nie den Bestand; unbekannter Barcode legt das Produkt wie beim Einlagern an, ohne Buchung (ADR-0015) | 200 `MarkResult` | `invalid_request`, `invalid_barcode` (422), `not_found` |
 | `DELETE /shopping-list/items/{product_id}` | `unmarkShoppingItem` | Vormerkung entfernen (Fehlbestand nach Soll bleibt) | 204 | `not_found` |
+| `POST /shopping-list/snapshot` | `sendShoppingSnapshot` | Einkaufsliste per MQTT neu senden (`shopping.snapshot`, Kapitel 11.3) | 202 | `mqtt_disabled` (409) |
+| `GET /summary` | `getSummary` | Zusammenfassung (Kapitel 11.5) | 200 `Summary` | |
+| `GET /integrations/mqtt` | `getMqttStatus` | Verbindung, angebotene und gewählte Zielliste (Kapitel 11.7) | 200 `MqttStatus` | |
+| `PUT /integrations/mqtt/target` | `setShoppingTarget` | Zielliste wählen `{id}` oder mit `{id: null}` aufheben | 200 `MqttStatus` | `mqtt_disabled` (409), `unknown_target` (422), `invalid_request` |
 
 Zusätzlich, **nicht** in der Spec beschrieben: `GET /api/v1/openapi.yaml` liefert die eingebettete Spec aus (öffentlich).
 
@@ -298,6 +304,8 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `method_not_allowed` | 405 |
 | `invalid_barcode` | 422 |
 | `idempotency_key_mismatch` | 422 |
+| `mqtt_disabled` | 409 |
+| `unknown_target` | 422 |
 | `invalid_image` | 422 |
 | `internal` | 500 |
 
@@ -317,6 +325,8 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - `needs_review` wird nur dann `false`, wenn der Patch mindestens eines der Felder `name`, `brand` oder `package_size` enthält. Ein Patch nur mit `target` ändert `needs_review` nicht.
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
 - **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`, `crate_size|null`
+- **Summary** (Kapitel 11.5): `product_count`, `shopping_count`, `empty_count`, `review_count`, `shopping: [{name, amount}]` (höchstens 100), `shopping_truncated`
+- **MqttStatus** (Kapitel 11.7): `status` (`disabled`, `connecting`, `connected`), `targets: [{id, name}]`, `target: {id, name}|null`
 - **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".
 - **Merge:**
   - Barcodes und Buchungen der Quelle gehen auf das Ziel über.
@@ -336,6 +346,8 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `shopping.changed` | `TypeShoppingChanged` | `missing` ändert sich, auch beim Löschen oder Zusammenführen eines Produkts mit `missing > 0` (dann `missing_after = 0`) | `product_id`, `name`, `missing_before`, `missing_after` |
 
 Ereignisse werden erst **nach** dem Commit ausgelöst, in dieser Reihenfolge: `product.created`, Buchungsereignis, `product.empty`, `shopping.changed`. Die Buchungsereignisse gibt es nur, wenn `delta ≠ 0`.
+
+Ab M2 (ADR-0018): `shopping.changed` entsteht zusätzlich beim Vormerken und beim Entfernen der Vormerkung, wenn sich dadurch ändert, ob das Produkt auf der Einkaufsliste steht (`missing_before` = `missing_after`). Für MQTT ergänzt die Outbox die Daten (Kapitel 11.3); dazu kommt der Typ `shopping.snapshot`, den nicht die Fachlogik, sondern der Abgleich erzeugt.
 
 ## 7. Barcodes und Open Food Facts
 
@@ -423,6 +435,13 @@ Danach wird mit `target = 0` gebucht.
 | `OFF_CONTACT` | leer | Kontakt für den OFF-User-Agent; leer bedeutet keine OFF-Lookups (nur Platzhalter) |
 | `BACKUP_KEEP` | `14` | Anzahl aufbewahrter täglicher Backups |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `MQTT_URL` | leer | Broker, z. B. `mqtt://192.168.1.10:1883` oder `mqtts://…:8883`; leer bedeutet ohne MQTT (Kapitel 11) |
+| `MQTT_USERNAME` | leer | MQTT-Benutzer |
+| `MQTT_PASSWORD` | leer | MQTT-Passwort; wird nie geloggt |
+| `MQTT_CLIENT_ID` | `stashbert` | Client-ID; zwei laufende Instanzen brauchen verschiedene IDs |
+| `MQTT_TOPIC_PREFIX` | `stashbert` | Präfix aller Topics, 1 bis 64 Zeichen aus `a` bis `z`, `0` bis `9` und `_` (wird auch für Entitäts-IDs in HA verwendet) |
+| `MQTT_HA_DISCOVERY` | `true` | `true` oder `false`: Gerät in HA per Discovery anmelden bzw. die Anmeldung löschen |
+| `MQTT_HA_PREFIX` | `homeassistant` | Discovery-Präfix von HA, 1 bis 64 Zeichen aus Buchstaben, Ziffern, `_` und `-` |
 
 ### 9.3 Backup
 
@@ -435,7 +454,7 @@ Danach wird mit `target = 0` gebucht.
 
 Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanken aus Kapitel 2.
 
-- **M2 Integrationen:** API-Tokens mit Scopes, Outbox und MQTT 5 (Mosquitto) mit HA-Discovery, Bring! über HA `todo.*` mit wählbarer Ziel-Liste, Summary-Endpunkt. Details in `research.md`, Kapitel 10 und 11.
+- **M2 Integrationen:** API-Tokens mit Scopes. Outbox, MQTT mit HA-Discovery, Bring! über HA und der Summary-Endpunkt sind in Kapitel 11 festgelegt (ADR-0018).
 - **M3 Hardware:** ESP32 mit ESPHome, bucht über `POST /api/v1/movements` mit Barcode (research.md, Kapitel 9).
 - **Weitere Optionen:**
   - OIDC-Anmeldung (Google oder Pocket ID)
@@ -445,3 +464,112 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
   - Offline-Buchen mit client-seitigen UUIDv7
   - Kurzbefehl
   - Swift-Hülle (research.md, 7.9)
+
+## 11. MQTT und Home Assistant (M2, ADR-0018)
+
+`<p>` steht für `MQTT_TOPIC_PREFIX` (Standard `stashbert`), `<ha>` für `MQTT_HA_PREFIX` (Standard `homeassistant`). Ist `MQTT_URL` leer, gibt es weder Verbindung noch Outbox; `events.Nop` bleibt der Publisher.
+
+### 11.1 Verbindung (`internal/mqtt`)
+
+- `internal/mqtt` kapselt `autopaho` (paho.golang v0.23.0) hinter einem kleinen Interface; der Rest des Codes kennt paho nicht.
+- MQTT 5, `CleanStartOnInitialConnection: true`, `SessionExpiryInterval: 0`, `KeepAlive: 30`, Wiederverbinden mit exponentiellem Backoff von 1 s bis 5 min.
+- **Last Will:** `<p>/status` = `offline`, QoS 1, retained. Nach jeder Verbindung: `<p>/status` = `online`, QoS 1, retained.
+- **Beenden:** Beim Herunterfahren zuerst `<p>/status` = `offline` (retained) publizieren, dann trennen; beides zusammen höchstens 5 s.
+- **Abonnements** nach jeder Verbindung neu (in `OnConnectionUp`, das nicht blockieren darf, also in einer Goroutine): `<p>/in/#` mit QoS 1 und, nur mit Discovery, `<ha>/status` mit QoS 1.
+- **Logs:** Verbindung auf und ab mit `info`, Fehler mit `warn`. Das Passwort erscheint nie im Log.
+- Der Zustand (`disabled`, `connecting`, `connected`) ist für `GET /integrations/mqtt` abfragbar.
+
+### 11.2 Topics
+
+| Topic | Richtung | Retained | QoS | Inhalt |
+|---|---|---|---|---|
+| `<p>/status` | aus | ja | 1 | `online` oder `offline` (Last Will), Verfügbarkeit für HA |
+| `<p>/state/summary` | aus | ja | 1 | Zusammenfassung als JSON (11.5) |
+| `<p>/events/<typ>` | aus | nein | 1 | Ereignis als JSON (11.3), z. B. `<p>/events/shopping.changed` |
+| `<ha>/device/<p>/config` | aus | ja | 1 | Discovery (11.6) |
+| `<p>/in/snapshot` | ein | Nachrichten mit Retain-Flag werden ignoriert | 1 | beliebiges Payload: löst `shopping.snapshot` aus |
+| `<p>/in/targets` | ein | ja (von HA) | 1 | verfügbare Ziellisten (11.7) |
+| `<ha>/status` | ein | nein | 1 | Birth `online` von HA (11.6) |
+
+### 11.3 Ereignisse
+
+- Payload ist das JSON von `events.Event`: `id`, `type`, `source`, `time`, `data` (6.6). Topic `<p>/events/<type>`, QoS 1, nicht retained, zugestellt in der Reihenfolge der Outbox.
+- **`shopping.changed`:** Die Outbox ergänzt beim Schreiben die Daten aus der Fachlogik (`product_id`, `name`, `missing_before`, `missing_after`) um den Zustand des Produkts nach dem Commit:
+  - `marked`: vorgemerkt;
+  - `on_list`: steht auf der Einkaufsliste (`missing > 0` oder `marked`);
+  - `amount`: Menge als Text (siehe unten);
+  - `list`: Kennung der gewählten Zielliste oder `""` (11.7).
+  Gibt es das Produkt nicht mehr (gelöscht oder zusammengeführt), sind `marked` und `on_list` `false` und `amount` ist `""`.
+- **`amount`:** mit Fehlbestand und Kastengröße `"1 Kasten"` bzw. `"N Kästen"` (N = `missing` durch `crate_size`, aufgerundet, ADR-0017); mit Fehlbestand ohne Kastengröße `"N Stück"`; ohne Fehlbestand (nur vorgemerkt oder nicht auf der Liste) `""`.
+- **`shopping.snapshot`:** `data` = `{list, items: [{product_id, name, on_list, amount}]}` für alle Produkte mit `target > 0` oder `marked`, sortiert wie die Einkaufsliste (nach Name). Ausgelöst durch `<p>/in/snapshot` (mehrere Anfragen innerhalb von 2 s ergeben einen Snapshot), `POST /shopping-list/snapshot` und den Wechsel der Zielliste (11.7).
+- Beispiel `shopping.changed`:
+
+  ```json
+  {
+    "id": "01a0d5c2-7f3e-7a41-9c1d-3b2f4e5a6b7c",
+    "type": "shopping.changed",
+    "source": "stashbert",
+    "time": "2026-09-24T18:03:11.482Z",
+    "data": {
+      "product_id": "01a0cfbb-6b1f-7943-a616-68709e8c19b1",
+      "name": "Jever Pilsener",
+      "missing_before": 0,
+      "missing_after": 17,
+      "marked": false,
+      "on_list": true,
+      "amount": "1 Kasten",
+      "list": "todo.bring_zuhause"
+    }
+  }
+  ```
+
+### 11.4 Outbox
+
+- Tabelle `outbox` (STRICT): `seq` INTEGER PRIMARY KEY AUTOINCREMENT (bestimmt die Reihenfolge; einzige ID ohne UUIDv7), `topic` TEXT (relativ zum Präfix, z. B. `events/stock.added`), `payload` TEXT (JSON), `created_at` TEXT, `attempts` INTEGER Standard 0, `last_error` TEXT NULL.
+- **Schreiben:** `outbox.Writer` implementiert `events.Publisher`. `Publish` ergänzt die Daten (11.3), schreibt eine Zeile und weckt den Zusteller. Ein Fehler beim Schreiben wird mit `warn` geloggt; die Fachlogik merkt davon nichts.
+- **Zustellen:** Ein Hintergrundjob wartet auf die Verbindung, liest die ältesten Einträge (höchstens 50 auf einmal) und publiziert sie der Reihe nach mit QoS 1. Nach erfolgreichem PUBACK wird der Eintrag gelöscht. Bei einem Fehler: `attempts` und `last_error` setzen, Stapel abbrechen (die Reihenfolge bleibt), mit Backoff von 1 s bis 5 min erneut versuchen.
+- **Aufräumen:** Einträge, die älter als 7 Tage sind, löscht der Job mit einer `warn`-Meldung samt Anzahl.
+
+### 11.5 Zusammenfassung
+
+- `Summary`: `product_count` (alle Produkte), `shopping_count` (Einträge der Einkaufsliste), `empty_count` (Bestand 0, wie der Filter „Leer"), `review_count` (`needs_review`, wie „Prüfen"), `shopping` (die ersten 100 Einträge der Einkaufsliste als `{name, amount}`, `amount` wie in 11.3), `shopping_truncated` (mehr als 100 Einträge).
+- `GET /summary` liefert sie immer, auch ohne MQTT.
+- Mit MQTT publiziert StashBert sie retained mit QoS 1 auf `<p>/state/summary`: nach jeder Verbindung, nach der Birth-Nachricht von HA und 1 s nach dem letzten von mehreren schnell aufeinander folgenden Ereignissen. Sie geht nicht über die Outbox; ohne Verbindung wird sie übersprungen und nach dem nächsten Verbinden gesendet.
+
+### 11.6 HA-Discovery
+
+- Topic `<ha>/device/<p>/config`, retained, QoS 1, gesendet nach jeder Verbindung und nach `online` auf `<ha>/status` (nach 1 bis 5 s Zufallsverzögerung, dabei auch `<p>/status` = `online` und die Zusammenfassung). Nachrichten auf `<ha>/status` außer `online` werden ignoriert.
+- Mit `MQTT_HA_DISCOVERY=false` publiziert StashBert nach jeder Verbindung ein leeres retained Payload auf das Topic; HA entfernt das Gerät dann.
+- Payload (Kurzformen von HA; `<v>` ist die Version von StashBert):
+
+  ```json
+  {
+    "dev": {"ids": ["<p>"], "name": "StashBert", "mf": "StashBert", "mdl": "Vorratsinventar", "sw": "<v>"},
+    "o": {"name": "StashBert", "sw": "<v>", "url": "https://github.com/schmitz-chris/stashbert"},
+    "avty_t": "<p>/status",
+    "qos": 1,
+    "cmps": {
+      "shopping": {"p": "sensor", "uniq_id": "<p>_shopping", "def_ent_id": "sensor.<p>_shopping", "name": "Einkauf", "ic": "mdi:cart", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.shopping_count }}", "stat_cla": "measurement", "json_attr_t": "<p>/state/summary", "json_attr_tpl": "{{ {'items': value_json.shopping, 'truncated': value_json.shopping_truncated} | tojson }}"},
+      "empty": {"p": "sensor", "uniq_id": "<p>_empty", "def_ent_id": "sensor.<p>_empty", "name": "Leer", "ic": "mdi:package-variant", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.empty_count }}", "stat_cla": "measurement"},
+      "review": {"p": "sensor", "uniq_id": "<p>_review", "def_ent_id": "sensor.<p>_review", "name": "Zu prüfen", "ic": "mdi:clipboard-alert-outline", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.review_count }}", "stat_cla": "measurement"},
+      "products": {"p": "sensor", "uniq_id": "<p>_products", "def_ent_id": "sensor.<p>_products", "name": "Produkte", "ic": "mdi:archive", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.product_count }}", "stat_cla": "measurement"},
+      "stock": {"p": "event", "uniq_id": "<p>_stock", "def_ent_id": "event.<p>_stock", "name": "Buchung", "ic": "mdi:barcode-scan", "stat_t": "<p>/events/+", "evt_typ": ["stock.added", "stock.consumed", "stock.adjusted"], "val_tpl": "{% if value_json.type in ['stock.added', 'stock.consumed', 'stock.adjusted'] %}{{ {'event_type': value_json.type, 'product_id': value_json.data.product_id, 'delta': value_json.data.delta, 'stock_after': value_json.data.stock_after} | tojson }}{% endif %}"},
+      "resend": {"p": "button", "uniq_id": "<p>_resend", "def_ent_id": "button.<p>_resend", "name": "Einkaufsliste neu senden", "ic": "mdi:send", "ent_cat": "config", "cmd_t": "<p>/in/snapshot", "pl_prs": "{}"}
+    }
+  }
+  ```
+
+- Keine Entität pro Produkt. `object_id` gibt es seit HA 2026.4 nicht mehr und wird nicht gesendet.
+
+### 11.7 Zielliste (A10)
+
+- **Angebot:** HA publiziert die verfügbaren Listen retained auf `<p>/in/targets` als JSON-Array `[{"id": "todo.bring_zuhause", "name": "Zuhause"}]`. Gültig sind höchstens 50 Einträge mit `id` von 1 bis 255 und `name` von 1 bis 100 Zeichen (nach Trimmen). Ein ungültiges Payload wird mit `warn` geloggt und ignoriert; das letzte gültige Angebot bleibt. Das Angebot liegt nur im Speicher.
+- **Wahl:** gespeichert in `settings` unter `shopping_target_id` und `shopping_target_name`. `PUT /integrations/mqtt/target` mit einer `id` aus dem aktuellen Angebot setzt sie (sonst `unknown_target`), `{id: null}` hebt sie auf; ohne MQTT antwortet der Endpunkt mit `mqtt_disabled`.
+- **Wechsel:** Hatte die alte Wahl eine Liste, geht zuerst ein `shopping.snapshot` für die alte Liste mit `on_list: false` und `amount: ""` für alle Einträge hinaus (die Automation räumt sie dort ab), danach einer für die neue Liste, wenn es eine gibt.
+- `MqttStatus.target` ist die gespeicherte Wahl, auch wenn sie gerade nicht im Angebot ist.
+
+### 11.8 HA-Seite (Blueprints)
+
+- `deploy/homeassistant/stashbert_einkauf_todo.yaml`: reagiert auf `<p>/events/shopping.changed` und `<p>/events/shopping.snapshot`; schreibt in `data.list` oder, wenn leer, in die im Blueprint gewählte Standardliste; legt an, ändert (`amount` als Beschreibung, wenn die Liste das kann) oder entfernt nach `on_list`; prüft vorher mit `todo.get_items`, damit keine doppelten Einträge entstehen; `mode: queued` mit `max: 50`.
+- `deploy/homeassistant/stashbert_listen_melden.yaml`: publiziert beim Start von HA und stündlich die `todo`-Entitäten einer wählbaren Integration (Standard `bring`) retained auf `<p>/in/targets`.
+- `docs/home-assistant.md` beschreibt Einrichtung, ACL, Import der Blueprints und Fehlersuche.

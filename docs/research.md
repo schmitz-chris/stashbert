@@ -901,6 +901,8 @@ Damit das Gerät dumm bleibt:
 
 ## 10. Home-Assistant-Integration
 
+> Stand 24.09.2026: Für die Umsetzung gelten ADR-0018 und architecture.md, Kapitel 11. Eine Nachprüfung gegen HA 2026.9.3 hat Teile dieses Kapitels und von Kapitel 11 korrigiert (u. a. `cmps` ist eine Zuordnung, `origin` ist Pflicht, `object_id` entfällt, ein leeres Payload entfernt das ganze Gerät, die Ereignisdaten folgen dem Code).
+
 ### 10.1 Fakten (Home Assistant 2026.9.3)
 
 - **REST-API:**

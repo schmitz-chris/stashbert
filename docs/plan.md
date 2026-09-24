@@ -1565,15 +1565,144 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ---
 
+## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
+
+Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.
+
+### B34: MQTT-Konfiguration und Verbindung
+
+- **Status:** offen
+- **Abhängig von:** B33
+- **Referenzen:** ADR-0018; architecture.md 11.1, 11.2, 9.2
+- **Umfang:**
+  - `internal/config`: die Variablen `MQTT_*` aus 9.2 mit Prüfung (`MQTT_URL` nur `mqtt://` oder `mqtts://` mit Host und Port; Präfixe nach den Regeln in 9.2; `MQTT_HA_DISCOVERY` nur `true` oder `false`).
+  - Neues Paket `internal/mqtt` über `autopaho` (paho.golang v0.23.0): Verbindung, Wiederverbinden, Last Will und Status nach 11.1, Abonnements `<p>/in/#` und (nur mit Discovery) `<ha>/status`, Weitergabe eingehender Nachrichten samt Retain-Flag an registrierte Empfänger, Rückruf nach jeder Verbindung für spätere Tasks, Zustand `disabled`/`connecting`/`connected`, `Publish` mit QoS 1 (wartet auf PUBACK, Fehler bei Ablehnung), sauberes Beenden mit `offline`.
+  - `cmd/stashbert/main.go`: Client nur starten, wenn `MQTT_URL` gesetzt ist; beim Herunterfahren nach dem HTTP-Server beenden.
+- **Nicht im Umfang:** Outbox, Ereignisse, Zusammenfassung, Discovery, Endpunkte.
+- **Abnahmekriterien:**
+  1. Tests für die Konfiguration (Standardwerte, gültige und ungültige Werte je Variable).
+  2. Test gegen `mochi-mqtt`: nach dem Start liegt `<p>/status` = `online` retained vor; nach dem Beenden `offline`; eine Nachricht auf `<p>/in/snapshot` erreicht den Empfänger mit korrektem Retain-Flag; das Passwort taucht in keinem Log auf.
+  3. `make check` ist grün.
+
+### B35: Outbox und Zustellung
+
+- **Status:** offen
+- **Abhängig von:** B34
+- **Referenzen:** ADR-0018; architecture.md 11.3, 11.4, 6.6
+- **Umfang:**
+  - Migration `0005_outbox.sql` und sqlc-Queries für die Tabelle `outbox` (11.4).
+  - Reine Funktion für `amount` (11.3) in `internal/domain`, damit die Zusammenfassung sie wiederverwendet.
+  - `outbox.Writer` als `events.Publisher`: ergänzt `shopping.changed` nach 11.3 (liest Produkt und die Einstellung `shopping_target_id`; fehlt sie, ist `list` `""`), schreibt die Zeile, weckt den Zusteller.
+  - Zusteller nach 11.4 (Reihenfolge, Löschen nach PUBACK, Backoff, Aufräumen nach 7 Tagen) über ein Interface, das `internal/mqtt` erfüllt.
+  - `main.go`: mit `MQTT_URL` ist der Publisher der Writer, und der Zusteller läuft; sonst bleibt `events.Nop`.
+- **Nicht im Umfang:** neue Ereignisauslöser, `shopping.snapshot`, Zusammenfassung, Discovery.
+- **Abnahmekriterien:**
+  1. Tests: `amount` (Stück, Kasten, Kästen, ohne Fehlbestand); Anreicherung von `shopping.changed` (vorhandenes, gelöschtes Produkt, mit Kastengröße, mit gespeicherter Zielliste); Reihenfolge; Löschen nach Erfolg; Behalten und erneuter Versuch nach Fehler; Aufräumen alter Einträge.
+  2. Ende-zu-Ende-Test mit `mochi-mqtt`: eine Buchung über die HTTP-API erscheint als `<p>/events/stock.added` mit dem JSON aus 11.3.
+  3. `make check` ist grün.
+
+### B36: Einkaufsereignisse beim Vormerken und Abgleich
+
+- **Status:** offen
+- **Abhängig von:** B35
+- **Referenzen:** ADR-0018; architecture.md 11.3, 6.2, 6.4, 6.6; ADR-0015
+- **Umfang:**
+  - Fachlogik: Vormerken und Entfernen der Vormerkung lösen `shopping.changed` aus, wenn sich dadurch ändert, ob das Produkt auf der Liste steht (6.6).
+  - `shopping.snapshot` nach 11.3: Aufbau der Einträge (sqlc-Query), Auslösen über `<p>/in/snapshot` (Nachrichten mit Retain-Flag ignorieren, 2 s zusammenfassen) und über `POST /shopping-list/snapshot` (`sendShoppingSnapshot`, 202; ohne MQTT 409 `mqtt_disabled`). Contract-first.
+- **Nicht im Umfang:** Zielliste wählen (B39), Zusammenfassung, Discovery, Oberfläche.
+- **Abnahmekriterien:**
+  1. Tests: Vormerken eines Produkts ohne Fehlbestand löst `shopping.changed` aus, Vormerken eines Produkts mit Fehlbestand nicht; Entfernen entsprechend; Inhalt und Sortierung des Snapshots; Retain-Flag wird ignoriert; mehrere Anfragen in 2 s ergeben einen Snapshot; API 202 und 409.
+  2. `make check` ist grün.
+
+### B37: Zusammenfassung
+
+- **Status:** offen
+- **Abhängig von:** B35
+- **Referenzen:** ADR-0018; architecture.md 11.5, 6.2, 6.5
+- **Umfang:**
+  - `GET /summary` (`getSummary`, Schema `Summary`), contract-first; Berechnung in `internal/domain` mit sqlc.
+  - Retained Veröffentlichung auf `<p>/state/summary` nach jeder Verbindung und 1 s nach dem letzten von schnell aufeinander folgenden Ereignissen (der Writer meldet Ereignisse); ohne Verbindung überspringen.
+- **Nicht im Umfang:** Discovery und die Reaktion auf die Birth-Nachricht von HA (B38).
+- **Abnahmekriterien:**
+  1. Tests: Zählungen (Einkauf mit Vormerkungen, leer, zu prüfen, alle), `amount` in `shopping`, Begrenzung auf 100 mit `shopping_truncated`; mehrere Ereignisse ergeben eine Veröffentlichung; Veröffentlichung nach dem Verbinden (mit `mochi-mqtt`).
+  2. `make check` ist grün.
+
+### B38: HA-Discovery
+
+- **Status:** offen
+- **Abhängig von:** B36, B37
+- **Referenzen:** ADR-0018; architecture.md 11.6
+- **Umfang:**
+  - Reine Funktion für das Discovery-Payload nach 11.6 (Präfixe und Version eingesetzt).
+  - Veröffentlichung nach jeder Verbindung; nach `online` auf `<ha>/status` nach 1 bis 5 s Zufallsverzögerung Discovery, `<p>/status` = `online` und Zusammenfassung erneut; mit `MQTT_HA_DISCOVERY=false` stattdessen leeres retained Payload.
+- **Nicht im Umfang:** Zielliste, Blueprints.
+- **Abnahmekriterien:**
+  1. Test des Payloads gegen das JSON aus 11.6 (mit Standardpräfixen und mit eigenem Präfix); gültiges JSON, keine Schlüssel `object_id`.
+  2. Tests mit `mochi-mqtt`: Discovery retained nach dem Verbinden; erneute Veröffentlichung nach `online` (Verzögerung im Test verkürzbar); leeres Payload bei `false`.
+  3. `make check` ist grün.
+
+### B39: Zielliste wählen
+
+- **Status:** offen
+- **Abhängig von:** B38
+- **Referenzen:** ADR-0018; architecture.md 11.7, 6.2, 6.4, 6.5
+- **Umfang:**
+  - Auswertung von `<p>/in/targets` (reine Funktion mit den Regeln aus 11.7, Angebot im Speicher).
+  - `GET /integrations/mqtt` (`getMqttStatus`) und `PUT /integrations/mqtt/target` (`setShoppingTarget`) mit Schema `MqttStatus`, contract-first; Speichern in `settings`.
+  - Beim Wechsel die beiden Snapshots aus 11.7 über die Outbox.
+- **Nicht im Umfang:** Oberfläche (F30), Blueprints.
+- **Abnahmekriterien:**
+  1. Tests: gültige und ungültige Angebote; Setzen, Aufheben, unbekannte ID (422), ohne MQTT (409); Snapshots beim Wechsel (alte Liste abgeräumt, neue befüllt, Reihenfolge); `list` in `shopping.changed` nach dem Setzen.
+  2. `make check` ist grün.
+
+### F30: Home Assistant in der Einkaufsansicht
+
+- **Status:** offen
+- **Abhängig von:** B39
+- **Referenzen:** ADR-0018; architecture.md 11.7; ADR-0016
+- **Umfang:**
+  - Unter der Einkaufsliste (auch bei leerer Liste) ein Abschnitt „Home Assistant", nur wenn `status` nicht `disabled` ist: Zustand („Verbunden" bzw. „Keine Verbindung zum Broker"), Auswahl „Liste in Home Assistant" mit den angebotenen Listen und „Keine" (eine gespeicherte, gerade nicht angebotene Liste erscheint als „<Name> (nicht verfügbar)"), Knopf „Liste neu senden" mit Rückmeldung.
+  - Logik für die Auswahl als reine Funktion mit Tests; Zugriff nur über den generierten Client.
+- **Nicht im Umfang:** eigene Einstellungsseite, weitere Integrationen.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Auswahl-Logik.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) und mit großer Schrift.
+
+### H01: Blueprints und Anleitung für Home Assistant
+
+- **Status:** offen
+- **Abhängig von:** B39
+- **Referenzen:** ADR-0018; architecture.md 11.8, 11.2, 11.3
+- **Umfang:**
+  - Die beiden Blueprints aus 11.8 unter `deploy/homeassistant/` (Einkauf nach To-do-Liste mit Snapshot-Verarbeitung per `repeat`/`for_each`; Listen melden).
+  - `docs/home-assistant.md` (Deutsch): Voraussetzungen, Konfiguration von StashBert, ACL-Vorschlag (mit Hinweis, dass die Wirkung im Add-on nicht bestätigt ist), Import der Blueprints, Prüfung in HA, Fehlersuche mit `mosquitto_sub`, Entfernen.
+  - `docs/betrieb.md` und die Beispielkonfiguration ergänzen.
+- **Nicht im Umfang:** Code in StashBert.
+- **Abnahmekriterien:**
+  1. Beide Blueprints sind gültiges YAML mit `blueprint:`-Kopf, `min_version` und den Eingaben aus 11.8.
+  2. Die Anleitung deckt alle Topics und Variablen aus 11.2 und 9.2 ab.
+
+### H02: Prüfung gegen den Broker im Heimnetz
+
+- **Status:** offen
+- **Abhängig von:** F30, H01
+- **Referenzen:** ADR-0018; architecture.md Kapitel 11
+- **Umfang:**
+  - Der Lead startet StashBert mit dem Broker im Heimnetz und prüft mit einem Beobachter-Skript: Status, Zusammenfassung, Discovery, Ereignisse einer Buchung, Snapshot über die API und den Knopf-Topic, Zielliste mit einem Testangebot (danach wieder gelöscht).
+  - Ergebnisse und offene Nutzerprüfungen in `docs/m2-pruefung.md`.
+- **Abnahmekriterien:**
+  1. Alle Topics aus 11.2 wurden gegen den echten Broker beobachtet.
+  2. (Nutzer) In HA erscheint das Gerät „StashBert" mit vier Sensoren, der Ereignis-Entität und dem Knopf.
+  3. (Nutzer) Eine Buchung ändert die Sensoren; ein Artikel erscheint über den Blueprint in der gewählten Bring!-Liste und verschwindet nach dem Einlagern.
+
+---
+
 ## Später (bewusst nicht Teil dieses Plans)
 
 Wird erst nach der M1-Abnahme geplant. Agenten bauen davon nichts vor.
 
-- M2:
+- M2 (Rest, Phase 2a deckt MQTT, HA und Bring! ab):
   - API-Tokens
-  - Outbox und MQTT 5 mit HA-Discovery
-  - Bring! über HA mit wählbarer Liste (research.md, Kapitel 10 und 11)
-  - Summary-Endpunkt
   - Breaking-Change-Prüfung der API
 - M3: ESP32-Scanner (research.md, Kapitel 9).
 - Weitere Optionen:
