@@ -51,13 +51,27 @@ export function withCrate(form: ProductForm, crate: boolean): ProductForm {
 }
 
 /**
+ * Returns whether form has the checkbox "Kastenware" set without a valid
+ * number of bottles, a whole number from 2 to 100 (ADR-0017). The form
+ * then says so below the field and does not save.
+ */
+export function crateSizeMissing(form: ProductForm): boolean {
+  if (!form.crate) {
+    return false;
+  }
+  const text = form.crate_size.trim();
+  const size = Number(text);
+  return !/^\d+$/.test(text) || size < 2 || size > 100;
+}
+
+/**
  * Returns a JSON Merge Patch (architecture.md 6.1) with the fields of form
  * that differ from original. Texts are compared and sent trimmed; an
  * optional text that is empty after trimming becomes null. The target is
  * only compared if its text is a number; the number input checks that it
  * is a whole number from 0 to 100000. Without crate the crate size is null
- * (no crate); with crate it is compared like the target, and the required
- * number input checks that it is a whole number from 2 to 100. Without
+ * (no crate); with crate it is compared like the target, and the form
+ * checks with crateSizeMissing that it is a whole number from 2 to 100. Without
  * changes the patch is empty. An empty name is part of the patch; the form
  * must catch it.
  */

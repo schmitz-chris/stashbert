@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  crateSizeMissing,
   diffPatch,
   toForm,
   withCrate,
@@ -61,6 +62,28 @@ describe("withCrate", () => {
   it("starts with an empty size when switched on again", () => {
     const again = withCrate(withCrate(toForm(crated), false), true);
     expect(again).toMatchObject({ crate: true, crate_size: "" });
+  });
+});
+
+describe("crateSizeMissing", () => {
+  it("is false without a crate", () => {
+    expect(crateSizeMissing(toForm(original))).toBe(false);
+  });
+
+  it("is false for a crate with a size from 2 to 100", () => {
+    for (const size of ["2", "20", " 24 ", "100"]) {
+      expect(crateSizeMissing({ ...toForm(original), crate: true, crate_size: size })).toBe(false);
+    }
+  });
+
+  it("is true for a crate switched on without a size", () => {
+    expect(crateSizeMissing(withCrate(toForm(original), true))).toBe(true);
+  });
+
+  it("is true for a size that is not a whole number from 2 to 100", () => {
+    for (const size of ["1", "101", "0", "2.5", "-3", "abc", "  "]) {
+      expect(crateSizeMissing({ ...toForm(original), crate: true, crate_size: size })).toBe(true);
+    }
   });
 });
 

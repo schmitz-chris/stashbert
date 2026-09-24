@@ -1553,7 +1553,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 - **Abhängig von:** F28
 - **Referenzen:** ADR-0017 (geändert am 24.09.2026); Nutzer-Rückmeldung vom 24.09.2026 („Das sollte man im Produkt selbst aktivieren können")
 - **Umfang:**
-  - Produktseite: das Zahlenfeld „Kastengröße" aus F27 wird ein Schalter (Checkbox) „Kastenware". Eingeschaltet erscheint darunter das Pflichtfeld „Flaschen pro Kasten" (Zahl, 2 bis 100, beim Einschalten leer); ausgeschaltet wird `crate_size: null` gespeichert und das Feld verschwindet. Gespeichert wird weiter über den bestehenden PATCH mit `diffPatch`.
+  - Produktseite: das Zahlenfeld „Kastengröße" aus F27 wird ein Schalter (Checkbox) „Kastenware". Eingeschaltet erscheint darunter das Pflichtfeld „Flaschen pro Kasten" (Zahl, 2 bis 100, beim Einschalten leer); ausgeschaltet wird `crate_size: null` gespeichert und das Feld verschwindet. Gespeichert wird weiter über den bestehenden PATCH mit `diffPatch`. Nachtrag vom 24.09.2026: Fehlt die Zahl oder liegt sie nicht zwischen 2 und 100, steht unter dem Feld rot „Bitte Flaschen pro Kasten eintragen (2 bis 100)." und neben „Speichern" „Nicht gespeichert"; die native Prüfung des Browsers entfällt für dieses Feld, weil ihre Blase auf iOS leicht zu übersehen ist.
   - Ergebniskarte der Scan-Ansicht: „War ein Kasten" entfällt mit dem Größen-Dialog, dem Speichern der Kastengröße von dort, dem Nachbuchen von N − 1 und dem Rückgängig über zwei Buchungen. Code, der dadurch nicht mehr gebraucht wird, wird entfernt.
   - Unverändert bleiben: die Frage „Flasche oder Kasten" für Produkte mit Kastengröße (F28), das Laden der Produktliste in der Scan-Ansicht, die Einkaufsliste (F27).
 - **Nicht im Umfang:** API und Backend, Einkaufsliste, Vorrat-Liste.

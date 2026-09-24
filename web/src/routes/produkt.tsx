@@ -19,7 +19,13 @@ import {
 } from "../lib/api/queries";
 import { normalizeGtin } from "../lib/gtin";
 import { pageTitle } from "../lib/pageTitle";
-import { diffPatch, toForm, withCrate, type ProductForm } from "../lib/productForm";
+import {
+  crateSizeMissing,
+  diffPatch,
+  toForm,
+  withCrate,
+  type ProductForm,
+} from "../lib/productForm";
 import { productBack } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
 import { sourceNote } from "../lib/sourceNote";
@@ -127,6 +133,9 @@ function ProductEditor({ product }: { product: Product }) {
   const [form, setForm] = useState(() => toForm(product));
   // Set when "Speichern" was chosen without a change, until the next one.
   const [unchanged, setUnchanged] = useState(false);
+  // Set when "Speichern" was chosen while a field needs a fix, until the
+  // next change.
+  const [blocked, setBlocked] = useState(false);
 
   const patch = diffPatch(base, form);
   const changed = Object.keys(patch).length > 0;
@@ -137,6 +146,7 @@ function ProductEditor({ product }: { product: Product }) {
     setForm(toForm(product));
   }
   const nameMissing = form.name.trim() === "";
+  const crateMissing = crateSizeMissing(form);
   const source = sourceNote(product);
 
   // Hides the confirmation of a successful save after a short time.
@@ -155,6 +165,10 @@ function ProductEditor({ product }: { product: Product }) {
     notice = "Keine Änderungen";
     noticeClass = "text-ink-secondary";
   }
+  if (blocked) {
+    notice = "Nicht gespeichert";
+    noticeClass = "text-danger";
+  }
   if (update.isError) {
     notice =
       problemCode(update.error) === "invalid_request"
@@ -163,10 +177,13 @@ function ProductEditor({ product }: { product: Product }) {
     noticeClass = "text-danger";
   }
 
-  // "Speichern" stays enabled: without a change it says so, without a
-  // name the hint below the field says why.
+  // "Speichern" stays enabled: without a change it says so; without a name
+  // or without a valid number of bottles it says "Nicht gespeichert" and
+  // the hint below the field says why.
   function save() {
-    if (nameMissing) {
+    if (nameMissing || crateMissing) {
+      update.reset();
+      setBlocked(true);
       return;
     }
     if (!changed) {
@@ -193,6 +210,7 @@ function ProductEditor({ product }: { product: Product }) {
       onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { value } = event.target;
         setUnchanged(false);
+        setBlocked(false);
         setForm((current) => ({ ...current, [field]: value }));
       },
       className: inputClass,
@@ -277,12 +295,15 @@ function ProductEditor({ product }: { product: Product }) {
             onChange={(event) => {
               const { checked } = event.target;
               setUnchanged(false);
+              setBlocked(false);
               setForm((current) => withCrate(current, checked));
             }}
             className="size-5 shrink-0 accent-accent"
           />
           <span className="font-medium">Kastenware</span>
         </label>
+        {/* No native range check: its bubble is easy to miss on iOS, so
+            the hint below the field says what is missing. */}
         {form.crate && (
           <label className="block">
             <span className={labelClass}>Flaschen pro Kasten</span>
@@ -290,12 +311,15 @@ function ProductEditor({ product }: { product: Product }) {
               {...bind("crate_size")}
               type="number"
               inputMode="numeric"
-              required
-              min={2}
-              max={100}
-              step={1}
+              aria-invalid={crateMissing}
+              aria-describedby={crateMissing ? "product-crate-size-hint" : undefined}
             />
           </label>
+        )}
+        {crateMissing && (
+          <p id="product-crate-size-hint" className="-mt-3 text-sm text-danger">
+            Bitte Flaschen pro Kasten eintragen (2 bis 100).
+          </p>
         )}
         <label className="block">
           <span className={labelClass}>Notiz</span>
