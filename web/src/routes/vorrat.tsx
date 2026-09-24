@@ -7,6 +7,7 @@ import {
   productMovementMutation,
   type ProductMovement,
 } from "../lib/api/queries";
+import { productImageUrl } from "../lib/productImage";
 import {
   filterProducts,
   matches,
@@ -195,10 +196,11 @@ function StockRow({ product }: { product: Product }) {
 }
 
 function ProductImage({ product }: { product: Product }) {
-  if (product.has_image) {
+  const imageUrl = productImageUrl(product);
+  if (imageUrl !== null) {
     return (
       <img
-        src={`/api/v1/products/${encodeURIComponent(product.id)}/image`}
+        src={imageUrl}
         loading="lazy"
         alt=""
         className="size-10 shrink-0 rounded-lg bg-stone-100 object-cover"

@@ -1328,7 +1328,7 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
 
 ### F17: Bild auf der Produktseite ersetzen oder entfernen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B32, F06a
 - **Referenzen:** architecture.md 7.3 (Verkleinern im Frontend)
 - **Umfang:**

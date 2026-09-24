@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Dialog } from "../components/Dialog";
 import { MergeSection } from "../components/MergeSection";
 import { MovementHistory } from "../components/MovementHistory";
+import { ProductImageSection } from "../components/ProductImageSection";
 import { ShoppingListSection } from "../components/ShoppingListSection";
 import { StockSection } from "../components/StockSection";
 import { problemCode } from "../lib/api/client";
@@ -156,13 +157,7 @@ function ProductEditor({ product }: { product: Product }) {
 
   return (
     <>
-      {product.has_image && (
-        <img
-          src={`/api/v1/products/${encodeURIComponent(product.id)}/image`}
-          alt=""
-          className="mt-2 h-48 w-full rounded-xl bg-white object-contain"
-        />
-      )}
+      <ProductImageSection product={product} />
       <h1 className="mt-4 text-2xl font-semibold break-words hyphens-auto">
         {product.name}
       </h1>

@@ -3,6 +3,7 @@ import {
   queryOptions,
   type QueryClient,
 } from "@tanstack/react-query";
+import { shrinkPhoto } from "../photo";
 import type { ProductPatch } from "../productForm";
 import {
   replaceProduct,
@@ -481,6 +482,74 @@ export function barcodeRemoveMutation(queryClient: QueryClient) {
           queryKey: productQuery(productId).queryKey,
         });
       }
+    },
+  });
+}
+
+/** A photo for the product with productId, as picked by the user. */
+export interface ProductPhoto {
+  productId: string;
+  photo: Blob;
+}
+
+// How long the upload of a photo may take before it counts as failed.
+const uploadTimeout = 30_000;
+
+/**
+ * Replaces the image of a product with a photo: shrinks it with
+ * shrinkPhoto and uploads the JPEG with PUT /products/{id}/image, with a
+ * timeout of 30 s. Throws PhotoDecodeError if the browser cannot decode
+ * the photo, the Problem Details of a failed upload, or the TimeoutError.
+ * On success the product from the response replaces the cached product
+ * and its entry in the product list.
+ */
+export function productImageUploadMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async ({ productId, photo }: ProductPhoto) => {
+      const jpeg = await shrinkPhoto(photo);
+      const { data, error, response } = await api.PUT("/products/{id}/image", {
+        params: { path: { id: productId } },
+        body: jpeg,
+        // The image is sent as it is; the default serializer makes JSON.
+        bodySerializer: (body) => body,
+        headers: { "Content-Type": "image/jpeg" },
+        signal: AbortSignal.timeout(uploadTimeout),
+      });
+      if (!response.ok || data === undefined) {
+        const path = `/products/${productId}/image`;
+        throw error ?? new Error(`PUT ${path}: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (product) => setCachedProduct(queryClient, product),
+  });
+}
+
+/**
+ * Removes the image of the product with the given id with DELETE
+ * /products/{id}/image. A failed removal throws the Problem Details of the
+ * response. The response holds no product, so on success the cached
+ * product and its entry in the product list lose their image at once and
+ * are fetched again.
+ */
+export function productImageDeleteMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (id: string) => {
+      const { error, response } = await api.DELETE("/products/{id}/image", {
+        params: { path: { id } },
+      });
+      if (!response.ok) {
+        throw error ?? new Error(`DELETE /products/${id}/image: status ${response.status}`);
+      }
+      return id;
+    },
+    onSuccess: (id) => {
+      changeCachedProduct(queryClient, id, (product) => ({ ...product, has_image: false }));
+      void queryClient.invalidateQueries({ queryKey: productQuery(id).queryKey });
+      void queryClient.invalidateQueries({
+        queryKey: productListQuery.queryKey,
+        exact: true,
+      });
     },
   });
 }
