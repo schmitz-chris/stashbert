@@ -31,7 +31,7 @@ const noticeDuration = 2000;
 // The buttons of a row: the tap area is 44 × 44 px, the visible face only
 // 40 × 40 px, so the three buttons leave more room for the name.
 const rowButtonClass = "flex size-11 items-center justify-center disabled:opacity-40";
-const rowButtonFaceClass = "flex size-10 items-center justify-center rounded-lg border";
+const rowButtonFaceClass = "flex size-9 items-center justify-center rounded-lg border";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
@@ -157,17 +157,17 @@ function StockRow({ product }: { product: Product }) {
   // The link covers the whole row with its ::after box, so a tap anywhere
   // outside the buttons opens the product. The buttons lie above it.
   return (
-    <li className="relative flex items-center gap-2 px-3 py-2">
+    <li className="relative flex items-center gap-1.5 px-3 py-2">
       <ProductImage product={product} />
       <div className="min-w-0 flex-1">
         <Link
           to={`/produkt/${encodeURIComponent(product.id)}`}
-          className="font-medium break-words hyphens-auto after:absolute after:inset-0"
+          className="line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
           {product.name}
         </Link>
         {product.brand !== null && (
-          <p className="text-sm break-words hyphens-auto text-stone-500">
+          <p className="truncate text-sm text-stone-500">
             {product.brand}
           </p>
         )}
@@ -176,7 +176,7 @@ function StockRow({ product }: { product: Product }) {
         </p>
       </div>
       {/* The stock large, below it the target; without a target only the stock. */}
-      <div className="min-w-12 shrink-0 text-center tabular-nums">
+      <div className="min-w-10 shrink-0 text-center tabular-nums">
         <p className="text-xl font-semibold text-stone-900">
           <span className="sr-only">Bestand </span>
           {product.stock}

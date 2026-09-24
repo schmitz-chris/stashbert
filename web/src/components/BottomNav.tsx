@@ -21,7 +21,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Hauptnavigation"
-      className="sticky bottom-0 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]"
+      className="sticky bottom-0 z-20 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="mx-auto grid h-16 max-w-md grid-cols-3 items-center">
         <li className="flex justify-center">
