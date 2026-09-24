@@ -397,6 +397,60 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /shopping-list/items:
+    post:
+      operationId: markShoppingItem
+      summary: Produkt für den Einkauf vormerken
+      description: >-
+        Merkt das Produkt für den Einkauf vor (marked true), bestimmt über
+        product_id oder barcode. Ändert nie den Bestand und legt keine Buchung
+        an. Ein unbekannter Barcode legt das Produkt wie beim Einlagern an,
+        aber ohne Buchung, also mit Bestand 0, und merkt es vor. Ein schon
+        vorgemerktes Produkt bleibt unverändert. Fehler-code:
+        invalid_request (400), not_found (404), invalid_barcode (422).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkCreate"
+      responses:
+        "200":
+          description: Das vorgemerkte Produkt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkResult"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /shopping-list/items/{product_id}:
+    parameters:
+      - name: product_id
+        in: path
+        required: true
+        description: ID des Produkts, dessen Vormerkung entfernt wird.
+        schema:
+          type: string
+    delete:
+      operationId: unmarkShoppingItem
+      summary: Vormerkung entfernen
+      description: >-
+        Setzt marked auf false. Ein Fehlbestand nach Soll bleibt auf der
+        Einkaufsliste. Ein nicht vorgemerktes Produkt bleibt unverändert.
+        Fehler-code: not_found (404).
+      responses:
+        "204":
+          description: Das Produkt ist nicht vorgemerkt.
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Problem:
@@ -756,6 +810,40 @@ components:
         marked:
           type: boolean
           description: Für den Einkauf vorgemerkt. Nur lesen.
+    MarkCreate:
+      type: object
+      description: >-
+        Vormerkung für ein Produkt, bestimmt über product_id oder barcode.
+        Genau eines der beiden Felder muss gesetzt sein, sonst invalid_request.
+      properties:
+        product_id:
+          type: string
+        barcode:
+          type: string
+          description: EAN-8, UPC-A, EAN-13 oder GTIN-14, wird normalisiert.
+    MarkResult:
+      type: object
+      required:
+        - product
+        - product_created
+        - already_listed
+        - message
+      properties:
+        product:
+          $ref: "#/components/schemas/Product"
+        product_created:
+          type: boolean
+          description: true, wenn das Produkt für einen unbekannten Barcode angelegt wurde.
+        already_listed:
+          type: boolean
+          description: >-
+            true, wenn das Produkt schon vorher auf der Einkaufsliste stand,
+            wegen missing größer 0 oder marked.
+        message:
+          type: string
+          description: >-
+            Fertiger deutscher Anzeigetext: "Vorgemerkt: <name>", "Neu
+            vorgemerkt: <name>" oder "Schon auf der Liste: <name>".
     ShoppingList:
       type: object
       required:

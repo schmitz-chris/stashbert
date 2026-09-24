@@ -13,7 +13,7 @@ type ServerDeps struct {
 	Version   string
 	DB        *sql.DB
 	Publisher events.Publisher
-	// Lookuper looks up unknown barcodes booked with add.
+	// Lookuper looks up unknown barcodes booked with add or marked for shopping.
 	Lookuper domain.Lookuper
 	// ImageDir is the directory of the product image files.
 	ImageDir string

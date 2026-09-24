@@ -13,8 +13,8 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
-// setMarked sets marked of the product id with direct SQL. The endpoints for
-// marking come with B31.
+// setMarked sets marked of the product id with direct SQL, without changing
+// its updated_at.
 func setMarked(t *testing.T, db *sql.DB, id string, marked int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

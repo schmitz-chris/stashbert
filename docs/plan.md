@@ -1258,7 +1258,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### B31: Endpunkte zum Vormerken
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B30, B20
 - **Referenzen:** ADR-0015, architecture.md 6.2 (`markShoppingItem`, `unmarkShoppingItem`), 6.5 (`MarkResult`), 7.2
 - **Umfang:**

@@ -26,7 +26,8 @@ type Deps struct {
 	DB      *sql.DB
 	// Publisher receives the domain events after each commit.
 	Publisher events.Publisher
-	// Lookuper looks up unknown barcodes booked with add (architecture.md, 7.2).
+	// Lookuper looks up unknown barcodes booked with add or marked for
+	// shopping (architecture.md, 7.2).
 	Lookuper domain.Lookuper
 	// ImageDir is the directory of the product image files, DATA_DIR/images
 	// (architecture.md, 7.3).

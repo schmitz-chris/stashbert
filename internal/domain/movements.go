@@ -106,13 +106,9 @@ func Book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, lookuper Loo
 	if err := checkNewMovement(in); err != nil {
 		return MovementResult{}, err
 	}
-	var code *string
-	if in.Barcode != nil {
-		normalized, err := normalizeBarcode(*in.Barcode)
-		if err != nil {
-			return MovementResult{}, err
-		}
-		code = &normalized
+	code, err := normalizeOptionalBarcode(in.Barcode)
+	if err != nil {
+		return MovementResult{}, err
 	}
 
 	r, err := book(ctx, sqlDB, pub, in, code, nil)
@@ -215,11 +211,7 @@ func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 		if p.Origin == "placeholder" {
 			warnings = append(warnings, warningPlaceholderCreated)
 		}
-		pub.Publish(ctx, events.New(events.TypeProductCreated, events.ProductCreatedData{
-			ProductID: p.ID,
-			Name:      p.Name,
-			Origin:    p.Origin,
-		}))
+		publishProductCreated(ctx, pub, p)
 	}
 	publishMovementEvents(ctx, pub, cur, p, m)
 	return MovementResult{
@@ -298,8 +290,8 @@ func repeatedMovement(ctx context.Context, q *db.Queries, idem Idempotency) (Mov
 // in.ProductID and in.Barcode is set, in.Kind is unknown, inventory has no
 // stock or add or consume has a stock.
 func checkNewMovement(in NewMovement) error {
-	if (in.ProductID == nil) == (in.Barcode == nil) {
-		return httpx.BadRequest("Genau eines von product_id und barcode muss gesetzt sein")
+	if err := checkProductOrBarcode(in.ProductID, in.Barcode); err != nil {
+		return err
 	}
 	switch in.Kind {
 	case "add", "consume":
@@ -314,6 +306,29 @@ func checkNewMovement(in NewMovement) error {
 		return httpx.BadRequest(fmt.Sprintf("kind %q ist unbekannt", in.Kind))
 	}
 	return nil
+}
+
+// checkProductOrBarcode returns a 400 invalid_request error if not exactly
+// one of productID and barcode is set.
+func checkProductOrBarcode(productID, barcode *string) error {
+	if (productID == nil) == (barcode == nil) {
+		return httpx.BadRequest("Genau eines von product_id und barcode muss gesetzt sein")
+	}
+	return nil
+}
+
+// normalizeOptionalBarcode returns nil if barcode is nil and otherwise the
+// barcode normalized by normalizeBarcode, which results in 422
+// invalid_barcode for an invalid one.
+func normalizeOptionalBarcode(barcode *string) (*string, error) {
+	if barcode == nil {
+		return nil, nil
+	}
+	code, err := normalizeBarcode(*barcode)
+	if err != nil {
+		return nil, err
+	}
+	return &code, nil
 }
 
 // movementProduct returns the product to book on and the units that one unit

@@ -230,6 +230,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shopping-list/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Produkt für den Einkauf vormerken
+         * @description Merkt das Produkt für den Einkauf vor (marked true), bestimmt über product_id oder barcode. Ändert nie den Bestand und legt keine Buchung an. Ein unbekannter Barcode legt das Produkt wie beim Einlagern an, aber ohne Buchung, also mit Bestand 0, und merkt es vor. Ein schon vorgemerktes Produkt bleibt unverändert. Fehler-code: invalid_request (400), not_found (404), invalid_barcode (422).
+         */
+        post: operations["markShoppingItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shopping-list/items/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID des Produkts, dessen Vormerkung entfernt wird. */
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Vormerkung entfernen
+         * @description Setzt marked auf false. Ein Fehlbestand nach Soll bleibt auf der Einkaufsliste. Ein nicht vorgemerktes Produkt bleibt unverändert. Fehler-code: not_found (404).
+         */
+        delete: operations["unmarkShoppingItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -391,6 +434,21 @@ export interface components {
             target: number;
             /** @description Für den Einkauf vorgemerkt. Nur lesen. */
             marked: boolean;
+        };
+        /** @description Vormerkung für ein Produkt, bestimmt über product_id oder barcode. Genau eines der beiden Felder muss gesetzt sein, sonst invalid_request. */
+        MarkCreate: {
+            product_id?: string;
+            /** @description EAN-8, UPC-A, EAN-13 oder GTIN-14, wird normalisiert. */
+            barcode?: string;
+        };
+        MarkResult: {
+            product: components["schemas"]["Product"];
+            /** @description true, wenn das Produkt für einen unbekannten Barcode angelegt wurde. */
+            product_created: boolean;
+            /** @description true, wenn das Produkt schon vorher auf der Einkaufsliste stand, wegen missing größer 0 oder marked. */
+            already_listed: boolean;
+            /** @description Fertiger deutscher Anzeigetext: "Vorgemerkt: <name>", "Neu vorgemerkt: <name>" oder "Schon auf der Liste: <name>". */
+            message: string;
         };
         ShoppingList: {
             items: components["schemas"]["ShoppingItem"][];
@@ -851,6 +909,69 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ShoppingList"];
                 };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    markShoppingItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkCreate"];
+            };
+        };
+        responses: {
+            /** @description Das vorgemerkte Produkt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkResult"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unmarkShoppingItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID des Produkts, dessen Vormerkung entfernt wird. */
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Das Produkt ist nicht vorgemerkt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Fehler nach RFC 9457. */
             default: {

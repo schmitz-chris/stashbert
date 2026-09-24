@@ -29,3 +29,29 @@ func (s *Server) GetShoppingList(ctx context.Context, request GetShoppingListReq
 	}
 	return GetShoppingList200JSONResponse{Items: items}, nil
 }
+
+// MarkShoppingItem marks a product for shopping by product_id or barcode and
+// returns it. An unknown barcode creates the product first.
+func (s *Server) MarkShoppingItem(ctx context.Context, request MarkShoppingItemRequestObject) (MarkShoppingItemResponseObject, error) {
+	r, err := domain.Mark(ctx, s.deps.DB, s.deps.Publisher, s.deps.Lookuper, domain.NewMark{
+		ProductID: request.Body.ProductId,
+		Barcode:   request.Body.Barcode,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return MarkShoppingItem200JSONResponse{
+		Product:        productResponse(r.Product),
+		ProductCreated: r.ProductCreated,
+		AlreadyListed:  r.AlreadyListed,
+		Message:        r.Message,
+	}, nil
+}
+
+// UnmarkShoppingItem ends the marking for shopping of a product.
+func (s *Server) UnmarkShoppingItem(ctx context.Context, request UnmarkShoppingItemRequestObject) (UnmarkShoppingItemResponseObject, error) {
+	if err := domain.Unmark(ctx, s.deps.DB, request.ProductId); err != nil {
+		return nil, err
+	}
+	return UnmarkShoppingItem204Response{}, nil
+}

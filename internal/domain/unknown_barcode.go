@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/gtin"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
@@ -154,8 +155,9 @@ func textOrNil(s string) *string {
 // insertScannedProduct stores s in the transaction of q as a new product for
 // the unknown normalized barcode code, with needs_review, target 0 and stock
 // 0, together with the barcode with 1 unit and the cache entry of s. now is
-// the formatted time of the booking. It returns false without storing the
-// cache entry if a concurrent request has stored the barcode meanwhile.
+// the formatted time of the booking or marking. It returns false without
+// storing the cache entry if a concurrent request has stored the barcode
+// meanwhile.
 func insertScannedProduct(ctx context.Context, q *db.Queries, s scannedProduct, code, now string) (db.Product, bool, error) {
 	row, err := q.InsertProduct(ctx, db.InsertProductParams{
 		ID:             uuid.Must(uuid.NewV7()).String(),
@@ -191,6 +193,16 @@ func insertScannedProduct(ctx context.Context, q *db.Queries, s scannedProduct, 
 		}
 	}
 	return row, true, nil
+}
+
+// publishProductCreated publishes product.created for the product p created
+// for an unknown barcode to pub (architecture.md, 6.6).
+func publishProductCreated(ctx context.Context, pub events.Publisher, p Product) {
+	pub.Publish(ctx, events.New(events.TypeProductCreated, events.ProductCreatedData{
+		ProductID: p.ID,
+		Name:      p.Name,
+		Origin:    p.Origin,
+	}))
 }
 
 // isUnknownBarcode reports whether err is the 404 unknown_barcode error of
