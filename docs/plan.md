@@ -1479,6 +1479,27 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
   2. `make check` ist grün.
   3. (Nutzer) Nahe, kleine Barcodes werden auf beiden iPhones scharf gelesen; das Menü zeigt die gewählte Kamera.
 
+## Phase 1i: Vorrat-Liste ruhiger gestalten
+
+### F26: Vorrat-Liste neu gestalten
+
+- **Status:** offen
+- **Abhängig von:** F25
+- **Referenzen:** Nutzer-Rückmeldung vom 24.09.2026 („nicht stimmig"), Entwurf im Chat (Vorschlag rechts), ADR-0016; Quellen: learnui.design/blog/ios-design-guidelines-templates.html, dev.to/flownato/quantity-stepper-ux-zero-stock-limits-and-failed-updates-4emj, mobbin.com/glossary/stepper
+- **Umfang:**
+  - **Liste:** weiße Karte ohne Rahmen auf dem Hintergrund, Trennlinien eingerückt ab dem Textbeginn (nicht unter dem Bild), großzügigere Innenabstände.
+  - **Zeile:** Bild (48 px, runde Ecken), Name, darunter Marke und Packungsgröße („Bonduelle · 400 g", fehlende Teile weglassen). Darunter, auf der Höhe des Textes beginnend, eine Zeile mit links dem Status und rechts den Knöpfen.
+  - **Status** (reine Funktion `stockStatus(product)` mit Tests, kein Balken): Bestand 0 ergibt „leer" (Fehlerfarbe, Kreuz-Symbol); `missing > 0` ergibt „fehlt N" (Text in `ink`, kleines Warnsymbol in Warnfarbe); sonst mit Soll „N von Soll" (`ink-secondary`); ohne Soll „N da" (`ink-tertiary`). Ist das Produkt vorgemerkt, folgt „· vorgemerkt" mit Warenkorb-Symbol in der Vorgemerkt-Farbe. Der Status ist nie nur Farbe.
+  - **Knöpfe:** Einkaufswagen und Stepper [−] Zahl [+] als runde, hellgraue Flächen ohne Rahmen (Rolle `fill` o. ä.); sichtbar etwa 34 bis 36 px hoch, Tippfläche weiterhin mindestens 44 × 44 px; die Zahl mit fester Breite (`tabular-nums`), damit nichts springt. Vorgemerkt: hellorange Fläche mit Symbol in der Vorgemerkt-Farbe statt vollflächigem Block. Kontraste der Symbole mindestens 3:1, der Zahl mindestens 4,5:1.
+  - **Suche und Filter:** Suchfeld als graue Fläche ohne Rahmen mit Lupe und Löschen-Knopf (wie bisher, nur Stil); Filter als Segment-Schalter (graue Leiste, gewähltes Segment weiß hinterlegt), weiter mit `radiogroup`/`radio`; bei großer Schrift darf er horizontal scrollen.
+  - Die Einkaufsliste bekommt denselben Stil für ihren Wagen-Knopf und dieselbe Karten- und Trennlinien-Optik, sonst keine Änderungen.
+  - Alle Regeln aus F19 bis F24 bleiben: Farbrollen, `pressable`, Dynamic Type, Fokus, Tippflächen.
+- **Nicht im Umfang:** Bestandsbalken (vom Nutzer nicht gewünscht), Gruppierung nach Status, Wischgesten, Produktseite.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für `stockStatus` (leer, fehlt, reicht mit Soll, ohne Soll, vorgemerkt, Mindestbestand-Fälle) und für die Kontraste neuer Farbrollen.
+  2. `make check` ist grün; Bildschirmfotos in 320, 390 und 402 px sowie mit großer Schrift.
+  3. (Nutzer) Die Liste wirkt stimmig.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
