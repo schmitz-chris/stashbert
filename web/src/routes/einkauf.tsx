@@ -151,14 +151,17 @@ function ShoppingRow({
           )}
           {item.name}
         </Link>
-        {item.brand !== null && (
+        {/* The brand and, for crates, the missing bottles share a line,
+            like "Jever · fehlen 17 Flaschen". */}
+        {(item.brand !== null || crates !== null) && (
           <p className="text-sm break-words hyphens-auto text-ink-tertiary">
             {item.brand}
-          </p>
-        )}
-        {crates !== null && (
-          <p className="text-sm text-ink-secondary">
-            {missingBottlesText(crates.bottles)}
+            {item.brand !== null && crates !== null && " · "}
+            {crates !== null && (
+              <span className="text-ink-secondary">
+                {missingBottlesText(crates.bottles)}
+              </span>
+            )}
           </p>
         )}
         {item.marked && (
