@@ -12,8 +12,6 @@ export interface StockStatus {
   level: StockLevel;
   /** The text of the status, like "leer", "fehlt 2", "3 von 4" or "2 da". */
   text: string;
-  /** Whether "· vorgemerkt" follows the text. */
-  marked: boolean;
 }
 
 /**
@@ -22,25 +20,21 @@ export interface StockStatus {
  * server from target and min_stock, architecture.md 5) gives "fehlt N"
  * with N = missing. Otherwise a product with a target gives "N von T"
  * with N = stock and T = target, even when the stock is below the target
- * but not below min_stock; a product without a target gives "N da". A
- * marked product (ADR-0015) gets marked, whatever its level.
+ * but not below min_stock; a product without a target gives "N da".
+ * Whether the product is marked (ADR-0015) is not part of the status; the
+ * cart button of the row shows it.
  */
 export function stockStatus(
-  product: Pick<Product, "stock" | "target" | "missing" | "marked">,
+  product: Pick<Product, "stock" | "target" | "missing">,
 ): StockStatus {
-  const marked = product.marked;
   if (product.stock === 0) {
-    return { level: "empty", text: "leer", marked };
+    return { level: "empty", text: "leer" };
   }
   if (product.missing > 0) {
-    return { level: "missing", text: `fehlt ${product.missing}`, marked };
+    return { level: "missing", text: `fehlt ${product.missing}` };
   }
   if (product.target > 0) {
-    return {
-      level: "target",
-      text: `${product.stock} von ${product.target}`,
-      marked,
-    };
+    return { level: "target", text: `${product.stock} von ${product.target}` };
   }
-  return { level: "untracked", text: `${product.stock} da`, marked };
+  return { level: "untracked", text: `${product.stock} da` };
 }

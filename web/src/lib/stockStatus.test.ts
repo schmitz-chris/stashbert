@@ -8,11 +8,10 @@ function product(
   stock: number,
   target: number,
   minStock: number | null = null,
-  marked = false,
 ) {
   const threshold = minStock ?? target;
   const missing = target > 0 && stock < threshold ? target - stock : 0;
-  return { stock, target, missing, marked };
+  return { stock, target, missing };
 }
 
 describe("stockStatus", () => {
@@ -22,14 +21,13 @@ describe("stockStatus", () => {
     ["with min_stock", product(0, 4, 2)],
     ["with min_stock 0", product(0, 4, 0)],
   ])("calls an empty stock leer, %s", (_, fields) => {
-    expect(stockStatus(fields)).toEqual({ level: "empty", text: "leer", marked: false });
+    expect(stockStatus(fields)).toEqual({ level: "empty", text: "leer" });
   });
 
   it("names the shortfall below the target without min_stock", () => {
     expect(stockStatus(product(1, 3))).toEqual({
       level: "missing",
       text: "fehlt 2",
-      marked: false,
     });
   });
 
@@ -37,7 +35,6 @@ describe("stockStatus", () => {
     expect(stockStatus(product(1, 6, 2))).toEqual({
       level: "missing",
       text: "fehlt 5",
-      marked: false,
     });
   });
 
@@ -45,7 +42,6 @@ describe("stockStatus", () => {
     expect(stockStatus(product(4, 4))).toEqual({
       level: "target",
       text: "4 von 4",
-      marked: false,
     });
   });
 
@@ -53,7 +49,6 @@ describe("stockStatus", () => {
     expect(stockStatus(product(5, 4))).toEqual({
       level: "target",
       text: "5 von 4",
-      marked: false,
     });
   });
 
@@ -62,7 +57,7 @@ describe("stockStatus", () => {
     [product(3, 4, 2), "3 von 4"],
   ])("shows stock and target without a shortfall when min_stock is met", (fields, text) => {
     const status = stockStatus(fields);
-    expect(status).toEqual({ level: "target", text, marked: false });
+    expect(status).toEqual({ level: "target", text });
     expect(status.text).not.toContain("fehlt");
   });
 
@@ -70,18 +65,6 @@ describe("stockStatus", () => {
     expect(stockStatus(product(3, 0))).toEqual({
       level: "untracked",
       text: "3 da",
-      marked: false,
     });
-  });
-
-  it.each([
-    [product(0, 3, null, true), "empty", "leer"],
-    [product(1, 3, null, true), "missing", "fehlt 2"],
-    [product(1, 6, 2, true), "missing", "fehlt 5"],
-    [product(3, 4, 2, true), "target", "3 von 4"],
-    [product(4, 4, null, true), "target", "4 von 4"],
-    [product(2, 0, null, true), "untracked", "2 da"],
-  ])("adds the mark to any level (%o)", (fields, level, text) => {
-    expect(stockStatus(fields)).toEqual({ level, text, marked: true });
   });
 });

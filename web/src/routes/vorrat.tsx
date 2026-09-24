@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { CartButton, roundButtonClass } from "../components/CartButton";
-import { CartIcon } from "../components/CartIcon";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { problemCode } from "../lib/api/client";
@@ -233,8 +232,9 @@ function StockRow({ product }: { product: Product }) {
         <p role="status" className="text-sm font-medium text-danger">
           {notice}
         </p>
-        {/* The status takes the room left of the buttons and wraps its
-            parts; below 6rem the buttons move to a line of their own,
+        {/* The status is as wide as its text and the buttons stand
+            right of it; if both do not fit side by side (large text or a
+            narrow screen), the buttons move to a line of their own,
             still on the right. */}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <StatusText product={product} />
@@ -289,29 +289,18 @@ const statusTextClass: Record<StockLevel, string> = {
 };
 
 // The status of a row (lib/stockStatus.ts): "leer" with a cross, "fehlt N"
-// with a warning triangle, "N von T" or "N da", followed by "· vorgemerkt"
-// with a cart. Each part keeps its symbol on its line. The dot lies in the
-// gap in front of "vorgemerkt"; when that part wraps to a line of its own,
-// the dot falls outside the status and is clipped. The text says
-// everything the colors and symbols say.
+// with a warning triangle, "N von T" or "N da". The text says everything
+// the color and the symbol say. Whether the product is marked shows only
+// the cart button (user feedback of 2026-09-24).
 function StatusText({ product }: { product: Product }) {
   const status = stockStatus(product);
   return (
-    <p className="flex min-w-0 flex-[1_1_6rem] flex-wrap items-center gap-x-4 overflow-hidden text-sm">
-      <span className={`inline-flex items-center gap-1 ${statusTextClass[status.level]}`}>
-        {status.level === "empty" && <EmptySymbol />}
-        {status.level === "missing" && <WarningSymbol />}
-        {status.text}
-      </span>
-      {status.marked && (
-        <span className="relative inline-flex items-center gap-1 font-medium text-marked">
-          <span aria-hidden="true" className="absolute right-full mr-1.5 text-ink-tertiary">
-            ·
-          </span>
-          <CartIcon checked={false} className="size-[1.15em]" />
-          vorgemerkt
-        </span>
-      )}
+    <p
+      className={`flex min-w-0 flex-auto items-center gap-1 text-sm ${statusTextClass[status.level]}`}
+    >
+      {status.level === "empty" && <EmptySymbol />}
+      {status.level === "missing" && <WarningSymbol />}
+      {status.text}
     </p>
   );
 }

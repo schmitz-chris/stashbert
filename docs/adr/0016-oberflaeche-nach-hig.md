@@ -23,7 +23,7 @@
 
 - Sechs kleine Tasks F19 bis F24 im Plan (Phase 1g).
 - Neue Oberflächen nutzen nur die Farbrollen und den gemeinsamen Druckzustand (AGENTS.md, Frontend-Regeln).
-- Screenshots in 320, 390 und 402 px Breite und mit großer Schrift gehören zur Abnahme jedes Tasks, der Layout ändert.
+- Screenshots in 320, 390 und 402 px Breite und mit großer Schrift gehören zur Abnahme jedes Tasks, der Layout ändert. Die Grundschrift dieser Screenshots ist 17 px, die Standardgröße von iOS, nicht die 16 px eines Desktop-Browsers.
 
 ## Alternativen
 
