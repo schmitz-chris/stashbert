@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { problemCode } from "../lib/api/client";
 import {
+  markProductMutation,
   productListQuery,
   productMovementMutation,
+  unmarkMutation,
   type ProductMovement,
 } from "../lib/api/queries";
+import { cartToggle } from "../lib/cartToggle";
 import { productImageUrl } from "../lib/productImage";
 import {
   filterProducts,
@@ -22,8 +25,13 @@ const filters: { value: ProductFilter; label: string }[] = [
   { value: "review", label: "Prüfen" },
 ];
 
-// How long the notice of a failed booking stays visible.
+// How long the notice of a failed booking or mark stays visible.
 const noticeDuration = 2000;
+
+// The buttons of a row: the tap area is 44 × 44 px, the visible face only
+// 40 × 40 px, so the three buttons leave more room for the name.
+const rowButtonClass = "flex size-11 items-center justify-center disabled:opacity-40";
+const rowButtonFaceClass = "flex size-10 items-center justify-center rounded-lg border";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
@@ -114,27 +122,36 @@ function StockList({
 function StockRow({ product }: { product: Product }) {
   const queryClient = useQueryClient();
   const movement = useMutation(productMovementMutation(queryClient));
-  const { isError, reset } = movement;
-
-  // Hides the notice of a failed booking after a short time.
-  useEffect(() => {
-    if (!isError) {
-      return;
-    }
-    const timer = setTimeout(reset, noticeDuration);
-    return () => clearTimeout(timer);
-  }, [isError, reset]);
+  const mark = useMutation(markProductMutation(queryClient));
+  const unmark = useMutation(unmarkMutation(queryClient));
+  useResetAfterError(movement);
+  useResetAfterError(mark);
+  useResetAfterError(unmark);
 
   let notice = "";
-  if (isError) {
+  if (movement.isError) {
     notice =
       problemCode(movement.error) === "stock_already_zero"
         ? "War schon leer"
         : "Buchung fehlgeschlagen";
+  } else if (mark.isError) {
+    notice = "Vormerken fehlgeschlagen";
+  } else if (unmark.isError) {
+    notice = "Entfernen fehlgeschlagen";
   }
 
   function book(kind: ProductMovement["kind"]) {
     movement.mutate({ productId: product.id, kind });
+  }
+
+  const cart = cartToggle(product);
+
+  function toggleCart() {
+    if (cart.action === "mark") {
+      mark.mutate(product.id);
+    } else {
+      unmark.mutate(product.id);
+    }
   }
 
   // The link covers the whole row with its ::after box, so a tap anywhere
@@ -154,9 +171,6 @@ function StockRow({ product }: { product: Product }) {
             {product.brand}
           </p>
         )}
-        {product.marked && (
-          <p className="text-xs font-medium text-amber-700">vorgemerkt</p>
-        )}
         <p role="status" className="text-sm font-medium text-amber-700">
           {notice}
         </p>
@@ -171,27 +185,79 @@ function StockRow({ product }: { product: Product }) {
           <p className="text-xs text-stone-500">Soll {product.target}</p>
         )}
       </div>
-      <div className="relative z-10 flex shrink-0 gap-2">
+      <div className="relative z-10 flex shrink-0">
+        <button
+          type="button"
+          disabled={mark.isPending || unmark.isPending}
+          onClick={toggleCart}
+          aria-pressed={cart.pressed}
+          aria-label={cart.label}
+          className={rowButtonClass}
+        >
+          <span
+            className={`${rowButtonFaceClass} ${cart.pressed ? "border-amber-700 bg-amber-700 text-white" : "border-stone-300 bg-white text-stone-700"}`}
+          >
+            <CartIcon checked={cart.pressed} />
+          </span>
+        </button>
         <button
           type="button"
           disabled={movement.isPending}
           onClick={() => book("consume")}
           aria-label={`Eins entnehmen: ${product.name}`}
-          className="size-11 rounded-lg border border-stone-300 bg-white text-xl disabled:opacity-40"
+          className={rowButtonClass}
         >
-          −
+          <span className={`${rowButtonFaceClass} border-stone-300 bg-white text-xl`}>
+            −
+          </span>
         </button>
         <button
           type="button"
           disabled={movement.isPending}
           onClick={() => book("add")}
           aria-label={`Eins einlagern: ${product.name}`}
-          className="size-11 rounded-lg border border-stone-300 bg-white text-xl disabled:opacity-40"
+          className={rowButtonClass}
         >
-          +
+          <span className={`${rowButtonFaceClass} border-stone-300 bg-white text-xl`}>
+            +
+          </span>
         </button>
       </div>
     </li>
+  );
+}
+
+// Resets a failed mutation of a row after noticeDuration, which hides its
+// notice.
+function useResetAfterError({ isError, reset }: { isError: boolean; reset: () => void }) {
+  useEffect(() => {
+    if (!isError) {
+      return;
+    }
+    const timer = setTimeout(reset, noticeDuration);
+    return () => clearTimeout(timer);
+  }, [isError, reset]);
+}
+
+// The shopping cart of the cart button, drawn with the color of the text
+// like the symbols of the navigation bar; checked, with a tick in the basket.
+function CartIcon({ checked }: { checked: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-6"
+    >
+      <path d="M2 3h2.5l2.6 12.2a1 1 0 0 0 1 .8h9.4a1 1 0 0 0 1-.76L21 7H5.6" />
+      <circle cx="9" cy="20" r="1.5" />
+      <circle cx="18" cy="20" r="1.5" />
+      {checked && <path d="m10 11.5 2 2 4-4" />}
+    </svg>
   );
 }
 

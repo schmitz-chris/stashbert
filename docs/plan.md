@@ -1346,7 +1346,7 @@ Anlass: Open Food Facts lieferte zu einem Barcode ein falsches Produkt samt Bild
 
 ### F18: Einkaufswagen-Knopf in der Vorrat-Liste
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F16
 - **Referenzen:** ADR-0015; Wunsch des Nutzers vom 24.09.2026 (Variante A: Knopf in jeder Zeile)
 - **Umfang:**
