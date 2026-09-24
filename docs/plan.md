@@ -1276,7 +1276,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F15: Scan-Modus „Einkaufen"
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B31, F10
 - **Referenzen:** ADR-0015, F08 bis F11
 - **Umfang:**

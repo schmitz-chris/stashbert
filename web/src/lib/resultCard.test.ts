@@ -6,13 +6,14 @@ import {
   cardView,
   formatStockChange,
   hiddenCard,
+  markCardView,
   resultCardReducer,
   targetChoices,
   type CardBooking,
   type ResultCardAction,
   type ResultCardState,
 } from "./resultCard";
-import type { MovementResult } from "./scan";
+import type { MarkResult, MovementResult } from "./scan";
 
 const product: Product = {
   id: "01a0ce63-0000-7000-8000-000000000000",
@@ -78,7 +79,7 @@ describe("resultCardReducer", () => {
     expect(cardDuration).toBe(10_000);
     expect(shown).toEqual({
       status: "running",
-      booking: { result: first, kind: "add", merged: false },
+      content: { result: first, kind: "add", merged: false },
       hideAt: 11_000,
     });
   });
@@ -101,7 +102,7 @@ describe("resultCardReducer", () => {
     });
     expect(replaced).toEqual({
       status: "running",
-      booking: { result: second, kind: "consume", merged: false },
+      content: { result: second, kind: "consume", merged: false },
       hideAt: 19_000,
     });
     expect(run(replaced, { type: "tick", now: 11_000 })).toBe(replaced);
@@ -116,7 +117,7 @@ describe("resultCardReducer", () => {
     );
     expect(again).toEqual({
       status: "running",
-      booking: { result: second, kind: "add", merged: false },
+      content: { result: second, kind: "add", merged: false },
       hideAt: 22_000,
     });
   });
@@ -125,7 +126,7 @@ describe("resultCardReducer", () => {
     const paused = run(shown, { type: "pause", now: 4000 });
     expect(paused).toEqual({
       status: "paused",
-      booking: { result: first, kind: "add", merged: false },
+      content: { result: first, kind: "add", merged: false },
       remaining: 7000,
     });
     expect(run(paused, { type: "tick", now: 60_000 })).toBe(paused);
@@ -139,7 +140,7 @@ describe("resultCardReducer", () => {
     );
     expect(resumed).toEqual({
       status: "running",
-      booking: { result: first, kind: "add", merged: false },
+      content: { result: first, kind: "add", merged: false },
       hideAt: 57_000,
     });
     expect(run(resumed, { type: "tick", now: 56_999 })).toBe(resumed);
@@ -167,7 +168,7 @@ describe("resultCardReducer", () => {
     );
     expect(replaced).toEqual({
       status: "running",
-      booking: { result: second, kind: "add", merged: false },
+      content: { result: second, kind: "add", merged: false },
       hideAt: 15_000,
     });
   });
@@ -237,7 +238,7 @@ describe("resultCardReducer with a new product", () => {
     const updated = run(shownNew, { type: "update", product: changed }, { type: "tick", now: 10_999 });
     expect(updated).toEqual({
       status: "running",
-      booking: { result: { ...created, product: changed }, kind: "add", merged: false },
+      content: { result: { ...created, product: changed }, kind: "add", merged: false },
       hideAt: 11_000,
     });
     expect(run(updated, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
@@ -247,7 +248,7 @@ describe("resultCardReducer with a new product", () => {
     const paused = run(shownNew, { type: "pause", now: 4000 });
     expect(run(paused, { type: "update", product: changed })).toEqual({
       status: "paused",
-      booking: { result: { ...created, product: changed }, kind: "add", merged: false },
+      content: { result: { ...created, product: changed }, kind: "add", merged: false },
       remaining: 7000,
     });
   });
@@ -265,7 +266,7 @@ describe("resultCardReducer with a new product", () => {
     );
     expect(merged).toEqual({
       status: "running",
-      booking: {
+      content: {
         result: {
           ...created,
           movement: { ...created.movement, product_id: mergeTarget.id },
@@ -286,11 +287,11 @@ describe("resultCardReducer with a new product", () => {
       target: mergeTarget,
     });
     expect(merged).toMatchObject({ status: "running", hideAt: 11_000 });
-    if (merged.status === "hidden") {
-      throw new Error("card hidden");
+    if (merged.status === "hidden" || merged.content.kind === "mark") {
+      throw new Error("no booking card");
     }
-    expect(merged.booking.result.movement.id).toBe(created.movement.id);
-    expect(merged.booking.result.product.id).toBe(mergeTarget.id);
+    expect(merged.content.result.movement.id).toBe(created.movement.id);
+    expect(merged.content.result.product.id).toBe(mergeTarget.id);
     expect(run(merged, { type: "hide", movementId: created.movement.id })).toEqual(hiddenCard);
   });
 
@@ -315,7 +316,7 @@ describe("resultCardReducer with a new product", () => {
     });
     expect(run(merged, { type: "show", result: first, kind: "add", now: 5000 })).toEqual({
       status: "running",
-      booking: { result: first, kind: "add", merged: false },
+      content: { result: first, kind: "add", merged: false },
       hideAt: 15_000,
     });
   });
@@ -364,14 +365,142 @@ describe("cardView", () => {
       sourceId: created.product.id,
       target: mergeTarget,
     });
-    if (merged.status === "hidden") {
-      throw new Error("card hidden");
+    if (merged.status === "hidden" || merged.content.kind === "mark") {
+      throw new Error("no booking card");
     }
-    expect(cardView(merged.booking)).toEqual({
+    expect(cardView(merged.content)).toEqual({
       title: "Nudeln",
       stock: "Bestand: 7",
       isNew: false,
       review: false,
+    });
+  });
+});
+
+// A mark of a known product by a scan, and one of a product that was
+// listed before.
+const marked: MarkResult = {
+  product: { ...product, marked: true },
+  product_created: false,
+  already_listed: false,
+  message: "Vorgemerkt: Kidneybohnen",
+};
+const listed: MarkResult = {
+  product: { ...mergeTarget, marked: true },
+  product_created: false,
+  already_listed: true,
+  message: "Schon auf der Liste: Nudeln",
+};
+
+// The card of the mark, shown at time 1000.
+const shownMark = run(hiddenCard, { type: "show", result: marked, kind: "mark", now: 1000 });
+
+describe("resultCardReducer with a mark", () => {
+  it("shows a mark for cardDuration", () => {
+    expect(shownMark).toEqual({
+      status: "running",
+      content: { result: marked, kind: "mark" },
+      hideAt: 11_000,
+    });
+    expect(run(shownMark, { type: "tick", now: 10_999 })).toBe(shownMark);
+    expect(run(shownMark, { type: "tick", now: 11_000 })).toEqual(hiddenCard);
+  });
+
+  it("stops the time while paused and continues with the time left", () => {
+    const paused = run(shownMark, { type: "pause", now: 4000 });
+    expect(paused).toEqual({
+      status: "paused",
+      content: { result: marked, kind: "mark" },
+      remaining: 7000,
+    });
+    expect(run(paused, { type: "tick", now: 60_000 })).toBe(paused);
+    const resumed = run(paused, { type: "resume", now: 50_000 });
+    expect(resumed).toMatchObject({ status: "running", hideAt: 57_000 });
+  });
+
+  it("replaces a booking card with a mark and a mark card with a booking", () => {
+    expect(run(shown, { type: "show", result: listed, kind: "mark", now: 5000 })).toEqual({
+      status: "running",
+      content: { result: listed, kind: "mark" },
+      hideAt: 15_000,
+    });
+    expect(run(shownMark, { type: "show", result: first, kind: "add", now: 5000 })).toEqual({
+      status: "running",
+      content: { result: first, kind: "add", merged: false },
+      hideAt: 15_000,
+    });
+  });
+
+  it("replaces a mark with the next mark, also while paused", () => {
+    const replaced = run(
+      shownMark,
+      { type: "pause", now: 4000 },
+      { type: "show", result: listed, kind: "mark", now: 5000 },
+    );
+    expect(replaced).toEqual({
+      status: "running",
+      content: { result: listed, kind: "mark" },
+      hideAt: 15_000,
+    });
+  });
+
+  it("hides the card of the mark after the mark of its product was undone", () => {
+    expect(run(shownMark, { type: "hideMark", productId: product.id })).toEqual(hiddenCard);
+    const paused = run(shownMark, { type: "pause", now: 4000 });
+    expect(run(paused, { type: "hideMark", productId: product.id })).toEqual(hiddenCard);
+  });
+
+  it("keeps the card of a mark of another product on hideMark", () => {
+    expect(run(shownMark, { type: "hideMark", productId: mergeTarget.id })).toBe(shownMark);
+  });
+
+  it("keeps a booking card on hideMark and a mark card on hide", () => {
+    expect(run(shown, { type: "hideMark", productId: product.id })).toBe(shown);
+    expect(run(shownMark, { type: "hide", movementId: first.movement.id })).toBe(shownMark);
+  });
+
+  it("ignores hideMark while hidden", () => {
+    expect(run(hiddenCard, { type: "hideMark", productId: product.id })).toBe(hiddenCard);
+  });
+
+  it("ignores update and merge on a mark card", () => {
+    expect(run(shownMark, { type: "update", product: { ...product, target: 5 } })).toBe(
+      shownMark,
+    );
+    expect(
+      run(shownMark, { type: "merge", sourceId: product.id, target: mergeTarget }),
+    ).toBe(shownMark);
+  });
+});
+
+describe("markCardView", () => {
+  it("shows a product this scan marked as vorgemerkt, with [Rückgängig]", () => {
+    expect(markCardView({ result: marked, kind: "mark" })).toEqual({
+      title: "Kidneybohnen",
+      status: "vorgemerkt",
+      undo: true,
+    });
+  });
+
+  it("shows a product that was listed before without [Rückgängig]", () => {
+    expect(markCardView({ result: listed, kind: "mark" })).toEqual({
+      title: "Nudeln",
+      status: "schon auf der Liste",
+      undo: false,
+    });
+  });
+
+  it("shows a product the mark created with Neu: as vorgemerkt, with [Rückgängig]", () => {
+    const createdMark: MarkResult = {
+      product: { ...created.product, stock: 0, marked: true },
+      product_created: true,
+      already_listed: false,
+      message: "Neu vorgemerkt: Neues Produkt 2000000000008",
+    };
+    expect(markCardView({ result: createdMark, kind: "mark" })).toEqual({
+      title: "Neu: Neues Produkt 2000000000008",
+      status: "vorgemerkt",
+      undo: true,
     });
   });
 });

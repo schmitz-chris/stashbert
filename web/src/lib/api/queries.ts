@@ -11,7 +11,7 @@ import {
   withoutBarcode,
   type Product,
 } from "../products";
-import type { MovementResult } from "../scan";
+import type { MarkResult, MovementResult } from "../scan";
 import { api, problemCode } from "./client";
 
 /**
@@ -31,10 +31,10 @@ export const productListQuery = queryOptions({
 });
 
 /**
- * The shopping list: all products with missing > 0, in the order of the
- * server (sorted by name). With the default staleTime of 0 it is fetched
- * again whenever a view using it mounts, so opening the shopping view
- * shows the current list.
+ * The shopping list: all products with missing > 0 or marked, in the order
+ * of the server (sorted by name). With the default staleTime of 0 it is
+ * fetched again whenever a view using it mounts, so opening the shopping
+ * view shows the current list.
  */
 export const shoppingListQuery = queryOptions({
   queryKey: ["shopping-list"],
@@ -47,10 +47,10 @@ export const shoppingListQuery = queryOptions({
   },
 });
 
-// Marks the cached shopping list as out of date after a change of stock
-// or target, so it is fetched again. Every mutation that changes stock or
-// target of a product (bookings, reversals, stock counts, changes,
-// merges and deletions) calls it.
+// Marks the cached shopping list as out of date after a change of stock,
+// target or mark, so it is fetched again. Every mutation that changes
+// stock, target or mark of a product (bookings, reversals, stock counts,
+// changes, marks, merges and deletions) calls it.
 function invalidateShoppingList(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: shoppingListQuery.queryKey });
 }
@@ -218,6 +218,78 @@ function cacheBookingResult(
     queryKey: productMovementsQuery(product.id).queryKey,
   });
   invalidateShoppingList(queryClient);
+}
+
+/**
+ * Marks a scanned code for shopping with POST /shopping-list/items
+ * (docs/plan.md, F15). Timeout and errors are those of
+ * scanMovementMutation, and it also runs while the browser reports being
+ * offline. On success product from the response replaces the cached
+ * product and its entry in the product list; if the mark created the
+ * product, the list is fetched again. The shopping list is fetched again.
+ */
+export function markScanMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (barcode: string) => {
+      const { data, error, response } = await api.POST("/shopping-list/items", {
+        body: { barcode },
+        signal: AbortSignal.timeout(scanTimeout),
+      });
+      if (!response.ok || data === undefined) {
+        throw bookingError(error, response, "POST /shopping-list/items");
+      }
+      return data;
+    },
+    networkMode: "always",
+    onSuccess: (result) => cacheMarkResult(queryClient, result),
+  });
+}
+
+// Updates the cache after a mark: product from the result replaces the
+// cached product and its entry in the product list; if the mark created
+// the product, the list is fetched again. The shopping list is fetched
+// again.
+function cacheMarkResult(queryClient: QueryClient, { product, product_created }: MarkResult) {
+  if (product_created) {
+    queryClient.setQueryData(productQuery(product.id).queryKey, product);
+    void queryClient.invalidateQueries({
+      queryKey: productListQuery.queryKey,
+      exact: true,
+    });
+  } else {
+    setCachedProduct(queryClient, product);
+  }
+  invalidateShoppingList(queryClient);
+}
+
+/**
+ * Removes the mark of the product with the given id for the result card
+ * of the scan view: DELETE /shopping-list/items/{product_id}. Timeout and
+ * errors are those of scanMovementMutation. The response holds no
+ * product, so on success the product, the product list and the shopping
+ * list are fetched again.
+ */
+export function unmarkMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (productId: string) => {
+      const { error, response } = await api.DELETE("/shopping-list/items/{product_id}", {
+        params: { path: { product_id: productId } },
+        signal: AbortSignal.timeout(scanTimeout),
+      });
+      if (!response.ok) {
+        throw bookingError(error, response, `DELETE /shopping-list/items/${productId}`);
+      }
+    },
+    networkMode: "always",
+    onSuccess: (_data, productId) => {
+      void queryClient.invalidateQueries({ queryKey: productQuery(productId).queryKey });
+      void queryClient.invalidateQueries({
+        queryKey: productListQuery.queryKey,
+        exact: true,
+      });
+      invalidateShoppingList(queryClient);
+    },
+  });
 }
 
 /**

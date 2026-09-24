@@ -1,8 +1,8 @@
 import type { Movement } from "./movements";
 import type { Product } from "./products";
-import type { MovementResult, ScanMode } from "./scan";
+import type { BookingMode, MarkResult, MovementResult } from "./scan";
 
-/** How long the result card stays visible after a booking, in ms. */
+/** How long the result card stays visible after a booking or mark, in ms. */
 export const cardDuration = 10_000;
 
 /**
@@ -12,9 +12,18 @@ export const cardDuration = 10_000;
  */
 export interface CardBooking {
   result: MovementResult;
-  kind: ScanMode;
+  kind: BookingMode;
   merged: boolean;
 }
+
+/** The mark of a scanned code in mode mark (docs/plan.md, F15). */
+export interface CardMark {
+  result: MarkResult;
+  kind: "mark";
+}
+
+/** What a result card shows: a booking or a mark, told apart by kind. */
+export type CardContent = CardBooking | CardMark;
 
 /**
  * The result card of the scan view (docs/plan.md, F09): hidden, running
@@ -23,15 +32,17 @@ export interface CardBooking {
  */
 export type ResultCardState =
   | { status: "hidden" }
-  | { status: "running"; booking: CardBooking; hideAt: number }
-  | { status: "paused"; booking: CardBooking; remaining: number };
+  | { status: "running"; content: CardContent; hideAt: number }
+  | { status: "paused"; content: CardContent; remaining: number };
 
 export type ResultCardAction =
-  | { type: "show"; result: MovementResult; kind: ScanMode; now: number }
+  | { type: "show"; result: MovementResult; kind: BookingMode; now: number }
+  | { type: "show"; result: MarkResult; kind: "mark"; now: number }
   | { type: "tick"; now: number }
   | { type: "pause"; now: number }
   | { type: "resume"; now: number }
   | { type: "hide"; movementId: string }
+  | { type: "hideMark"; productId: string }
   | { type: "update"; product: Product }
   | { type: "merge"; sourceId: string; target: Product };
 
@@ -40,22 +51,25 @@ export const hiddenCard: ResultCardState = { status: "hidden" };
 /**
  * Returns the next state of the result card:
  *
- *   - show: shows the booking result (booked with kind) for cardDuration,
- *     replacing the card shown before, also a paused one.
+ *   - show: shows the booking result (booked with kind) or the mark
+ *     result (kind mark) for cardDuration, replacing the card shown
+ *     before, also a paused one.
  *   - tick: hides a running card whose time is up.
  *   - pause: stops the time of a running card.
  *   - resume: lets a paused card run for the time it had left.
  *   - hide: hides the card if it shows the booking movementId, so undoing
  *     an older booking leaves the card of a newer one.
+ *   - hideMark: hides the card if it shows a mark of the product with
+ *     productId, after its mark was undone.
  *   - update: replaces the product on the card with a changed version of
  *     it (same id), for example after its target was changed.
  *   - merge: after the product on the card (sourceId) was merged into
  *     target, the card shows target, to which the booking belongs now,
  *     and no longer as a new product.
  *
- * update and merge only change what the card shows, not its time, and
- * leave a card that shows another product unchanged. Actions that do not
- * apply to the state return it unchanged.
+ * update and merge only change what the card of a booking shows, not its
+ * time, and leave a card that shows a mark or another product unchanged.
+ * Actions that do not apply to the state return it unchanged.
  */
 export function resultCardReducer(
   state: ResultCardState,
@@ -63,8 +77,11 @@ export function resultCardReducer(
 ): ResultCardState {
   switch (action.type) {
     case "show": {
-      const booking = { result: action.result, kind: action.kind, merged: false };
-      return { status: "running", booking, hideAt: action.now + cardDuration };
+      const content: CardContent =
+        action.kind === "mark"
+          ? { result: action.result, kind: "mark" }
+          : { result: action.result, kind: action.kind, merged: false };
+      return { status: "running", content, hideAt: action.now + cardDuration };
     }
     case "tick":
       return state.status === "running" && action.now >= state.hideAt ? hiddenCard : state;
@@ -74,7 +91,7 @@ export function resultCardReducer(
       }
       return {
         status: "paused",
-        booking: state.booking,
+        content: state.content,
         remaining: Math.max(0, state.hideAt - action.now),
       };
     case "resume":
@@ -83,11 +100,24 @@ export function resultCardReducer(
       }
       return {
         status: "running",
-        booking: state.booking,
+        content: state.content,
         hideAt: action.now + state.remaining,
       };
     case "hide":
-      if (state.status === "hidden" || state.booking.result.movement.id !== action.movementId) {
+      if (
+        state.status === "hidden" ||
+        state.content.kind === "mark" ||
+        state.content.result.movement.id !== action.movementId
+      ) {
+        return state;
+      }
+      return hiddenCard;
+    case "hideMark":
+      if (
+        state.status === "hidden" ||
+        state.content.kind !== "mark" ||
+        state.content.result.product.id !== action.productId
+      ) {
         return state;
       }
       return hiddenCard;
@@ -111,16 +141,20 @@ export function resultCardReducer(
 }
 
 // Returns state with its booking replaced by change(booking), if the card
-// shows the product with productId; otherwise state unchanged.
+// shows a booking of the product with productId; otherwise state unchanged.
 function withBooking(
   state: ResultCardState,
   productId: string,
   change: (booking: CardBooking) => CardBooking,
 ): ResultCardState {
-  if (state.status === "hidden" || state.booking.result.product.id !== productId) {
+  if (
+    state.status === "hidden" ||
+    state.content.kind === "mark" ||
+    state.content.result.product.id !== productId
+  ) {
     return state;
   }
-  return { ...state, booking: change(state.booking) };
+  return { ...state, content: change(state.content) };
 }
 
 /**
@@ -158,5 +192,30 @@ export function cardView({ result, merged }: CardBooking): CardView {
     stock: merged ? `Bestand: ${product.stock}` : formatStockChange(result.movement),
     isNew,
     review: isNew && product.needs_review,
+  };
+}
+
+/** What the result card shows for a mark (docs/plan.md, F15). */
+export interface MarkCardView {
+  /** The name of the product, as "Neu: <name>" if the mark created it. */
+  title: string;
+  /** "vorgemerkt", or "schon auf der Liste" if it was listed before. */
+  status: string;
+  /** Whether [Rückgängig] is offered: only if this scan marked it. */
+  undo: boolean;
+}
+
+/**
+ * Returns what the result card shows for mark: the name of the product,
+ * as "Neu: <name>" if the mark created it, and "vorgemerkt", or "schon auf
+ * der Liste" without [Rückgängig] if the product was on the shopping list
+ * before (already_listed), so the mark did not come from this scan.
+ */
+export function markCardView({ result }: CardMark): MarkCardView {
+  const { product, product_created: isNew, already_listed: listed } = result;
+  return {
+    title: isNew ? `Neu: ${product.name}` : product.name,
+    status: listed ? "schon auf der Liste" : "vorgemerkt",
+    undo: !listed,
   };
 }

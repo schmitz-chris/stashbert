@@ -8,10 +8,14 @@ export interface Tone {
   ms: number;
 }
 
-// Tone patterns per outcome (docs/plan.md, F07).
+// Tone patterns per outcome (docs/plan.md, F07 and F15).
 export const TONES = {
   add: [{ hz: 880, ms: 100 }],
   consume: [{ hz: 660, ms: 100 }],
+  mark: [
+    { hz: 1320, ms: 60 },
+    { hz: 1320, ms: 60 },
+  ],
   warn: [
     { hz: 440, ms: 80 },
     { hz: 440, ms: 80 },

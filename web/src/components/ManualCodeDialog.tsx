@@ -5,6 +5,13 @@ import { Dialog } from "./Dialog";
 
 const buttonClass = "min-h-11 rounded-lg px-4 font-medium";
 
+// The submit button per mode of the scan view: its text and colour.
+const submitButton: Record<ScanMode, { label: string; className: string }> = {
+  add: { label: "Einlagern", className: "bg-emerald-600 text-white" },
+  consume: { label: "Entnehmen", className: "bg-sky-600 text-white" },
+  mark: { label: "Vormerken", className: "bg-amber-700 text-white" },
+};
+
 interface ManualCodeDialogProps {
   /** Whether the dialog is shown. */
   open: boolean;
@@ -88,11 +95,8 @@ function ManualCodeForm({
         >
           Abbrechen
         </button>
-        <button
-          type="submit"
-          className={`${mode === "add" ? "bg-emerald-600" : "bg-sky-600"} text-white ${buttonClass}`}
-        >
-          {mode === "add" ? "Einlagern" : "Entnehmen"}
+        <button type="submit" className={`${submitButton[mode].className} ${buttonClass}`}>
+          {submitButton[mode].label}
         </button>
       </div>
     </form>

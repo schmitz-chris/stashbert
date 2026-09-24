@@ -3,13 +3,22 @@ import { useEffect, useId } from "react";
 import { Link } from "react-router";
 import { productUpdateMutation } from "../lib/api/queries";
 import type { Product } from "../lib/products";
-import { cardView, targetChoices, type CardBooking } from "../lib/resultCard";
+import {
+  cardView,
+  markCardView,
+  targetChoices,
+  type CardBooking,
+  type CardMark,
+} from "../lib/resultCard";
 
 // How long the message of a target change stays visible.
 const noticeDuration = 2000;
 
 const actionClass =
   "inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 font-medium text-stone-800";
+
+const undoClass =
+  "min-h-11 shrink-0 rounded-lg bg-stone-200 px-3 font-medium text-stone-800 disabled:opacity-40";
 
 interface ResultCardProps {
   booking: CardBooking;
@@ -61,12 +70,7 @@ export function ResultCard({
         >
           +1
         </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onUndo}
-          className="min-h-11 shrink-0 rounded-lg bg-stone-200 px-3 font-medium text-stone-800 disabled:opacity-40"
-        >
+        <button type="button" disabled={disabled} onClick={onUndo} className={undoClass}>
           Rückgängig
         </button>
       </div>
@@ -77,6 +81,41 @@ export function ResultCard({
           onMerge={onMerge}
         />
       )}
+    </section>
+  );
+}
+
+interface MarkResultCardProps {
+  mark: CardMark;
+  /** Locks [Rückgängig], while it runs. */
+  disabled: boolean;
+  onUndo: () => void;
+}
+
+/**
+ * The result card of the scan view in mode mark (docs/plan.md, F15): the
+ * product, "vorgemerkt" or "schon auf der Liste", and [Rückgängig] only if
+ * this scan marked the product.
+ */
+export function MarkResultCard({ mark, disabled, onUndo }: MarkResultCardProps) {
+  const nameId = useId();
+  const view = markCardView(mark);
+
+  return (
+    <section aria-labelledby={nameId} className="rounded-xl bg-white p-3 shadow">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
+            {view.title}
+          </h2>
+          <p className="text-xl font-bold text-amber-700">{view.status}</p>
+        </div>
+        {view.undo && (
+          <button type="button" disabled={disabled} onClick={onUndo} className={undoClass}>
+            Rückgängig
+          </button>
+        )}
+      </div>
     </section>
   );
 }

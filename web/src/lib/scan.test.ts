@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "./products";
 import {
   cameraErrorText,
   feedbackFor,
+  loadScanMode,
+  saveScanMode,
   undoFeedbackFor,
+  unmarkFeedbackFor,
+  type MarkResult,
   type MovementResult,
 } from "./scan";
 
@@ -59,6 +63,54 @@ function problem(status: number, code: string) {
 function statusError(status: number) {
   return Object.assign(new Error(`POST /movements: status ${status}`), { status });
 }
+
+// Replaces localStorage with a store in a Map that holds saved.
+function stubStorage(saved: Record<string, string> = {}) {
+  const items = new Map(Object.entries(saved));
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => items.set(key, value),
+  });
+}
+
+describe("loadScanMode", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["add", "consume", "mark"] as const)("returns the saved mode %s", (mode) => {
+    stubStorage({ "stashbert.scanMode": mode });
+    expect(loadScanMode()).toBe(mode);
+  });
+
+  it.each(["", "Einkaufen", "reversal", "MARK"])(
+    "returns add for the unknown saved value %o",
+    (value) => {
+      stubStorage({ "stashbert.scanMode": value });
+      expect(loadScanMode()).toBe("add");
+    },
+  );
+
+  it("returns add if no mode is saved", () => {
+    stubStorage();
+    expect(loadScanMode()).toBe("add");
+  });
+
+  it("returns add if the storage is unavailable", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new DOMException("", "SecurityError");
+      },
+    });
+    expect(loadScanMode()).toBe("add");
+  });
+
+  it("returns the mode mark after saving it", () => {
+    stubStorage();
+    saveScanMode("mark");
+    expect(loadScanMode()).toBe("mark");
+  });
+});
 
 describe("feedbackFor", () => {
   it("shows a booking in add mode green with the add tone", () => {
@@ -118,6 +170,87 @@ describe("feedbackFor", () => {
     [new Error("unexpected"), "red", "error", "Buchung fehlgeschlagen"],
   ])("shows the error %o as %s with the %s tone", (error, color, sound, text) => {
     expect(feedbackFor({ ok: false, error })).toEqual({ color, sound, text });
+  });
+});
+
+describe("feedbackFor in mode mark", () => {
+  function markResult(fields: Partial<MarkResult> = {}): MarkResult {
+    return {
+      product: { ...product, marked: true },
+      product_created: false,
+      already_listed: false,
+      message: "Vorgemerkt: Kidneybohnen",
+      ...fields,
+    };
+  }
+
+  it("shows a new mark orange with the mark tone", () => {
+    expect(feedbackFor({ ok: true, mode: "mark", result: markResult() })).toEqual({
+      color: "orange",
+      sound: "mark",
+      text: "Vorgemerkt: Kidneybohnen",
+    });
+  });
+
+  it("shows a product that was listed before orange with the mark tone", () => {
+    const listed = markResult({
+      already_listed: true,
+      message: "Schon auf der Liste: Kidneybohnen",
+    });
+    expect(feedbackFor({ ok: true, mode: "mark", result: listed })).toEqual({
+      color: "orange",
+      sound: "mark",
+      text: "Schon auf der Liste: Kidneybohnen",
+    });
+  });
+
+  it("shows a product the mark created orange with the mark tone", () => {
+    const created = markResult({
+      product: { ...product, name: "Neues Produkt 2000000000008", stock: 0, marked: true },
+      product_created: true,
+      message: "Neu vorgemerkt: Neues Produkt 2000000000008",
+    });
+    expect(feedbackFor({ ok: true, mode: "mark", result: created })).toEqual({
+      color: "orange",
+      sound: "mark",
+      text: "Neu vorgemerkt: Neues Produkt 2000000000008",
+    });
+  });
+
+  it.each([
+    [problem(422, "invalid_barcode"), "Ungültiger Barcode"],
+    [new TypeError("Failed to fetch"), "Server nicht erreichbar"],
+    [new DOMException("", "TimeoutError"), "Server nicht erreichbar"],
+    [statusError(502), "Server nicht erreichbar"],
+    [statusError(503), "Server nicht erreichbar"],
+    [statusError(504), "Server nicht erreichbar"],
+    [problem(500, "internal"), "Buchung fehlgeschlagen"],
+  ])("shows the error %o of a mark red with the error tone", (error, text) => {
+    expect(feedbackFor({ ok: false, error })).toEqual({ color: "red", sound: "error", text });
+  });
+});
+
+describe("unmarkFeedbackFor", () => {
+  it("shows the removed mark yellow with the warn tone", () => {
+    expect(unmarkFeedbackFor({ ok: true, product })).toEqual({
+      color: "yellow",
+      sound: "warn",
+      text: "Nicht mehr vorgemerkt: Kidneybohnen",
+    });
+  });
+
+  it.each([
+    [problem(404, "not_found"), "Rückgängig fehlgeschlagen"],
+    [problem(500, "internal"), "Rückgängig fehlgeschlagen"],
+    [new TypeError("Failed to fetch"), "Server nicht erreichbar"],
+    [new DOMException("", "TimeoutError"), "Server nicht erreichbar"],
+    [statusError(503), "Server nicht erreichbar"],
+  ])("shows the error %o red with the error tone", (error, text) => {
+    expect(unmarkFeedbackFor({ ok: false, error })).toEqual({
+      color: "red",
+      sound: "error",
+      text,
+    });
   });
 });
 

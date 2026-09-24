@@ -4,13 +4,15 @@ import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
-import { ResultCard } from "../components/ResultCard";
+import { MarkResultCard, ResultCard } from "../components/ResultCard";
 import { TorchButton } from "../components/TorchButton";
 import { useScanner } from "../hooks/useScanner";
 import {
+  markScanMutation,
   repeatMovementMutation,
   reversalMutation,
   scanMovementMutation,
+  unmarkMutation,
 } from "../lib/api/queries";
 import type { Product } from "../lib/products";
 import { hiddenCard, resultCardReducer } from "../lib/resultCard";
@@ -20,6 +22,8 @@ import {
   loadScanMode,
   saveScanMode,
   undoFeedbackFor,
+  unmarkFeedbackFor,
+  type BookingMode,
   type Feedback,
   type FeedbackColor,
   type MovementResult,
@@ -37,11 +41,13 @@ const cardTickInterval = 200;
 const modes: { mode: ScanMode; label: string; active: string }[] = [
   { mode: "add", label: "Einlagern", active: "bg-emerald-600 text-white" },
   { mode: "consume", label: "Entnehmen", active: "bg-sky-600 text-white" },
+  { mode: "mark", label: "Einkaufen", active: "bg-amber-700 text-white" },
 ];
 
 const flashClass: Record<FeedbackColor, string> = {
   green: "bg-emerald-500/70",
   blue: "bg-sky-500/70",
+  orange: "bg-amber-600/70",
   yellow: "bg-amber-400/70",
   red: "bg-red-600/70",
 };
@@ -49,6 +55,7 @@ const flashClass: Record<FeedbackColor, string> = {
 const messageClass: Record<FeedbackColor, string> = {
   green: "bg-emerald-600 text-white",
   blue: "bg-sky-600 text-white",
+  orange: "bg-amber-700 text-white",
   yellow: "bg-amber-400 text-stone-900",
   red: "bg-red-600 text-white",
 };
@@ -73,6 +80,8 @@ export function ScanPage() {
   const { mutateAsync: book } = useMutation(scanMovementMutation(queryClient));
   const repeat = useMutation(repeatMovementMutation(queryClient));
   const reversal = useMutation(reversalMutation(queryClient));
+  const { mutateAsync: mark } = useMutation(markScanMutation(queryClient));
+  const unmark = useMutation(unmarkMutation(queryClient));
   const [card, dispatchCard] = useReducer(resultCardReducer, hiddenCard);
   const [mode, setMode] = useState(loadScanMode);
   // False when the view was loaded directly: iOS plays sound only after a tap.
@@ -90,32 +99,43 @@ export function ScanPage() {
   }
 
   // Reports a booking of kind and shows it on the result card.
-  function showBooking(result: MovementResult, kind: ScanMode) {
+  function showBooking(result: MovementResult, kind: BookingMode) {
     show(feedbackFor({ ok: true, mode: kind, result }));
     dispatchCard({ type: "show", result, kind, now: Date.now() });
   }
 
-  // Books code in the mode that is set now and reports the result.
-  function bookCode(code: string) {
+  // Books code in the mode that is set now, or marks it for shopping in
+  // mode mark, and reports the result.
+  function handleCode(code: string) {
     const kind = mode;
+    if (kind === "mark") {
+      mark(code).then(
+        (result) => {
+          show(feedbackFor({ ok: true, mode: kind, result }));
+          dispatchCard({ type: "show", result, kind, now: Date.now() });
+        },
+        (error: unknown) => show(feedbackFor({ ok: false, error })),
+      );
+      return;
+    }
     book({ barcode: code, kind }).then(
       (result) => showBooking(result, kind),
       (error: unknown) => show(feedbackFor({ ok: false, error })),
     );
   }
 
-  // Books every accepted code. While the merge dialog or the dialog for
-  // typing in a code lies over the camera, codes are ignored.
+  // Books or marks every accepted code. While the merge dialog or the
+  // dialog for typing in a code lies over the camera, codes are ignored.
   const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
     useScanner((code) => {
       if (mergeSource !== null || manualOpen) {
         return;
       }
-      bookCode(code);
+      handleCode(code);
     });
 
   // [+1]: books one more unit of the product on the card, with its kind.
-  function plusOne(productId: string, kind: ScanMode) {
+  function plusOne(productId: string, kind: BookingMode) {
     repeat.mutateAsync({ productId, kind }).then(
       (result) => showBooking(result, kind),
       (error: unknown) => show(feedbackFor({ ok: false, error })),
@@ -130,6 +150,18 @@ export function ScanPage() {
         show(undoFeedbackFor({ ok: true, result }));
       },
       (error: unknown) => show(undoFeedbackFor({ ok: false, error })),
+    );
+  }
+
+  // [Rückgängig] on the card of a mark: removes the mark of product and
+  // hides the card.
+  function undoMark(product: Product) {
+    unmark.mutateAsync(product.id).then(
+      () => {
+        dispatchCard({ type: "hideMark", productId: product.id });
+        show(unmarkFeedbackFor({ ok: true, product }));
+      },
+      (error: unknown) => show(unmarkFeedbackFor({ ok: false, error })),
     );
   }
 
@@ -156,11 +188,11 @@ export function ScanPage() {
     dispatchCard({ type: "resume", now: Date.now() });
   }
 
-  // A code typed in by hand is booked like a scanned one. The repeat
-  // filter of the scanner does not apply: typing it in is deliberate.
+  // A code typed in by hand is booked or marked like a scanned one. The
+  // repeat filter of the scanner does not apply: typing it in is deliberate.
   function submitManual(code: string) {
     closeManual();
-    bookCode(code);
+    handleCode(code);
   }
 
   // After the merge the card shows the target, which the booking on the
@@ -219,11 +251,12 @@ export function ScanPage() {
   }
 
   const { width, height } = videoSize;
+  const content = card.status === "hidden" ? null : card.content;
 
   return (
     <div className="flex flex-col gap-3" onClick={handleTap}>
       <h1 className="sr-only">Scannen</h1>
-      <div role="group" aria-label="Modus" className="grid grid-cols-2 gap-2">
+      <div role="group" aria-label="Modus" className="grid grid-cols-3 gap-2">
         {modes.map(({ mode: value, label, active }) => (
           <button
             key={value}
@@ -314,15 +347,22 @@ export function ScanPage() {
       >
         {shown?.feedback.text}
       </p>
-      {card.status !== "hidden" && (
+      {content?.kind === "mark" && (
+        <MarkResultCard
+          mark={content}
+          disabled={unmark.isPending}
+          onUndo={() => undoMark(content.result.product)}
+        />
+      )}
+      {content !== null && content.kind !== "mark" && (
         <ResultCard
-          key={card.booking.result.movement.id}
-          booking={card.booking}
+          key={content.result.movement.id}
+          booking={content}
           disabled={repeat.isPending || reversal.isPending}
-          onPlusOne={() => plusOne(card.booking.result.product.id, card.booking.kind)}
-          onUndo={() => undo(card.booking.result.movement.id)}
+          onPlusOne={() => plusOne(content.result.product.id, content.kind)}
+          onUndo={() => undo(content.result.movement.id)}
           onProductChange={(product) => dispatchCard({ type: "update", product })}
-          onMerge={() => openMerge(card.booking.result.product)}
+          onMerge={() => openMerge(content.result.product)}
         />
       )}
       {!soundReady && (
