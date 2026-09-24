@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router";
+import { CartButton, roundButtonClass } from "../components/CartButton";
 import { CartIcon } from "../components/CartIcon";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -17,11 +18,13 @@ import { pageTitle } from "../lib/pageTitle";
 import { productImageUrl } from "../lib/productImage";
 import { productLinkState } from "../lib/productOrigin";
 import {
+  brandAndSize,
   filterProducts,
   matches,
   type Product,
   type ProductFilter,
 } from "../lib/products";
+import { stockStatus, type StockLevel } from "../lib/stockStatus";
 
 const filters: { value: ProductFilter; label: string }[] = [
   { value: "all", label: "Alle" },
@@ -29,12 +32,6 @@ const filters: { value: ProductFilter; label: string }[] = [
   { value: "empty", label: "Leer" },
   { value: "review", label: "Prüfen" },
 ];
-
-// The buttons of a row, above the link of the row: 44 × 44 px, growing with
-// the text size up to 48 px, so the stepper still fits into the row of a
-// 320 px wide screen at 200 % text size.
-const rowButtonClass =
-  "pressable relative z-10 flex size-[min(2.75rem,48px)] shrink-0 items-center justify-center disabled:opacity-40";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
@@ -68,38 +65,43 @@ export function StockPage() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Name oder Marke suchen"
             aria-label="Vorrat durchsuchen"
-            className="min-h-[min(2.75rem,48px)] w-full rounded-lg border border-line-strong bg-surface pr-11 pl-10 text-base [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-h-[min(2.75rem,48px)] w-full rounded-[10px] bg-fill pr-11 pl-10 text-base placeholder:text-ink-tertiary [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query !== "" && (
             <button
               type="button"
               onClick={clearSearch}
               aria-label="Suche löschen"
-              className="pressable absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-lg text-ink-tertiary"
+              className="pressable absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-[10px] text-ink-tertiary"
             >
               <ClearIcon />
             </button>
           )}
         </div>
-        {/* One row, which scrolls sideways when the filters do not fit (large
-            text size, narrow screen), so the sticky header stays low. */}
+        {/* A segmented control: a gray track with the chosen segment on a
+            white face. The track takes the full width and scrolls sideways
+            when the filters do not fit (large text size, narrow screen), so
+            the sticky header stays low. A transparent border of 2 px around
+            each face belongs to its tap area of at least 44 px. */}
         <div
           role="radiogroup"
           aria-label="Filter"
-          className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4"
+          className="-mx-4 mt-3 overflow-x-auto px-4"
         >
-          {filters.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={filter === value}
-              onClick={() => setFilter(value)}
-              className="pressable min-h-[min(2.75rem,48px)] shrink-0 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-checked:border-accent aria-checked:bg-accent aria-checked:text-white"
-            >
-              {label}
-            </button>
-          ))}
+          <div className="flex w-max min-w-full rounded-xl bg-fill">
+            {filters.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={filter === value}
+                onClick={() => setFilter(value)}
+                className="pressable min-h-[min(2.75rem,48px)] flex-1 shrink-0 rounded-xl border-2 border-transparent bg-clip-padding px-2 text-sm font-medium text-ink-secondary aria-checked:bg-surface aria-checked:text-ink"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div className="mt-1">
@@ -151,7 +153,7 @@ function StockList({
     return <p className="text-ink-tertiary">Keine Treffer.</p>;
   }
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+    <ul className="overflow-hidden rounded-xl bg-surface">
       {products.map((product) => (
         <StockRow key={product.id} product={product} />
       ))}
@@ -203,74 +205,169 @@ function StockRow({ product }: { product: Product }) {
     }
   }
 
-  // Two lines: image, name and brand over the full width, below them on
-  // the right the cart and, set apart by 16 px, the stepper [−] stock [+].
-  // The link covers the whole row with its ::after box, so a tap anywhere
-  // outside the buttons opens the product. The buttons lie above it.
+  const details = brandAndSize(product);
+
+  // Image, then name, brand and package size, and below them, where the
+  // text starts, the status on the left and the cart and the stepper
+  // [−] stock [+] on the right, set apart by 12 px. The separator above a
+  // row starts where the text starts, not below the image. The side
+  // padding and the gap grow with the text only up to 20 and 16 px, so the
+  // stepper fits beside the image on a 320 px wide screen at 200 % text
+  // size. The link covers the whole row with its ::after box, so a tap
+  // anywhere outside the buttons opens the product. The buttons lie above
+  // it.
   return (
-    <li className="relative px-3 py-2">
-      <div className="flex items-center gap-3">
-        <ProductImage product={product} />
-        <div className="min-w-0 flex-1">
-          <Link
-            to={`/produkt/${encodeURIComponent(product.id)}`}
-            state={productLinkState("vorrat")}
-            className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
-          >
-            {product.name}
-          </Link>
-          {product.brand !== null && (
-            <p className="text-sm break-words hyphens-auto text-ink-tertiary">{product.brand}</p>
-          )}
-          <p role="status" className="text-sm font-medium text-danger">
-            {notice}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-4">
-        <button
-          type="button"
-          disabled={mark.isPending || unmark.isPending}
-          onClick={toggleCart}
-          aria-pressed={cart.pressed}
-          aria-label={cart.label}
-          className={`${rowButtonClass} rounded-lg border ${cart.pressed ? "border-marked bg-marked text-white" : "border-line-strong bg-surface text-ink-secondary"}`}
+    <li className="group relative flex items-start gap-[min(0.75rem,16px)] pl-[min(1rem,20px)]">
+      <ProductImage product={product} />
+      <div className="min-w-0 flex-1 border-t border-line py-3 pr-[min(1rem,20px)] group-first:border-t-0">
+        <Link
+          to={`/produkt/${encodeURIComponent(product.id)}`}
+          state={productLinkState("vorrat")}
+          className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
-          <CartIcon checked={cart.pressed} />
-        </button>
-        {/* The stepper in one frame: the stock large, below it the target
-            (without a target only the stock), between the buttons. */}
-        <div className="flex items-center rounded-lg ring-1 ring-line-strong ring-inset">
-          <button
-            type="button"
-            disabled={movement.isPending}
-            onClick={() => book("consume")}
-            aria-label={`Eins entnehmen: ${product.name}`}
-            className={`${rowButtonClass} rounded-l-lg text-xl leading-none`}
-          >
-            −
-          </button>
-          <div className="min-w-12 px-1 text-center tabular-nums">
-            <p className="text-xl leading-6 font-semibold text-ink">
-              <span className="sr-only">Bestand </span>
-              {product.stock}
-            </p>
-            {product.target > 0 && (
-              <p className="text-xs leading-4 text-ink-tertiary">Soll {product.target}</p>
-            )}
+          {product.name}
+        </Link>
+        {details !== null && (
+          <p className="text-sm break-words hyphens-auto text-ink-tertiary">{details}</p>
+        )}
+        <p role="status" className="text-sm font-medium text-danger">
+          {notice}
+        </p>
+        {/* The status takes the room left of the buttons and wraps its
+            parts; below 6rem the buttons move to a line of their own,
+            still on the right. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <StatusText product={product} />
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+            <CartButton
+              checked={cart.pressed}
+              pressed={cart.pressed}
+              label={cart.label}
+              disabled={mark.isPending || unmark.isPending}
+              onClick={toggleCart}
+            />
+            {/* The stepper: one gray capsule with round ends for [−] and
+                [+] and the stock between them, in a box 3 digits wide, so
+                the buttons stay in place when it changes. */}
+            <div className="flex items-center rounded-full bg-fill">
+              <button
+                type="button"
+                disabled={movement.isPending}
+                onClick={() => book("consume")}
+                aria-label={`Eins entnehmen: ${product.name}`}
+                className={`${roundButtonClass} text-ink-secondary`}
+              >
+                <StepSymbol plus={false} />
+              </button>
+              <p className="box-content min-w-[3ch] px-[min(0.25rem,4px)] text-center text-[min(1.125rem,24px)] leading-none font-semibold text-ink tabular-nums">
+                <span className="sr-only">Bestand </span>
+                {product.stock}
+              </p>
+              <button
+                type="button"
+                disabled={movement.isPending}
+                onClick={() => book("add")}
+                aria-label={`Eins einlagern: ${product.name}`}
+                className={`${roundButtonClass} text-ink-secondary`}
+              >
+                <StepSymbol plus />
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            disabled={movement.isPending}
-            onClick={() => book("add")}
-            aria-label={`Eins einlagern: ${product.name}`}
-            className={`${rowButtonClass} rounded-r-lg text-xl leading-none`}
-          >
-            +
-          </button>
         </div>
       </div>
     </li>
+  );
+}
+
+// The color and weight of the text of each level of the status.
+const statusTextClass: Record<StockLevel, string> = {
+  empty: "font-medium text-danger",
+  missing: "font-medium text-ink",
+  target: "text-ink-secondary",
+  untracked: "text-ink-tertiary",
+};
+
+// The status of a row (lib/stockStatus.ts): "leer" with a cross, "fehlt N"
+// with a warning triangle, "N von T" or "N da", followed by "· vorgemerkt"
+// with a cart. Each part keeps its symbol on its line. The dot lies in the
+// gap in front of "vorgemerkt"; when that part wraps to a line of its own,
+// the dot falls outside the status and is clipped. The text says
+// everything the colors and symbols say.
+function StatusText({ product }: { product: Product }) {
+  const status = stockStatus(product);
+  return (
+    <p className="flex min-w-0 flex-[1_1_6rem] flex-wrap items-center gap-x-4 overflow-hidden text-sm">
+      <span className={`inline-flex items-center gap-1 ${statusTextClass[status.level]}`}>
+        {status.level === "empty" && <EmptySymbol />}
+        {status.level === "missing" && <WarningSymbol />}
+        {status.text}
+      </span>
+      {status.marked && (
+        <span className="relative inline-flex items-center gap-1 font-medium text-marked">
+          <span aria-hidden="true" className="absolute right-full mr-1.5 text-ink-tertiary">
+            ·
+          </span>
+          <CartIcon checked={false} className="size-[1.15em]" />
+          vorgemerkt
+        </span>
+      )}
+    </p>
+  );
+}
+
+// A cross in a circle, in the color of the text (danger).
+function EmptySymbol() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.25}
+      strokeLinecap="round"
+      className="size-[1.15em] shrink-0"
+    >
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="m8.75 8.75 6.5 6.5m0-6.5-6.5 6.5" />
+    </svg>
+  );
+}
+
+// A warning triangle in the warning color with an exclamation mark in ink
+// (the warning role carries ink).
+function WarningSymbol() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[1.15em] shrink-0">
+      <path
+        d="M10.3 3.6a2 2 0 0 1 3.4 0l8.3 14.4a2 2 0 0 1-1.7 3H3.7a2 2 0 0 1-1.7-3z"
+        className="fill-warning"
+      />
+      <path
+        d="M12 8.5v5.5m0 3.25v.01"
+        fill="none"
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        className="stroke-ink"
+      />
+    </svg>
+  );
+}
+
+// The minus or plus of the stepper, in the color of the text.
+function StepSymbol({ plus }: { plus: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.25}
+      strokeLinecap="round"
+      className="size-[min(1.25rem,24px)] shrink-0"
+    >
+      <path d={plus ? "M5 12h14M12 5v14" : "M5 12h14"} />
+    </svg>
   );
 }
 
@@ -308,9 +405,9 @@ function ClearIcon() {
   );
 }
 
-// The picture of a row: 40 px, growing with the text size only up to 48 px,
-// so the name keeps the width.
-const imageClass = "size-[min(2.5rem,48px)] shrink-0 rounded-lg";
+// The picture of a row: 48 px (smaller only below a text size of 16 px),
+// level with the name, so the name keeps the width at a large text size.
+const imageClass = "mt-3 size-[min(3rem,48px)] shrink-0 rounded-[10px]";
 
 function ProductImage({ product }: { product: Product }) {
   const imageUrl = productImageUrl(product);

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useState } from "react";
 import { Link } from "react-router";
-import { CartIcon } from "../components/CartIcon";
+import { CartButton } from "../components/CartButton";
 import { CloseIcon } from "../components/CloseIcon";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -105,7 +105,7 @@ function ShoppingList({
   }
   return (
     <>
-      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+      <ul className="overflow-hidden rounded-xl bg-surface">
         {items.map((item) => (
           <ShoppingRow key={item.product_id} item={item} onRemoved={onRemoved} />
         ))}
@@ -127,10 +127,11 @@ function ShoppingRow({
   const quantity = shoppingQuantity(item);
 
   // The link covers the whole row with its ::after box, so a tap anywhere
-  // outside the button opens the product. The button lies above it; like
-  // the buttons of the stock list it grows with the text only up to 48 px.
+  // outside the button opens the product. The button lies above it. The
+  // separator above a row (::before) starts where the text starts, like in
+  // the stock list.
   return (
-    <li className="relative flex min-h-11 items-center gap-3 px-3 py-2">
+    <li className="relative flex min-h-11 items-center gap-3 px-4 py-3 before:absolute before:top-0 before:right-0 before:left-4 before:border-t before:border-line first:before:hidden">
       <div className="min-w-0 flex-1">
         <Link
           to={`/produkt/${encodeURIComponent(item.product_id)}`}
@@ -157,19 +158,16 @@ function ShoppingRow({
         </p>
       </div>
       {item.marked && (
-        <button
-          type="button"
+        <CartButton
+          checked
+          label={`Von der Liste nehmen: ${item.name}`}
           disabled={unmark.isPending}
           onClick={() =>
             unmark.mutate(item.product_id, {
               onSuccess: () => onRemoved({ productId: item.product_id, name: item.name }),
             })
           }
-          aria-label={`Von der Liste nehmen: ${item.name}`}
-          className="pressable relative z-10 flex size-[min(2.75rem,48px)] shrink-0 items-center justify-center rounded-lg bg-marked text-white disabled:opacity-40"
-        >
-          <CartIcon checked />
-        </button>
+        />
       )}
     </li>
   );

@@ -9,6 +9,7 @@ const roles = {
   "accent-soft": "#ecfdf5",
   consume: "#0069a8",
   marked: "#bb4d00",
+  "marked-soft": "#ffedd4",
   warning: "#fdc700",
   "warning-soft": "#fefce8",
   danger: "#c10007",
@@ -95,6 +96,17 @@ describe("color roles", () => {
     ["danger", "canvas"],
   ])("carry text in %s on %s with at least 4.5:1", (text, background) => {
     expect(contrast(roles[text], roles[background])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // Symbols of buttons and fields (F26): the cart on a marked cart button,
+  // the cart, minus and plus on the gray buttons, and the magnifier and
+  // the clear button of the search field.
+  it.each<[Role, Role]>([
+    ["marked", "marked-soft"],
+    ["ink-secondary", "fill"],
+    ["ink-tertiary", "fill"],
+  ])("draw symbols in %s on %s with at least 3:1", (symbol, background) => {
+    expect(contrast(roles[symbol], roles[background])).toBeGreaterThanOrEqual(3);
   });
 
   it.each<Role>(["surface", "canvas"])(

@@ -18,6 +18,9 @@
   --color-consume: #0069a8;
   /* Marked for shopping, and nothing else (amber-700). */
   --color-marked: #bb4d00;
+  /* The light face of a marked cart button, behind the symbol in marked
+     (orange-100). */
+  --color-marked-soft: #ffedd4;
   /* Warnings, with ink on it (yellow-400). */
   --color-warning: #fdc700;
   /* A light warning surface (yellow-50). */
@@ -29,7 +32,8 @@
   --color-canvas: #fafaf9;
   /* Lists, cards, fields and dialogs (white). */
   --color-surface: #ffffff;
-  /* Neutral buttons and placeholders (stone-200). */
+  /* Neutral buttons, the search field, the track of the filters and
+     placeholders (stone-200). */
   --color-fill: #e7e5e4;
   /* Text (stone-900). */
   --color-ink: #1c1917;

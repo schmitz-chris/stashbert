@@ -39,6 +39,20 @@ export function matches(product: Product, query: string): boolean {
 }
 
 /**
+ * Returns the line below the name in the stock list: brand and package
+ * size joined with " · ", like "Bonduelle · 400 g". A missing part is left
+ * out; without both it returns null.
+ */
+export function brandAndSize(
+  product: Pick<Product, "brand" | "package_size">,
+): string | null {
+  const parts = [product.brand, product.package_size].filter(
+    (part): part is string => part !== null && part !== "",
+  );
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+/**
  * Returns the products the product with ownId can be merged into: all
  * products except that one which match query (see matches), in their
  * order.

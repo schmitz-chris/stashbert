@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  brandAndSize,
   filterProducts,
   matches,
   mergeCandidates,
@@ -69,6 +70,17 @@ describe("matches", () => {
 
   it.each(["", " ", "   "])("matches every product for %j", (query) => {
     expect(matches(product({ name: "Mehl" }), query)).toBe(true);
+  });
+});
+
+describe("brandAndSize", () => {
+  it.each([
+    ["Bonduelle", "400 g", "Bonduelle · 400 g"],
+    ["Bonduelle", null, "Bonduelle"],
+    [null, "400 g", "400 g"],
+    [null, null, null],
+  ])("joins brand %s and size %s", (brand, size, line) => {
+    expect(brandAndSize(product({ brand, package_size: size }))).toBe(line);
   });
 });
 

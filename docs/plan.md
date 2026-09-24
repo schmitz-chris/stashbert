@@ -1483,7 +1483,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F26: Vorrat-Liste neu gestalten
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F25
 - **Referenzen:** Nutzer-Rückmeldung vom 24.09.2026 („nicht stimmig"), Entwurf im Chat (Vorschlag rechts), ADR-0016; Quellen: learnui.design/blog/ios-design-guidelines-templates.html, dev.to/flownato/quantity-stepper-ux-zero-stock-limits-and-failed-updates-4emj, mobbin.com/glossary/stepper
 - **Umfang:**
