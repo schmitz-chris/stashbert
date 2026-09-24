@@ -1616,7 +1616,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B36a: Einkaufsereignis bei jeder Änderung der Listenzugehörigkeit
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B36
 - **Referenzen:** ADR-0018; architecture.md 6.6, 11.3; ADR-0015
 - **Umfang:**

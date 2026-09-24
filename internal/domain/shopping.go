@@ -1,7 +1,12 @@
 // Package domain contains the business rules of StashBert.
 package domain
 
-import "github.com/schmitz-chris/stashbert/internal/store/db"
+import (
+	"context"
+
+	"github.com/schmitz-chris/stashbert/internal/events"
+	"github.com/schmitz-chris/stashbert/internal/store/db"
+)
 
 // Missing returns how many units of a product have to be bought
 // (architecture.md, 5). Nothing is missing if target is 0 or if stock has not
@@ -19,6 +24,47 @@ func Missing(stock, target int64, minStock *int64) int64 {
 		return 0
 	}
 	return target - stock
+}
+
+// listing is what decides whether a product is on the shopping list
+// (architecture.md, 5): what is missing of it and whether it is marked
+// (ADR-0015). A product that does not exist has the zero listing.
+type listing struct {
+	missing int64
+	marked  bool
+}
+
+// onList reports whether a product with the listing l is on the shopping list.
+func (l listing) onList() bool {
+	return l.missing > 0 || l.marked
+}
+
+// storedListing returns the listing of the stored product p.
+func storedListing(p db.Product) listing {
+	return listing{missing: Missing(p.Stock, p.Target, p.MinStock), marked: p.Marked != 0}
+}
+
+// productListing returns the listing of p.
+func productListing(p Product) listing {
+	return listing{missing: p.Missing, marked: p.Marked}
+}
+
+// publishShoppingChanged publishes shopping.changed for the product id with
+// name to pub if its missing or whether it is on the shopping list differs
+// between before and after (architecture.md, 6.6). Callers call it at most
+// once per product and operation, after the commit, so a change of both
+// results in one event. If only whether it is on the list changed,
+// missing_before and missing_after are equal.
+func publishShoppingChanged(ctx context.Context, pub events.Publisher, id, name string, before, after listing) {
+	if before.missing == after.missing && before.onList() == after.onList() {
+		return
+	}
+	pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
+		ProductID:     id,
+		Name:          name,
+		MissingBefore: before.missing,
+		MissingAfter:  after.missing,
+	}))
 }
 
 // Units of the quantity to buy in MQTT messages (architecture.md, 11.3).

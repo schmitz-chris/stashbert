@@ -220,3 +220,162 @@ func TestMergeProductMarked(t *testing.T) {
 		})
 	}
 }
+
+// shoppingChanged returns the expected shopping.changed event of the product
+// id with name and missing before and after (architecture.md, 6.6).
+func shoppingChanged(id, name string, before, after int64) reversalEvent {
+	return reversalEvent{events.TypeShoppingChanged, events.ShoppingChangedData{
+		ProductID: id, Name: name, MissingBefore: before, MissingAfter: after,
+	}}
+}
+
+func TestCreateMovementMarkedPublishesEvents(t *testing.T) {
+	// See insertProducts: p1 "Zucker" has stock 0 and target 0, so missing is
+	// always 0. p2 "kidneybohnen" has stock 2, target 5 and no min_stock
+	// (missing 3). p4 "Mehl" has stock 2, target 4 and min_stock 1 (missing
+	// 0). The product is marked before the booking; the data of the stock
+	// event gets the id of the movement.
+	stock := func(typ, id string, delta, stockAfter int64) reversalEvent {
+		return reversalEvent{typ, events.StockData{ProductID: id, Delta: delta, StockAfter: stockAfter}}
+	}
+	tests := []struct {
+		name string
+		id   string
+		body string
+		want []reversalEvent
+	}{
+		{"add ends the marking without shortfall", "p4", `{"product_id": "p4", "kind": "add"}`, []reversalEvent{
+			stock(events.TypeStockAdded, "p4", 1, 3),
+			shoppingChanged("p4", "Mehl", 0, 0),
+		}},
+		{"add by barcode ends the marking without shortfall", "p4", `{"barcode": "3017620422003", "kind": "add"}`, []reversalEvent{
+			stock(events.TypeStockAdded, "p4", 1, 3),
+			shoppingChanged("p4", "Mehl", 0, 0),
+		}},
+		{"add ends the marking without target", "p1", `{"product_id": "p1", "kind": "add", "quantity": 2}`, []reversalEvent{
+			stock(events.TypeStockAdded, "p1", 2, 2),
+			shoppingChanged("p1", "Zucker", 0, 0),
+		}},
+		// missing and whether p2 is on the list change together: one event.
+		{"add ends the marking and the shortfall", "p2", `{"product_id": "p2", "kind": "add", "quantity": 3}`, []reversalEvent{
+			stock(events.TypeStockAdded, "p2", 3, 5),
+			shoppingChanged("p2", "kidneybohnen", 3, 0),
+		}},
+		{"add ends the marking, shortfall remains", "p2", `{"product_id": "p2", "kind": "add"}`, []reversalEvent{
+			stock(events.TypeStockAdded, "p2", 1, 3),
+			shoppingChanged("p2", "kidneybohnen", 3, 2),
+		}},
+		{"consume keeps the marking", "p4", `{"product_id": "p4", "kind": "consume"}`, []reversalEvent{
+			stock(events.TypeStockConsumed, "p4", -1, 1),
+		}},
+		{"consume to a shortfall keeps the marking", "p4", `{"product_id": "p4", "kind": "consume", "quantity": 2}`, []reversalEvent{
+			stock(events.TypeStockConsumed, "p4", -2, 0),
+			{events.TypeProductEmpty, events.ProductEmptyData{ProductID: "p4", Name: "Mehl"}},
+			shoppingChanged("p4", "Mehl", 0, 4),
+		}},
+		{"inventory unchanged", "p4", `{"product_id": "p4", "kind": "inventory", "stock": 2}`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+			setMarked(t, db, tt.id, 1)
+
+			_, movement := decodeMovementResult(t, post(h, "/api/v1/movements", tt.body))
+
+			checkReversalEvents(t, recorder.Events(), tt.want, movement)
+		})
+	}
+}
+
+func TestDeleteMarkedProductPublishesShoppingChanged(t *testing.T) {
+	// See insertProducts: nothing is missing of p1 "Zucker" and p4 "Mehl", p2
+	// "kidneybohnen" misses 3. The product is marked before the deletion.
+	tests := []struct {
+		id   string
+		want events.ShoppingChangedData
+	}{
+		{"p4", events.ShoppingChangedData{ProductID: "p4", Name: "Mehl", MissingBefore: 0, MissingAfter: 0}},
+		{"p1", events.ShoppingChangedData{ProductID: "p1", Name: "Zucker", MissingBefore: 0, MissingAfter: 0}},
+		{"p2", events.ShoppingChangedData{ProductID: "p2", Name: "kidneybohnen", MissingBefore: 3, MissingAfter: 0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+			setMarked(t, db, tt.id, 1)
+
+			if rec := deleteProduct(h, tt.id); rec.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want %d, body %s", rec.Code, http.StatusNoContent, rec.Body.String())
+			}
+
+			checkShoppingChanged(t, recorder.Events(), &tt.want)
+		})
+	}
+}
+
+func TestMergeMarkedProductPublishesEvents(t *testing.T) {
+	// See insertProducts: p1 "Zucker" has stock 0 and target 0, so missing is
+	// always 0. p2 "kidneybohnen" has stock 2, target 5 and no min_stock
+	// (missing 3). p3 "Kidneybohnen" has stock 0, target 4 and min_stock 1
+	// (missing 4). p4 "Mehl" has stock 2, target 4 and min_stock 1 (missing
+	// 0). The data of stock.adjusted gets the id of the merge movement.
+	adjusted := func(id string, delta, stockAfter int64) reversalEvent {
+		return reversalEvent{events.TypeStockAdjusted, events.StockData{ProductID: id, Delta: delta, StockAfter: stockAfter}}
+	}
+	tests := []struct {
+		name                       string
+		source, target             string
+		sourceMarked, targetMarked bool
+		want                       []reversalEvent
+	}{
+		{"target takes over the marking without stock", "p1", "p4", true, false, []reversalEvent{
+			shoppingChanged("p4", "Mehl", 0, 0),
+			shoppingChanged("p1", "Zucker", 0, 0),
+		}},
+		{"target takes over the marking with stock", "p4", "p1", true, false, []reversalEvent{
+			adjusted("p1", 2, 2),
+			shoppingChanged("p1", "Zucker", 0, 0),
+			shoppingChanged("p4", "Mehl", 0, 0),
+		}},
+		{"target takes over the marking of a source with shortfall", "p2", "p1", true, false, []reversalEvent{
+			adjusted("p1", 2, 2),
+			shoppingChanged("p1", "Zucker", 0, 0),
+			shoppingChanged("p2", "kidneybohnen", 3, 0),
+		}},
+		{"target with shortfall takes over the marking", "p1", "p3", true, false, []reversalEvent{
+			shoppingChanged("p1", "Zucker", 0, 0),
+		}},
+		{"marked source into a target with shortfall", "p4", "p2", true, false, []reversalEvent{
+			adjusted("p2", 2, 4),
+			shoppingChanged("p2", "kidneybohnen", 3, 1),
+			shoppingChanged("p4", "Mehl", 0, 0),
+		}},
+		{"marked target stays on the list", "p4", "p1", false, true, []reversalEvent{
+			adjusted("p1", 2, 2),
+		}},
+		{"both marked", "p4", "p1", true, true, []reversalEvent{
+			adjusted("p1", 2, 2),
+			shoppingChanged("p4", "Mehl", 0, 0),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recorder events.Recorder
+			h, db := newAppWithPublisher(t, &recorder)
+			insertProducts(t, db)
+			if tt.sourceMarked {
+				setMarked(t, db, tt.source, 1)
+			}
+			if tt.targetMarked {
+				setMarked(t, db, tt.target, 1)
+			}
+
+			decodeProduct(t, mergeProduct(h, tt.source, mergeInto(tt.target)))
+
+			checkReversalEvents(t, recorder.Events(), tt.want, map[string]any{"id": mergeMovementID(t, db)})
+		})
+	}
+}

@@ -24,10 +24,12 @@ import (
 // has none (ADR-0017). The other fields of the target stay as they are.
 //
 // After the commit it publishes the events of the merge movement to pub (see
-// publishMovementEvents), if there is one. Then it finishes the deletion of
-// the source like DeleteProduct: it removes the image file of the source from
-// imageDir and publishes shopping.changed with missing_after 0 if the source
-// had missing > 0 (architecture.md, 6.6).
+// publishMovementEvents), if there is one, and otherwise shopping.changed for
+// the target if the marking of the source put it on the shopping list (see
+// publishShoppingChanged). Then it finishes the deletion of the source like
+// DeleteProduct: it removes the image file of the source from imageDir and
+// publishes shopping.changed with missing_after 0 if the source was on the
+// shopping list (architecture.md, 6.6).
 //
 // sourceID equal to targetID results in 400 invalid_request before the
 // database is accessed; an unknown source or target results in 404
@@ -92,6 +94,8 @@ func MergeProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imag
 
 	if m != nil {
 		publishMovementEvents(ctx, pub, target, p, *m)
+	} else {
+		publishShoppingChanged(ctx, pub, p.ID, p.Name, storedListing(target), productListing(p))
 	}
 	productDeleted(ctx, pub, imageDir, source)
 	return p, nil

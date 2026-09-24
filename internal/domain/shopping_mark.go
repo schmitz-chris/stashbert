@@ -105,7 +105,7 @@ func mark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID, c
 		return MarkResult{}, err
 	}
 
-	listed := cur.Marked != 0 || Missing(cur.Stock, cur.Target, cur.MinStock) > 0
+	listed := storedListing(cur).onList()
 	row := cur
 	if cur.Marked == 0 {
 		row, err = q.SetProductMarked(ctx, db.SetProductMarkedParams{Marked: 1, UpdatedAt: now, ID: cur.ID})
@@ -133,9 +133,7 @@ func mark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID, c
 	case listed:
 		message = "Schon auf der Liste: " + p.Name
 	}
-	if !listed {
-		publishListingChanged(ctx, pub, p.ID, p.Name, p.Missing)
-	}
+	publishShoppingChanged(ctx, pub, p.ID, p.Name, storedListing(cur), productListing(p))
 	return MarkResult{
 		Product:        p,
 		ProductCreated: created,
@@ -169,31 +167,17 @@ func Unmark(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, productID 
 	if cur.Marked == 0 {
 		return nil
 	}
-	if _, err := q.SetProductMarked(ctx, db.SetProductMarkedParams{
+	row, err := q.SetProductMarked(ctx, db.SetProductMarkedParams{
 		Marked:    0,
 		UpdatedAt: store.FormatTime(time.Now()),
 		ID:        cur.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("unmark product %s: %w", cur.ID, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("unmark product: commit: %w", err)
 	}
-	if missing := Missing(cur.Stock, cur.Target, cur.MinStock); missing == 0 {
-		publishListingChanged(ctx, pub, cur.ID, cur.Name, missing)
-	}
+	publishShoppingChanged(ctx, pub, row.ID, row.Name, storedListing(cur), storedListing(row))
 	return nil
-}
-
-// publishListingChanged publishes shopping.changed for marking or unmarking
-// the product id with name that has changed whether it is on the shopping
-// list. Its missing is unchanged, so missing_before and missing_after are
-// both missing (architecture.md, 6.6).
-func publishListingChanged(ctx context.Context, pub events.Publisher, id, name string, missing int64) {
-	pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
-		ProductID:     id,
-		Name:          name,
-		MissingBefore: missing,
-		MissingAfter:  missing,
-	}))
 }

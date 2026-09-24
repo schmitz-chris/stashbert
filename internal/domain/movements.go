@@ -387,34 +387,28 @@ func bookedStock(stock, amount int64, in NewMovement) (int64, []string, error) {
 }
 
 // publishMovementEvents publishes the events of the booked movement m to pub,
-// in the order of architecture.md 6.6: the stock event of the kind of m,
-// product.empty if the stock changed from above 0 to 0 and shopping.changed
-// if missing changed. before is the stored product before and p the product
-// after the booking. A movement with delta 0 publishes no event.
+// in the order of architecture.md 6.6: the stock event of the kind of m and
+// product.empty if the stock changed from above 0 to 0, both only if the
+// delta of m is not 0, then shopping.changed if missing or whether the
+// product is on the shopping list changed, also if an add only ended its
+// marking (see publishShoppingChanged). before is the stored product before
+// and p the product after the booking.
 func publishMovementEvents(ctx context.Context, pub events.Publisher, before db.Product, p Product, m Movement) {
-	if m.Delta == 0 {
-		return
-	}
-	pub.Publish(ctx, events.New(stockEventType(m.Kind), events.StockData{
-		ProductID:  p.ID,
-		MovementID: m.ID,
-		Delta:      m.Delta,
-		StockAfter: m.StockAfter,
-	}))
-	if before.Stock > 0 && p.Stock == 0 {
-		pub.Publish(ctx, events.New(events.TypeProductEmpty, events.ProductEmptyData{
-			ProductID: p.ID,
-			Name:      p.Name,
+	if m.Delta != 0 {
+		pub.Publish(ctx, events.New(stockEventType(m.Kind), events.StockData{
+			ProductID:  p.ID,
+			MovementID: m.ID,
+			Delta:      m.Delta,
+			StockAfter: m.StockAfter,
 		}))
+		if before.Stock > 0 && p.Stock == 0 {
+			pub.Publish(ctx, events.New(events.TypeProductEmpty, events.ProductEmptyData{
+				ProductID: p.ID,
+				Name:      p.Name,
+			}))
+		}
 	}
-	if missingBefore := Missing(before.Stock, before.Target, before.MinStock); missingBefore != p.Missing {
-		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
-			ProductID:     p.ID,
-			Name:          p.Name,
-			MissingBefore: missingBefore,
-			MissingAfter:  p.Missing,
-		}))
-	}
+	publishShoppingChanged(ctx, pub, p.ID, p.Name, storedListing(before), productListing(p))
 }
 
 // stockEventType returns the event type of a movement of kind

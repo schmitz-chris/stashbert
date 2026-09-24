@@ -31,7 +31,7 @@ type ProductPatch struct {
 // UpdateProduct applies patch to the product with id and sets its updated_at,
 // in one transaction. needs_review becomes false if patch contains name, brand
 // or package_size. If missing changes, UpdateProduct publishes
-// shopping.changed to pub after the commit.
+// shopping.changed to pub after the commit (see publishShoppingChanged).
 //
 // Name and texts are trimmed like in CreateProduct; empty texts are stored as
 // NULL. An unknown id results in 404 not_found; a text of the wrong length or
@@ -72,22 +72,16 @@ func UpdateProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, id 
 		return Product{}, fmt.Errorf("update product %s: commit: %w", id, err)
 	}
 
-	if before := Missing(cur.Stock, cur.Target, cur.MinStock); before != p.Missing {
-		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
-			ProductID:     p.ID,
-			Name:          p.Name,
-			MissingBefore: before,
-			MissingAfter:  p.Missing,
-		}))
-	}
+	publishShoppingChanged(ctx, pub, p.ID, p.Name, storedListing(cur), productListing(p))
 	return p, nil
 }
 
 // DeleteProduct deletes the product with id in one transaction; the foreign
 // keys delete its barcodes and movements. After the commit it removes the
 // image file of the product from imageDir, if the product has one, and
-// publishes shopping.changed with missing_after 0 to pub if the product had
-// missing > 0 (architecture.md, 6.6). An unknown id results in 404 not_found.
+// publishes shopping.changed with missing_after 0 to pub if the product was
+// on the shopping list (architecture.md, 6.6). An unknown id results in 404
+// not_found.
 func DeleteProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imageDir, id string) error {
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -116,20 +110,14 @@ func DeleteProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, ima
 
 // productDeleted finishes the deletion of the stored product p after the
 // commit: it removes the image file of p from imageDir, if p has one, and
-// publishes shopping.changed with missing_after 0 to pub if p had missing > 0
+// publishes shopping.changed with missing_after 0 to pub if p was on the
+// shopping list, because something was missing or it was marked
 // (architecture.md, 6.6).
 func productDeleted(ctx context.Context, pub events.Publisher, imageDir string, p db.Product) {
 	if p.ImageFile != nil {
 		removeImage(imageDir, *p.ImageFile)
 	}
-	if missing := Missing(p.Stock, p.Target, p.MinStock); missing > 0 {
-		pub.Publish(ctx, events.New(events.TypeShoppingChanged, events.ShoppingChangedData{
-			ProductID:     p.ID,
-			Name:          p.Name,
-			MissingBefore: missing,
-			MissingAfter:  0,
-		}))
-	}
+	publishShoppingChanged(ctx, pub, p.ID, p.Name, storedListing(p), listing{})
 }
 
 // applyPatch returns the stored product cur with patch applied, as parameters
