@@ -18,3 +18,4 @@ poc/*/public/beep.wav
 **/.svelte-kit/
 poc/*/.cert/
 deploy/data/
+.claude/worktrees/

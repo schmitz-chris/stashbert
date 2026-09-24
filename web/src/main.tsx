@@ -6,6 +6,10 @@ import { UpdateBanner } from "./components/UpdateBanner";
 import "./index.css";
 import { createAppRouter } from "./router";
 
+// iOS Safari applies :active (the press state of pressable) only when a
+// touchstart listener exists; an empty passive one is enough.
+document.addEventListener("touchstart", () => {}, { passive: true });
+
 const queryClient = new QueryClient();
 const router = createAppRouter();
 

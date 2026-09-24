@@ -1081,7 +1081,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
   - **Service Worker** mit `vite-plugin-pwa`, Strategie `generateSW`, `registerType: "prompt"` und `injectRegister: false`; registriert wird im App-Code über `useRegisterSW` aus `virtual:pwa-register/react` (gebündelt, also kein Inline-Skript wegen der CSP). `prompt` statt `autoUpdate`, damit eine neue Version nicht mitten im Scannen die Seite neu lädt:
     - Precache aller Build-Dateien inklusive `zxing_reader.wasm` (in `globPatterns` enthalten; das Standardlimit von 2 MiB reicht).
     - `navigateFallbackDenylist: [/^\/api\//]`. `/api/` wird nie gecacht.
-  - **Manifest:** Name und Kurzname „StashBert", `display: standalone`, `start_url: /`, `scope: /`, `theme_color: #15803d`, Icons aus F13a.
+  - **Manifest:** Name und Kurzname „StashBert", `display: standalone`, `start_url: /`, `scope: /`, `theme_color` wie die Hintergrundfarbe (seit F23 `#fafaf9`), Icons aus F13a.
   - **`index.html`:** `apple-touch-icon`, `theme-color`, `viewport-fit=cover`.
   - **Update-Hinweis:** Bei einer neuen Service-Worker-Version (`needRefresh` aus `useRegisterSW`) erscheint ein Banner „Neue Version verfügbar, tippen zum Aktualisieren"; der Tap ruft `updateServiceWorker(true)`.
 - **Nicht im Umfang:** Offline-Buchen, Push.

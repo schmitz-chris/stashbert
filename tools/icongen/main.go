@@ -26,7 +26,9 @@ import (
 )
 
 var (
-	iconGreen  = color.NRGBA{R: 0x15, G: 0x80, B: 0x3d, A: 0xff} // #15803d
+	// iconGreen is the accent color of the app (--color-accent in
+	// web/src/index.css, emerald-700).
+	iconGreen  = color.NRGBA{R: 0x00, G: 0x7a, B: 0x55, A: 0xff} // #007a55
 	motifWhite = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
 	// appBackground is stone-50, the background of html and body. The same
 	// value is theme-color in web/index.html and theme_color and
