@@ -376,13 +376,14 @@ export function ScanPage() {
           cameras={cameras}
           onSelectCamera={selectCamera}
         />
+        {/* The settings apply at once, so the button only closes (HIG, Sheets). */}
         <div className="mt-4 flex justify-end">
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
             className="pressable min-h-11 rounded-lg bg-accent px-4 font-medium text-white"
           >
-            Fertig
+            Schließen
           </button>
         </div>
       </Dialog>

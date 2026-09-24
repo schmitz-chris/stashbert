@@ -1,29 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { productMovementsQuery } from "../lib/api/queries";
 import {
   formatDelta,
   formatMovementTime,
   movementKindLabel,
+  visibleMovements,
   type Movement,
 } from "../lib/movements";
 
-/** Lists the latest movements of the product with productId. */
+/**
+ * Lists the latest movements of the product with productId: three, and
+ * with "Alle anzeigen" all that the query loads (ten).
+ */
 export function MovementHistory({ productId }: { productId: string }) {
   const movements = useQuery(productMovementsQuery(productId));
+  const [expanded, setExpanded] = useState(false);
   const headingId = useId();
 
   let content = <p className="mt-2 text-ink-tertiary">Verlauf wird geladen …</p>;
   if (movements.data !== undefined) {
+    const shown = visibleMovements(movements.data, expanded);
     content =
       movements.data.length === 0 ? (
         <p className="mt-2 text-ink-tertiary">Noch keine Buchungen.</p>
       ) : (
-        <ul className="mt-2 divide-y divide-line rounded-xl border border-line bg-surface">
-          {movements.data.map((movement) => (
-            <MovementRow key={movement.id} movement={movement} />
-          ))}
-        </ul>
+        <>
+          <ul className="mt-2 divide-y divide-line rounded-xl border border-line bg-surface">
+            {shown.map((movement) => (
+              <MovementRow key={movement.id} movement={movement} />
+            ))}
+          </ul>
+          {shown.length < movements.data.length && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="pressable mt-1 -ml-2 min-h-11 rounded-lg px-2 font-medium text-accent"
+            >
+              Alle anzeigen
+            </button>
+          )}
+        </>
       );
   } else if (movements.isError && !movements.isFetching) {
     content = (
@@ -32,7 +49,7 @@ export function MovementHistory({ productId }: { productId: string }) {
         <button
           type="button"
           onClick={() => void movements.refetch()}
-          className="pressable mt-3 min-h-11 rounded-lg bg-accent px-4 font-medium text-white"
+          className="pressable mt-3 min-h-11 rounded-lg border border-line-strong bg-surface px-4 font-medium text-accent"
         >
           Erneut versuchen
         </button>

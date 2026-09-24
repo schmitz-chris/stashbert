@@ -6,9 +6,11 @@ import {
 } from "../lib/api/queries";
 import { photoErrorText, productImageUrl } from "../lib/productImage";
 import type { Product } from "../lib/products";
-import { Dialog } from "./Dialog";
+import { ConfirmActions, Dialog } from "./Dialog";
 
-const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+// Secondary buttons (docs/plan.md, F22); "Bild entfernen" in red text.
+const buttonClass =
+  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 font-medium disabled:opacity-40";
 
 /**
  * The image of product on the product page, if it has one, and below it
@@ -36,20 +38,20 @@ export function ProductImageSection({ product }: { product: Product }) {
   }
 
   return (
-    <>
+    <div className="mt-4">
       {imageUrl !== null && (
         <img
           src={imageUrl}
           alt=""
-          className="mt-2 h-48 w-full rounded-xl bg-surface object-contain"
+          className="mb-2 h-48 w-full rounded-xl bg-surface object-contain"
         />
       )}
-      <div className="mt-2 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           disabled={pending}
           onClick={() => inputRef.current?.click()}
-          className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
+          className={`text-accent ${buttonClass}`}
         >
           {upload.isPending ? "Wird hochgeladen …" : "Foto aufnehmen"}
         </button>
@@ -70,7 +72,7 @@ export function ProductImageSection({ product }: { product: Product }) {
               remove.reset();
               setConfirmOpen(true);
             }}
-            className={`border border-danger bg-surface text-danger ${buttonClass}`}
+            className={`text-danger ${buttonClass}`}
           >
             Bild entfernen
           </button>
@@ -90,28 +92,17 @@ export function ProductImageSection({ product }: { product: Product }) {
         <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
-        <div className="mt-4 flex flex-wrap justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(false)}
-            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
-          >
-            Abbrechen
-          </button>
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(product.id, {
-                onSuccess: () => setConfirmOpen(false),
-              })
-            }
-            className={`bg-danger text-white ${buttonClass}`}
-          >
-            Entfernen
-          </button>
-        </div>
+        <ConfirmActions
+          label="Entfernen"
+          pending={remove.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() =>
+            remove.mutate(product.id, {
+              onSuccess: () => setConfirmOpen(false),
+            })
+          }
+        />
       </Dialog>
-    </>
+    </div>
   );
 }

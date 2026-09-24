@@ -8,6 +8,7 @@ import {
   shoppingListQuery,
   unmarkMutation,
 } from "../lib/api/queries";
+import { productLinkState } from "../lib/productOrigin";
 import {
   shoppingQuantity,
   shoppingText,
@@ -129,6 +130,7 @@ function ShoppingRow({
       <div className="min-w-0 flex-1">
         <Link
           to={`/produkt/${encodeURIComponent(item.product_id)}`}
+          state={productLinkState("einkauf")}
           className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
           {quantity !== null && (

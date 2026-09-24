@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
-import { NavLink, type NavLinkRenderProps } from "react-router";
+import { NavLink, useLocation, useMatch } from "react-router";
+import { productBack } from "../lib/productOrigin";
 import { unlockSound } from "../lib/sound";
 
-function sideLinkClass({ isActive }: NavLinkRenderProps) {
+function sideLinkClass(isActive: boolean) {
   const state = isActive
     ? "bg-accent-soft font-semibold text-accent"
     : "font-medium text-ink-tertiary";
   return `pressable flex min-h-[48px] min-w-[80px] flex-col items-center justify-center gap-[2px] rounded-[8px] px-[12px] py-[4px] text-[12px] leading-[16px] ${state}`;
 }
 
-function scanLinkClass({ isActive }: NavLinkRenderProps) {
+function scanLinkClass(isActive: boolean) {
   const state = isActive
     ? "bg-accent-strong ring-4 ring-accent/30"
     : "bg-accent";
@@ -17,12 +18,19 @@ function scanLinkClass({ isActive }: NavLinkRenderProps) {
 }
 
 /**
- * The bottom navigation bar of the views Vorrat, Scan and Einkauf. Its
- * sizes are in px, so it keeps them when the text size of the system grows,
- * like the tab bars of iOS (HIG, Typography: tab titles do not grow), and
- * never wraps or reaches past the edge of the screen (ADR-0016).
+ * The bottom navigation bar of the views Vorrat, Scan and Einkauf and of
+ * the product page. On the product page the tab of the view it was opened
+ * from is marked, the view its back link names (docs/plan.md, F22). Its
+ * sizes are in px, so it keeps them when the text size of the system
+ * grows, like the tab bars of iOS (HIG, Typography: tab titles do not
+ * grow), and never wraps or reaches past the edge of the screen (ADR-0016).
  */
 export function BottomNav() {
+  const { state } = useLocation();
+  const onProduct = useMatch("/produkt/:id") !== null;
+  // The path of the tab that is marked although its route is not active.
+  const origin = onProduct ? productBack(state).path : null;
+
   return (
     <nav
       aria-label="Hauptnavigation"
@@ -30,20 +38,30 @@ export function BottomNav() {
     >
       <ul className="mx-auto grid h-[64px] max-w-[448px] grid-cols-3 items-center">
         <li className="flex justify-center">
-          <NavLink to="/vorrat" className={sideLinkClass}>
+          <NavLink
+            to="/vorrat"
+            className={({ isActive }) => sideLinkClass(isActive || origin === "/vorrat")}
+          >
             <BoxIcon />
             Vorrat
           </NavLink>
         </li>
         <li className="flex justify-center">
           {/* The tap unlocks the sound of the scan view (iOS). */}
-          <NavLink to="/scan" className={scanLinkClass} onClick={() => unlockSound()}>
+          <NavLink
+            to="/scan"
+            className={({ isActive }) => scanLinkClass(isActive || origin === "/scan")}
+            onClick={() => unlockSound()}
+          >
             <BarcodeIcon />
             Scan
           </NavLink>
         </li>
         <li className="flex justify-center">
-          <NavLink to="/einkauf" className={sideLinkClass}>
+          <NavLink
+            to="/einkauf"
+            className={({ isActive }) => sideLinkClass(isActive || origin === "/einkauf")}
+          >
             <CartIcon />
             Einkauf
           </NavLink>

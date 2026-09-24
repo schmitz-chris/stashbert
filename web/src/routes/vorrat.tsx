@@ -12,6 +12,7 @@ import {
 } from "../lib/api/queries";
 import { cartToggle } from "../lib/cartToggle";
 import { productImageUrl } from "../lib/productImage";
+import { productLinkState } from "../lib/productOrigin";
 import {
   filterProducts,
   matches,
@@ -209,6 +210,7 @@ function StockRow({ product }: { product: Product }) {
         <div className="min-w-0 flex-1">
           <Link
             to={`/produkt/${encodeURIComponent(product.id)}`}
+            state={productLinkState("vorrat")}
             className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
           >
             {product.name}

@@ -13,7 +13,9 @@ interface Notice {
   failed: boolean;
 }
 
-const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+// Secondary buttons (docs/plan.md, F22).
+const buttonClass =
+  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 font-medium text-accent disabled:opacity-40";
 
 /**
  * Shows whether product is marked for shopping (ADR-0015): marked, the
@@ -66,7 +68,7 @@ export function ShoppingListSection({ product }: { product: Product }) {
             type="button"
             disabled={pending}
             onClick={unmarkProduct}
-            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
+            className={buttonClass}
           >
             Von der Liste nehmen
           </button>
@@ -76,7 +78,7 @@ export function ShoppingListSection({ product }: { product: Product }) {
           type="button"
           disabled={pending}
           onClick={markProduct}
-          className={`mt-2 bg-marked text-white ${buttonClass}`}
+          className={`mt-2 ${buttonClass}`}
         >
           Vormerken
         </button>

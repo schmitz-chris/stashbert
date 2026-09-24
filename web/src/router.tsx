@@ -9,7 +9,8 @@ import { StockPage } from "./routes/vorrat";
 /**
  * The route table. Every route has an id, so tests can check with
  * matchRoutes which view a path shows, without a DOM. Only the routes
- * below TabLayout show the bottom navigation bar.
+ * below TabLayout show the bottom navigation bar; the product page is one
+ * of them, so the bar stays visible there (docs/plan.md, F22).
  */
 export const routes: RouteObject[] = [
   { id: "redirect", path: "/", element: <Navigate to="/vorrat" replace /> },
@@ -20,9 +21,9 @@ export const routes: RouteObject[] = [
       { id: "stock", path: "/vorrat", Component: StockPage },
       { id: "scan", path: "/scan", Component: ScanPage },
       { id: "shopping", path: "/einkauf", Component: ShoppingPage },
+      { id: "product", path: "/produkt/:id", Component: ProductPage },
     ],
   },
-  { id: "product", path: "/produkt/:id", Component: ProductPage },
   { id: "not-found", path: "*", Component: NotFoundPage },
 ];
 

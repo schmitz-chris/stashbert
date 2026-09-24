@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatDelta, formatMovementTime, movementKindLabel } from "./movements";
+import {
+  formatDelta,
+  formatMovementTime,
+  movementKindLabel,
+  visibleMovements,
+} from "./movements";
 
 describe("movementKindLabel", () => {
   it.each([
@@ -51,5 +56,22 @@ describe("formatMovementTime", () => {
     expect(formatMovementTime("2026-03-04T05:06:07.123Z", "UTC")).toBe(
       "04.03.2026, 05:06",
     );
+  });
+});
+
+describe("visibleMovements", () => {
+  const ten = Array.from({ length: 10 }, (_, i) => i);
+
+  it("shows the first three while collapsed", () => {
+    expect(visibleMovements(ten, false)).toEqual([0, 1, 2]);
+  });
+
+  it("shows all of them once expanded", () => {
+    expect(visibleMovements(ten, true)).toEqual(ten);
+  });
+
+  it("shows fewer than three as they are", () => {
+    expect(visibleMovements([0, 1], false)).toEqual([0, 1]);
+    expect(visibleMovements([], false)).toEqual([]);
   });
 });

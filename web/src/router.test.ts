@@ -35,6 +35,7 @@ describe("routes", () => {
     ["/vorrat", "stock", StockPage],
     ["/scan", "scan", ScanPage],
     ["/einkauf", "shopping", ShoppingPage],
+    ["/produkt/abc", "product", ProductPage],
   ])("shows %s below the layout with the navigation bar", (path, id, page) => {
     const matches = match(path);
     expect(matches.map((m) => m.route.id)).toEqual(["tabs", id]);
@@ -42,11 +43,9 @@ describe("routes", () => {
     expect(matches[1].route.Component).toBe(page);
   });
 
-  it("shows /produkt/abc without the navigation bar", () => {
+  it("passes the id of /produkt/abc to the product page", () => {
     const matches = match("/produkt/abc");
-    expect(matches.map((m) => m.route.id)).toEqual(["product"]);
-    expect(matches[0].route.Component).toBe(ProductPage);
-    expect(matches[0].params).toEqual({ id: "abc" });
+    expect(matches[1].params).toEqual({ id: "abc" });
   });
 
   it.each(["/unbekannt", "/produkt", "/vorrat/abc", "/produkt/abc/mehr"])(

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId } from "react";
 import { Link } from "react-router";
 import { productUpdateMutation } from "../lib/api/queries";
+import { productLinkState } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
 import {
   cardView,
@@ -208,7 +209,11 @@ function NewProductActions({
         {notice}
       </p>
       <div className="mt-1 flex flex-wrap gap-2">
-        <Link to={`/produkt/${encodeURIComponent(product.id)}`} className={actionClass}>
+        <Link
+          to={`/produkt/${encodeURIComponent(product.id)}`}
+          state={productLinkState("scan")}
+          className={actionClass}
+        >
           Name ändern
         </Link>
         <button type="button" onClick={onMerge} className={actionClass}>

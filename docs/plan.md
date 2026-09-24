@@ -1415,7 +1415,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F22: Produktseite aufräumen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F21
 - **Referenzen:** hig-pruefung.md M3, M4, N6
 - **Umfang:**

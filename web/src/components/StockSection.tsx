@@ -42,7 +42,8 @@ export function StockSection({ product }: { product: Product }) {
       </p>
       <form
         // The number input checks that the stock is a whole number from 0
-        // to 100000; the form is only submitted if it is.
+        // to 100000; the form is only submitted if it is. An empty field
+        // gets the hint of the browser instead of a disabled button.
         onSubmit={(event) => {
           event.preventDefault();
           inventory.mutate(
@@ -76,8 +77,8 @@ export function StockSection({ product }: { product: Product }) {
           />
           <button
             type="submit"
-            disabled={stock.trim() === "" || inventory.isPending}
-            className="pressable min-h-11 shrink-0 rounded-lg bg-accent px-4 font-medium text-white disabled:opacity-40"
+            disabled={inventory.isPending}
+            className="pressable min-h-11 shrink-0 rounded-lg border border-line-strong bg-surface px-4 font-medium text-accent disabled:opacity-40"
           >
             Bestand setzen
           </button>

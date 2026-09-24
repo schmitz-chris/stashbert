@@ -2,10 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { productListQuery, productMergeMutation } from "../lib/api/queries";
 import { mergeCandidates, type Product } from "../lib/products";
-import { Dialog } from "./Dialog";
-
-const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
-const cancelClass = `border border-line-strong bg-surface text-ink-secondary ${buttonClass}`;
+import { ConfirmActions, Dialog, Sheet } from "./Dialog";
 
 interface MergeDialogProps {
   /** The product to merge; the dialog is open while it is not null. */
@@ -17,20 +14,26 @@ interface MergeDialogProps {
 }
 
 /**
- * The dialog that merges source into another product: the user picks the
- * target from a list with search, confirms, and source is merged into it
- * with POST /products/{id}/merge.
+ * Merges source into another product: the user picks the target in a
+ * sheet with search and list, confirms in a dialog above the sheet, and
+ * source is merged into it with POST /products/{id}/merge. "Abbrechen" in
+ * the confirmation goes back to the list.
  */
 export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
   const queryClient = useQueryClient();
   const merge = useMutation(productMergeMutation(queryClient));
-  // The picked target; while it is null the dialog shows the list.
+  // The picked target; while it is not null the confirmation is shown.
   const [target, setTarget] = useState<Product | null>(null);
 
   function close() {
     setTarget(null);
     merge.reset();
     onClose();
+  }
+
+  function cancelConfirm() {
+    setTarget(null);
+    merge.reset();
   }
 
   function confirm(from: Product, picked: Product) {
@@ -46,40 +49,35 @@ export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
   }
 
   return (
-    <Dialog
-      open={source !== null}
-      onClose={close}
-      title={target === null ? "Zielprodukt wählen" : "Produkte zusammenführen"}
-    >
-      {source !== null && target === null && (
-        <MergePicker ownId={source.id} onPick={setTarget} onCancel={close} />
-      )}
-      {source !== null && target !== null && (
-        <>
-          <p className="mt-2 text-ink-secondary">
-            „{source.name}“ in „{target.name}“ zusammenführen? Barcodes,
-            Verlauf und Bestand gehen auf „{target.name}“ über, „
-            {source.name}“ wird gelöscht.
-          </p>
-          <p role="status" className="mt-2 text-sm font-medium text-danger">
-            {merge.isError ? "Zusammenführen fehlgeschlagen" : ""}
-          </p>
-          <div className="mt-4 flex flex-wrap justify-end gap-3">
-            <button type="button" onClick={close} className={cancelClass}>
-              Abbrechen
-            </button>
-            <button
-              type="button"
-              disabled={merge.isPending}
-              onClick={() => confirm(source, target)}
-              className={`bg-danger text-white ${buttonClass}`}
-            >
-              Zusammenführen
-            </button>
-          </div>
-        </>
-      )}
-    </Dialog>
+    <>
+      <Sheet open={source !== null} onClose={close} title="Zielprodukt wählen">
+        {source !== null && <MergePicker ownId={source.id} onPick={setTarget} />}
+      </Sheet>
+      <Dialog
+        open={source !== null && target !== null}
+        onClose={cancelConfirm}
+        title="Produkte zusammenführen"
+      >
+        {source !== null && target !== null && (
+          <>
+            <p className="mt-2 text-ink-secondary">
+              „{source.name}“ in „{target.name}“ zusammenführen? Barcodes,
+              Verlauf und Bestand gehen auf „{target.name}“ über, „
+              {source.name}“ wird gelöscht.
+            </p>
+            <p role="status" className="mt-2 text-sm font-medium text-danger">
+              {merge.isError ? "Zusammenführen fehlgeschlagen" : ""}
+            </p>
+            <ConfirmActions
+              label="Zusammenführen"
+              pending={merge.isPending}
+              onCancel={cancelConfirm}
+              onConfirm={() => confirm(source, target)}
+            />
+          </>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -88,11 +86,9 @@ export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
 function MergePicker({
   ownId,
   onPick,
-  onCancel,
 }: {
   ownId: string;
   onPick: (product: Product) => void;
-  onCancel: () => void;
 }) {
   const products = useQuery(productListQuery);
   const [query, setQuery] = useState("");
@@ -144,11 +140,6 @@ function MergePicker({
         className="mt-3 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base"
       />
       {content}
-      <div className="mt-4 flex justify-end">
-        <button type="button" onClick={onCancel} className={cancelClass}>
-          Abbrechen
-        </button>
-      </div>
     </>
   );
 }

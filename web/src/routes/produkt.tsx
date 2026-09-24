@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState, type ChangeEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { Dialog } from "../components/Dialog";
+import { ConfirmActions, Dialog } from "../components/Dialog";
 import { MergeSection } from "../components/MergeSection";
 import { MovementHistory } from "../components/MovementHistory";
 import { ProductImageSection } from "../components/ProductImageSection";
@@ -17,6 +17,7 @@ import {
 } from "../lib/api/queries";
 import { normalizeGtin } from "../lib/gtin";
 import { diffPatch, toForm, type ProductForm } from "../lib/productForm";
+import { productBack } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
 import { sourceNote } from "../lib/sourceNote";
 
@@ -27,15 +28,24 @@ const labelClass = "block text-sm font-medium text-ink-secondary";
 const inputClass =
   "mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base aria-[invalid=true]:border-danger";
 const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+// Every action besides "Speichern", the one filled button of the page
+// (docs/plan.md, F22).
+const secondaryClass = `border border-line-strong bg-surface ${buttonClass}`;
+// A row that opens and closes a details element (HIG, Disclosure controls):
+// 44 px high over the full width, the chevron on the trailing edge.
+const summaryClass =
+  "pressable flex min-h-11 cursor-pointer list-none items-center gap-3 py-1 text-lg font-semibold [&::-webkit-details-marker]:hidden";
 const sourceText = "Daten und Bild: Open Food Facts (ODbL / CC BY-SA 3.0)";
 
 export function ProductPage() {
   const { id = "" } = useParams();
   const product = useQuery(productQuery(id));
   const navigate = useNavigate();
+  const location = useLocation();
   // The first location of a visit has the key "default". Only then is there
   // no page of the app to go back to (reload, start of the installed app).
-  const canGoBack = useLocation().key !== "default";
+  const canGoBack = location.key !== "default";
+  const back = productBack(location.state);
 
   let content = <p className="mt-4 text-ink-tertiary">Produkt wird geladen …</p>;
   if (product.data !== undefined) {
@@ -68,36 +78,46 @@ export function ProductPage() {
   }
 
   return (
-    <main className="px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-      <Link
-        to="/vorrat"
-        onClick={(event) => {
-          // Back to where the product was opened, e.g. Einkauf or Scan.
-          if (canGoBack) {
-            event.preventDefault();
-            void navigate(-1);
-          }
-        }}
-        className="pressable -ml-2 inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-accent"
-      >
-        <span aria-hidden="true">‹&nbsp;</span>Zurück
-      </Link>
+    <>
+      {/* The navigation bar stays at the top below the safe area, over the
+          full width of the view (it takes back the padding of main). It lies
+          above the page and below the update banner and the tab bar (z-20). */}
+      <header className="sticky top-[env(safe-area-inset-top)] z-15 -mx-4 -mt-6 grid grid-cols-[1fr_minmax(0,max-content)_1fr] items-center gap-2 border-b border-line bg-canvas px-4">
+        <Link
+          to={back.path}
+          onClick={(event) => {
+            // Back to where the product was opened, e.g. Einkauf or Scan.
+            if (canGoBack) {
+              event.preventDefault();
+              void navigate(-1);
+            }
+          }}
+          aria-label={`Zurück: ${back.label}`}
+          className="pressable -ml-2 inline-flex min-h-11 items-center justify-self-start rounded-lg px-2 font-medium whitespace-nowrap text-accent"
+        >
+          <span aria-hidden="true">‹&nbsp;</span>
+          {back.label}
+        </Link>
+        {/* Screen readers read the name in the h1 below. */}
+        <p aria-hidden="true" className="truncate text-center font-semibold">
+          {product.data?.name}
+        </p>
+      </header>
       {content}
-    </main>
+    </>
   );
 }
 
 function ProductEditor({ product }: { product: Product }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const update = useMutation(productUpdateMutation(queryClient));
   const review = useMutation(productUpdateMutation(queryClient));
-  const remove = useMutation(productDeleteMutation(queryClient));
   // base is the product the form started from; the patch holds what the
   // user changed since, so fields the user did not touch are never sent.
   const [base, setBase] = useState(product);
   const [form, setForm] = useState(() => toForm(product));
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Set when "Speichern" was chosen without a change, until the next one.
+  const [unchanged, setUnchanged] = useState(false);
 
   const patch = diffPatch(base, form);
   const changed = Object.keys(patch).length > 0;
@@ -121,15 +141,28 @@ function ProductEditor({ product }: { product: Product }) {
   }, [isSuccess, reset]);
 
   let notice = isSuccess ? "Gespeichert" : "";
+  let noticeClass = "text-accent";
+  if (unchanged) {
+    notice = "Keine Änderungen";
+    noticeClass = "text-ink-secondary";
+  }
   if (update.isError) {
     notice =
       problemCode(update.error) === "invalid_request"
         ? "Ungültige Angaben, nicht gespeichert"
         : "Speichern fehlgeschlagen";
+    noticeClass = "text-danger";
   }
 
+  // "Speichern" stays enabled: without a change it says so, without a
+  // name the hint below the field says why.
   function save() {
-    if (!changed || nameMissing) {
+    if (nameMissing) {
+      return;
+    }
+    if (!changed) {
+      update.reset();
+      setUnchanged(true);
       return;
     }
     update.mutate(
@@ -149,6 +182,7 @@ function ProductEditor({ product }: { product: Product }) {
       value: form[field],
       onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { value } = event.target;
+        setUnchanged(false);
         setForm((current) => ({ ...current, [field]: value }));
       },
       className: inputClass,
@@ -157,10 +191,13 @@ function ProductEditor({ product }: { product: Product }) {
 
   return (
     <>
-      <ProductImageSection product={product} />
       <h1 className="mt-4 text-2xl font-semibold break-words hyphens-auto">
         {product.name}
       </h1>
+      {product.brand !== null && (
+        <p className="break-words hyphens-auto text-ink-tertiary">{product.brand}</p>
+      )}
+      <ProductImageSection product={product} />
       {product.needs_review && (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-warning bg-warning-soft p-3">
           <p className="w-full text-ink">Bitte die Angaben prüfen.</p>
@@ -170,7 +207,7 @@ function ProductEditor({ product }: { product: Product }) {
             onClick={() =>
               review.mutate({ id: product.id, patch: { name: product.name } })
             }
-            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
+            className={`text-accent ${secondaryClass}`}
           >
             Passt so
           </button>
@@ -228,20 +265,16 @@ function ProductEditor({ product }: { product: Product }) {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
-            disabled={!changed || update.isPending}
+            disabled={update.isPending}
             className={`bg-accent text-white ${buttonClass}`}
           >
             Speichern
           </button>
-          <p
-            role="status"
-            className={`text-sm font-medium ${update.isError ? "text-danger" : "text-accent"}`}
-          >
+          <p role="status" className={`text-sm font-medium ${noticeClass}`}>
             {notice}
           </p>
         </div>
       </form>
-      <BarcodeSection product={product} />
       <StockSection product={product} />
       <ShoppingListSection product={product} />
       <MovementHistory productId={product.id} />
@@ -261,16 +294,59 @@ function ProductEditor({ product }: { product: Product }) {
           )}
         </p>
       )}
-      <button
-        type="button"
-        onClick={() => {
-          remove.reset();
-          setConfirmOpen(true);
-        }}
-        className={`mt-8 w-full border border-danger bg-surface text-danger ${buttonClass}`}
-      >
-        Produkt löschen
-      </button>
+      {/* Progressive disclosure (HIG, Layout): what is rarely needed. */}
+      <div className="mt-8 border-y border-line">
+        <BarcodeSection product={product} />
+        <DeleteSection product={product} />
+      </div>
+    </>
+  );
+}
+
+// The chevron of a summary: it points to the trailing edge while the
+// details are closed and down while they are open.
+function Chevron() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5 shrink-0 text-accent group-open:rotate-90 motion-safe:transition-transform"
+    >
+      <path d="m9 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+// "Produkt löschen", closed at first, and its confirmation.
+function DeleteSection({ product }: { product: Product }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const remove = useMutation(productDeleteMutation(queryClient));
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <>
+      <details className="group border-t border-line">
+        <summary className={summaryClass}>
+          <span className="min-w-0 flex-1">Produkt löschen</span>
+          <Chevron />
+        </summary>
+        <button
+          type="button"
+          onClick={() => {
+            remove.reset();
+            setConfirmOpen(true);
+          }}
+          className={`mt-1 mb-4 w-full text-danger ${secondaryClass}`}
+        >
+          Produkt löschen
+        </button>
+      </details>
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
@@ -282,27 +358,16 @@ function ProductEditor({ product }: { product: Product }) {
         <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Löschen fehlgeschlagen" : ""}
         </p>
-        <div className="mt-4 flex flex-wrap justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(false)}
-            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
-          >
-            Abbrechen
-          </button>
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(product.id, {
-                onSuccess: () => void navigate("/vorrat", { replace: true }),
-              })
-            }
-            className={`bg-danger text-white ${buttonClass}`}
-          >
-            Löschen
-          </button>
-        </div>
+        <ConfirmActions
+          label="Löschen"
+          pending={remove.isPending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() =>
+            remove.mutate(product.id, {
+              onSuccess: () => void navigate("/vorrat", { replace: true }),
+            })
+          }
+        />
       </Dialog>
     </>
   );
@@ -313,12 +378,12 @@ function BarcodeSection({ product }: { product: Product }) {
   const add = useMutation(barcodeAddMutation(queryClient));
   const remove = useMutation(barcodeRemoveMutation(queryClient));
   const [code, setCode] = useState("");
-  // localHint is set when the entered code fails normalizeGtin or already
-  // belongs to this product; then no request is sent.
+  // localHint is set when the field is empty, the entered code fails
+  // normalizeGtin or already belongs to this product; then no request is
+  // sent.
   const [localHint, setLocalHint] = useState<string | null>(null);
   // The code of the barcode whose removal the dialog asks to confirm.
   const [removing, setRemoving] = useState<string | null>(null);
-  const headingId = useId();
   const inputId = useId();
   const hintId = useId();
 
@@ -339,6 +404,12 @@ function BarcodeSection({ product }: { product: Product }) {
   }
 
   function submit() {
+    // "Hinzufügen" stays enabled; with an empty field it says why.
+    if (code.trim() === "") {
+      add.reset();
+      setLocalHint("Bitte einen Barcode eingeben");
+      return;
+    }
     const normalized = normalizeGtin(code.trim());
     if (normalized === null) {
       add.reset();
@@ -375,79 +446,85 @@ function BarcodeSection({ product }: { product: Product }) {
   }
 
   return (
-    <section aria-labelledby={headingId} className="mt-8">
-      <h2 id={headingId} className="text-lg font-semibold">
-        Barcodes
-      </h2>
-      {product.barcodes.length === 0 ? (
-        <p className="mt-2 text-ink-tertiary">Noch keine Barcodes.</p>
-      ) : (
-        <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-          {product.barcodes.map((barcode) => (
-            <li
-              key={barcode.code}
-              className="flex items-center justify-between gap-3 pl-3"
-            >
-              <span className="font-mono break-all">{barcode.code}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  remove.reset();
-                  setRemoving(barcode.code);
-                }}
-                aria-label={`Barcode ${barcode.code} entfernen`}
-                className="pressable min-h-11 min-w-11 shrink-0 px-3 font-medium text-danger"
+    <>
+      <details className="group">
+        <summary className={summaryClass}>
+          <span className="min-w-0 flex-1">Barcodes</span>
+          <span className="font-normal text-ink-tertiary tabular-nums">
+            {product.barcodes.length}
+          </span>
+          <Chevron />
+        </summary>
+        {product.barcodes.length === 0 ? (
+          <p className="mt-1 text-ink-tertiary">Noch keine Barcodes.</p>
+        ) : (
+          <ul className="mt-1 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+            {product.barcodes.map((barcode) => (
+              <li
+                key={barcode.code}
+                className="flex items-center justify-between gap-3 pl-3"
               >
-                Entfernen
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-        className="mt-4"
-      >
-        <label htmlFor={inputId} className={labelClass}>
-          Barcode hinzufügen
-        </label>
-        {/* The button moves below the field when the text is large. */}
-        <div className="mt-1 flex flex-wrap gap-2">
-          <input
-            id={inputId}
-            value={code}
-            onChange={(event) => {
-              setCode(event.target.value);
-              setLocalHint(null);
-              if (add.isError) {
-                add.reset();
-              }
-            }}
-            inputMode="numeric"
-            autoComplete="off"
-            aria-invalid={codeRejected}
-            aria-describedby={hint !== "" ? hintId : undefined}
-            className="min-h-11 min-w-[8rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
-          />
-          <button
-            type="submit"
-            disabled={code.trim() === "" || add.isPending}
-            className={`shrink-0 bg-accent text-white ${buttonClass}`}
-          >
-            Hinzufügen
-          </button>
-        </div>
-        <p
-          id={hintId}
-          role="status"
-          className="mt-1 text-sm font-medium text-danger"
+                <span className="font-mono break-all">{barcode.code}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    remove.reset();
+                    setRemoving(barcode.code);
+                  }}
+                  aria-label={`Barcode ${barcode.code} entfernen`}
+                  className="pressable min-h-11 min-w-11 shrink-0 px-3 font-medium text-danger"
+                >
+                  Entfernen
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+          className="mt-4 mb-3"
         >
-          {hint}
-        </p>
-      </form>
+          <label htmlFor={inputId} className={labelClass}>
+            Barcode hinzufügen
+          </label>
+          {/* The button moves below the field when the text is large. */}
+          <div className="mt-1 flex flex-wrap gap-2">
+            <input
+              id={inputId}
+              value={code}
+              onChange={(event) => {
+                setCode(event.target.value);
+                setLocalHint(null);
+                if (add.isError) {
+                  add.reset();
+                }
+              }}
+              inputMode="numeric"
+              autoComplete="off"
+              aria-invalid={codeRejected}
+              aria-describedby={hint !== "" ? hintId : undefined}
+              className="min-h-11 min-w-[8rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
+            />
+            <button
+              type="submit"
+              disabled={add.isPending}
+              className={`shrink-0 text-accent ${secondaryClass}`}
+            >
+              Hinzufügen
+            </button>
+          </div>
+          <p
+            id={hintId}
+            role="status"
+            className="mt-1 text-sm font-medium text-danger"
+          >
+            {hint}
+          </p>
+        </form>
+      </details>
       <Dialog
         open={removing !== null}
         onClose={() => setRemoving(null)}
@@ -462,28 +539,17 @@ function BarcodeSection({ product }: { product: Product }) {
             ? "Entfernen fehlgeschlagen"
             : ""}
         </p>
-        <div className="mt-4 flex flex-wrap justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => setRemoving(null)}
-            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
-          >
-            Abbrechen
-          </button>
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() => {
-              if (removing !== null) {
-                confirmRemove(removing);
-              }
-            }}
-            className={`bg-danger text-white ${buttonClass}`}
-          >
-            Entfernen
-          </button>
-        </div>
+        <ConfirmActions
+          label="Entfernen"
+          pending={remove.isPending}
+          onCancel={() => setRemoving(null)}
+          onConfirm={() => {
+            if (removing !== null) {
+              confirmRemove(removing);
+            }
+          }}
+        />
       </Dialog>
-    </section>
+    </>
   );
 }

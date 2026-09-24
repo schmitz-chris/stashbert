@@ -44,3 +44,15 @@ export function formatMovementTime(createdAt: string, timeZone?: string): string
     timeZone,
   }).format(new Date(createdAt));
 }
+
+/** How many movements the product page shows before "Alle anzeigen". */
+export const collapsedMovementCount = 3;
+
+/**
+ * Returns the movements the history of the product page shows: the first
+ * collapsedMovementCount, or all of them (at most the ten of the query)
+ * once the user chose "Alle anzeigen" (docs/plan.md, F22).
+ */
+export function visibleMovements<T>(movements: T[], expanded: boolean): T[] {
+  return expanded ? movements : movements.slice(0, collapsedMovementCount);
+}
