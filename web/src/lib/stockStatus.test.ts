@@ -38,33 +38,13 @@ describe("stockStatus", () => {
     });
   });
 
-  it("shows stock and target when the target is met", () => {
-    expect(stockStatus(product(4, 4))).toEqual({
-      level: "target",
-      text: "4 von 4",
-    });
-  });
-
-  it("shows stock and target above the target", () => {
-    expect(stockStatus(product(5, 4))).toEqual({
-      level: "target",
-      text: "5 von 4",
-    });
-  });
-
   it.each([
-    [product(2, 4, 2), "2 von 4"],
-    [product(3, 4, 2), "3 von 4"],
-  ])("shows stock and target without a shortfall when min_stock is met", (fields, text) => {
-    const status = stockStatus(fields);
-    expect(status).toEqual({ level: "target", text });
-    expect(status.text).not.toContain("fehlt");
-  });
-
-  it("counts the stock without a target", () => {
-    expect(stockStatus(product(3, 0))).toEqual({
-      level: "untracked",
-      text: "3 da",
-    });
+    ["the target is met", product(4, 4)],
+    ["the stock is above the target", product(5, 4)],
+    ["min_stock is met below the target", product(2, 4, 2)],
+    ["min_stock is met above it", product(3, 4, 2)],
+    ["there is no target", product(3, 0)],
+  ])("gives no status when %s", (_, fields) => {
+    expect(stockStatus(fields)).toBeNull();
   });
 });

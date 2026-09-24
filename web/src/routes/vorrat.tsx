@@ -207,7 +207,7 @@ function StockRow({ product }: { product: Product }) {
   const details = brandAndSize(product);
 
   // Image, then name, brand and package size, and below them, where the
-  // text starts, the status on the left and the cart and the stepper
+  // text starts, the status (if any) on the left and the cart and the stepper
   // [−] stock [+] on the right, set apart by 12 px. The separator above a
   // row starts where the text starts, not below the image. The side
   // padding and the gap grow with the text only up to 20 and 16 px, so the
@@ -232,8 +232,8 @@ function StockRow({ product }: { product: Product }) {
         <p role="status" className="text-sm font-medium text-danger">
           {notice}
         </p>
-        {/* The status is as wide as its text and the buttons stand
-            right of it; if both do not fit side by side (large text or a
+        {/* The status, if there is one, is as wide as its text and the
+            buttons stand right of it; if both do not fit side by side (large text or a
             narrow screen), the buttons move to a line of their own,
             still on the right. */}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -284,16 +284,17 @@ function StockRow({ product }: { product: Product }) {
 const statusTextClass: Record<StockLevel, string> = {
   empty: "font-medium text-danger",
   missing: "font-medium text-ink",
-  target: "text-ink-secondary",
-  untracked: "text-ink-tertiary",
 };
 
-// The status of a row (lib/stockStatus.ts): "leer" with a cross, "fehlt N"
-// with a warning triangle, "N von T" or "N da". The text says everything
-// the color and the symbol say. Whether the product is marked shows only
-// the cart button (user feedback of 2026-09-24).
+// The status of a row (lib/stockStatus.ts): "leer" with a cross or
+// "fehlt N" with a warning triangle, and nothing if there is nothing to do
+// (user feedback of 2026-09-24). The text says everything the color and
+// the symbol say.
 function StatusText({ product }: { product: Product }) {
   const status = stockStatus(product);
+  if (status === null) {
+    return null;
+  }
   return (
     <p
       className={`flex min-w-0 flex-auto items-center gap-1 text-sm ${statusTextClass[status.level]}`}
