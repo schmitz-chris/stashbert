@@ -1204,7 +1204,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R04: Restore-Test
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B28, B16b
 - **Referenzen:** architecture.md 9.3
 - **Umfang:** Ein Go-Test in `internal/app/restore_test.go`:
