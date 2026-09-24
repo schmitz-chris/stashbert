@@ -1,0 +1,62 @@
+# Blueprint for Home Assistant (ADR-0018, architecture.md 11.7 and 11.8):
+# offers StashBert the to-do lists of one integration, retained on
+# <prefix>/in/targets, so they can be chosen in the shopping view.
+blueprint:
+  name: "StashBert: Einkaufslisten anbieten"
+  description: >-
+    Meldet StashBert die To-do-Listen einer Integration (Standard Bring!),
+    damit du in der Einkaufsansicht von StashBert auswählen kannst, in
+    welche Liste eingekauft wird. Die Meldung geht beim Start von Home
+    Assistant, stündlich und immer dann hinaus, wenn StashBert online geht.
+  domain: automation
+  author: StashBert
+  source_url: https://github.com/schmitz-chris/stashbert/blob/main/deploy/homeassistant/stashbert_listen_melden.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    integration:
+      name: Integration
+      description: >-
+        Die Integration, deren To-do-Listen StashBert anbieten soll, zum
+        Beispiel bring, local_todo oder todoist.
+      default: bring
+      selector:
+        text: {}
+    prefix:
+      name: MQTT-Präfix
+      description: Wie MQTT_TOPIC_PREFIX in StashBert.
+      default: stashbert
+      selector:
+        text: {}
+
+mode: queued
+max: 5
+
+trigger_variables:
+  prefix: !input prefix
+triggers:
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    hours: "/1"
+  - trigger: mqtt
+    topic: "{{ prefix }}/status"
+    payload: "online"
+
+variables:
+  integration: !input integration
+  prefix: !input prefix
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "{{ prefix }}/in/targets"
+      qos: 1
+      retain: true
+      # A JSON array of {"id", "name"}; keys stay English (AGENTS.md).
+      payload: >-
+        {% set ns = namespace(lists=[]) %}
+        {% for entity in integration_entities(integration) | select('match', 'todo\.') | list | sort %}
+          {% set ns.lists = ns.lists + [{'id': entity, 'name': state_attr(entity, 'friendly_name') or entity}] %}
+        {% endfor %}
+        {{ ns.lists | to_json }}

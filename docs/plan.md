@@ -1685,7 +1685,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### H01: Blueprints und Anleitung für Home Assistant
 
-- **Status:** offen
+- **Status:** erledigt (beide Blueprints am 24.09.2026 im HA des Nutzers gespeichert und gegen eine Testliste und eine Bring!-Liste geprüft)
 - **Abhängig von:** B39
 - **Referenzen:** ADR-0018; architecture.md 11.8, 11.2, 11.3
 - **Umfang:**

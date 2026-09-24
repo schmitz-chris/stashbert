@@ -101,6 +101,7 @@ Die Env-Datei mit einem Editor öffnen, zum Beispiel `nano /etc/stashbert/stashb
 | `OFF_CONTACT` | leer | Kontakt für den User-Agent bei Open Food Facts, z. B. `du@example.org`. Leer bedeutet: keine Abfragen, unbekannte Produkte bekommen nur einen Platzhalter |
 | `BACKUP_KEEP` | `14` | Anzahl aufbewahrter täglicher Backups (1 bis 365) |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` oder `error` |
+| `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD` und weitere `MQTT_*` | leer bzw. Standardwerte | Anbindung an Home Assistant über MQTT; leer bedeutet ohne MQTT. Einrichtung und alle Variablen in `docs/home-assistant.md` |
 
 Mindestens `OFF_CONTACT` mit einer eigenen Kontaktadresse setzen:
 

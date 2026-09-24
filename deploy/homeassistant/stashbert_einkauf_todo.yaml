@@ -1,0 +1,133 @@
+# Blueprint for Home Assistant (ADR-0018, architecture.md 11.8): writes the
+# shopping list of StashBert into a to-do list such as Bring!.
+blueprint:
+  name: "StashBert: Einkaufsliste in eine To-do-Liste übertragen"
+  description: >-
+    Überträgt die Einkaufsliste von StashBert in eine To-do-Liste, zum
+    Beispiel eine Bring!-Liste. StashBert sendet dafür die MQTT-Nachrichten
+    shopping.changed und shopping.snapshot. Geschrieben wird in die Liste,
+    die in StashBert gewählt ist; ist dort keine gewählt, in die
+    Standardliste. Einträge, die StashBert nicht kennt, bleiben unberührt.
+  domain: automation
+  author: StashBert
+  source_url: https://github.com/schmitz-chris/stashbert/blob/main/deploy/homeassistant/stashbert_einkauf_todo.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    default_list:
+      name: Standardliste
+      description: >-
+        Wird genutzt, wenn in StashBert keine Liste gewählt ist.
+      selector:
+        entity:
+          filter:
+            - domain: todo
+    prefix:
+      name: MQTT-Präfix
+      description: Wie MQTT_TOPIC_PREFIX in StashBert.
+      default: stashbert
+      selector:
+        text: {}
+    piece_label:
+      name: Einheit für Stück
+      default: Stück
+      selector:
+        text: {}
+    crate_label:
+      name: Einheit für einen Kasten
+      default: Kasten
+      selector:
+        text: {}
+    crates_label:
+      name: Einheit für mehrere Kästen
+      default: Kästen
+      selector:
+        text: {}
+
+# Keeps the order of the messages; a snapshot can follow many changes.
+mode: queued
+max: 50
+
+trigger_variables:
+  prefix: !input prefix
+triggers:
+  - trigger: mqtt
+    topic: "{{ prefix }}/events/shopping.changed"
+    qos: 1
+    id: changed
+  - trigger: mqtt
+    topic: "{{ prefix }}/events/shopping.snapshot"
+    qos: 1
+    id: snapshot
+
+variables:
+  default_list: !input default_list
+  piece_label: !input piece_label
+  crate_label: !input crate_label
+  crates_label: !input crates_label
+  msg: "{{ trigger.payload_json.data }}"
+  # The list chosen in StashBert, else the default list of this automation.
+  target: >-
+    {{ msg.list if msg.list is string and msg.list.startswith('todo.') else default_list }}
+  # A snapshot carries many entries, a change one; both have the same fields.
+  entries: >-
+    {{ msg['items'] if trigger.id == 'snapshot' else [msg] }}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ target is string and target.startswith('todo.')
+         and states(target) not in ['unknown', 'unavailable'] }}
+
+actions:
+  - action: todo.get_items
+    target:
+      entity_id: "{{ target }}"
+    data:
+      status:
+        - needs_action
+        - completed
+    response_variable: current
+  - variables:
+      names: "{{ current[target]['items'] | map(attribute='summary') | list }}"
+      # Feature 64: the list keeps a description per entry (Bring!: "Spezifikation").
+      has_description: >-
+        {{ (state_attr(target, 'supported_features') | int(0)) | bitwise_and(64) > 0 }}
+  - repeat:
+      for_each: "{{ entries }}"
+      sequence:
+        - variables:
+            name: "{{ repeat.item.name }}"
+            quantity: "{{ repeat.item.quantity | int(0) }}"
+            amount: >-
+              {% if quantity > 0 and repeat.item.unit == 'crate' %}{{ quantity }} {{ crate_label if quantity == 1 else crates_label }}{% elif quantity > 0 %}{{ quantity }} {{ piece_label }}{% endif %}
+            exists: "{{ name in names }}"
+        - choose:
+            - alias: Nicht mehr auf der Liste
+              conditions: "{{ not repeat.item.on_list }}"
+              sequence:
+                - if: "{{ exists }}"
+                  then:
+                    - action: todo.remove_item
+                      target:
+                        entity_id: "{{ target }}"
+                      data:
+                        item: "{{ name }}"
+                      continue_on_error: true
+            - alias: Schon in der To-do-Liste
+              conditions: "{{ exists }}"
+              sequence:
+                - action: todo.update_item
+                  target:
+                    entity_id: "{{ target }}"
+                  data: >-
+                    {% set base = {'item': name, 'status': 'needs_action'} %}
+                    {{ dict(base, description=amount) if has_description else base }}
+                  continue_on_error: true
+          default:
+            - action: todo.add_item
+              target:
+                entity_id: "{{ target }}"
+              data: >-
+                {% set base = {'item': name} %}
+                {{ dict(base, description=amount) if has_description and amount | length > 0 else base }}
