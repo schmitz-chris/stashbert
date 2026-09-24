@@ -1112,7 +1112,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R01: Dockerfile und Healthcheck
 
-- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
+- **Status:** offen (optionaler Weg nach ADR-0014)
 - **Abhängig von:** B29
 - **Referenzen:** ADR-0010, architecture.md 9.1
 - **Umfang:**
@@ -1132,13 +1132,13 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R02: Compose und Betriebsanleitung
 
-- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
+- **Status:** offen (optionaler Weg nach ADR-0014)
 - **Abhängig von:** R01
 - **Referenzen:** architecture.md 9
 - **Umfang:**
   - **`deploy/compose.yaml`:** ein Dienst, Image `ghcr.io/schmitz-chris/stashbert:${STASHBERT_VERSION:-latest}`, Port `8080:8080`, `env_file: .env`, Volume `./data:/data`, Healthcheck mit `["/stashbert", "-healthcheck"]`.
   - **`deploy/.env.example`** mit allen Variablen aus 9.2 und `STASHBERT_VERSION`.
-  - **`docs/betrieb.md`:** Start, Rechte für `./data` (`chown 65532:65532`), Anforderungen an den Proxy (9.1), Update über eine neue `STASHBERT_VERSION`, Backup und Restore (9.3), Logs.
+  - **`docs/betrieb.md`:** Die Anleitung für den LXC (L03) bleibt Hauptteil. Am Ende kommt ein eigener Abschnitt „Alternative: Docker" dazu: Start, Rechte für `./data` (`chown 65532:65532`), Update über eine neue `STASHBERT_VERSION`, Backup und Restore mit dem Container statt systemd, Logs mit `docker compose logs`. Proxy-Anforderungen nur verweisen, nicht wiederholen. Das Image liegt in GHCR eines privaten Repositorys; der Abschnitt nennt `docker login ghcr.io` bzw. alternativ `make docker` für ein lokal gebautes Image.
 - **Nicht im Umfang:** Reverse-Proxy-Konfiguration.
 - **Abnahmekriterien:**
   1. `docker compose -f deploy/compose.yaml config` ist gültig.
@@ -1146,7 +1146,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R03: CI: Image bauen
 
-- **Status:** zurückgestellt (ADR-0014: Hauptweg LXC; Docker bleibt optional)
+- **Status:** offen (optionaler Weg nach ADR-0014)
 - **Abhängig von:** R01, F01
 - **Referenzen:** ADR-0003, ADR-0012
 - **Umfang:**
