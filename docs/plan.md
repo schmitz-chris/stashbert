@@ -1464,7 +1464,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F25: Automatische Kamerawahl
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F24
 - **Referenzen:** AGENTS.md (Kamera), architecture.md 4.3; Quellen: dominikschilling.de/notes/ios-access-all-back-cameras-mediadevices-api/, developer.apple.com/forums/thread/772553 und /thread/776460
 - **Umfang:**

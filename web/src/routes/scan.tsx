@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
 import { FeedbackSymbol } from "../components/FeedbackSymbol";
@@ -7,6 +7,7 @@ import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
 import { PageHeading } from "../components/PageHeading";
 import { MarkResultCard, ResultCard } from "../components/ResultCard";
+import { ScanTimings } from "../components/ScanTimings";
 import { TorchButton } from "../components/TorchButton";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useScanner } from "../hooks/useScanner";
@@ -102,6 +103,9 @@ export function ScanPage() {
   const [mergeSource, setMergeSource] = useState<Product | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [videoSize, setVideoSize] = useState({ width: 3, height: 4 });
+  // From reading the last code to the answer of the server, for the camera
+  // menu (F25); a ref, so that measuring renders nothing.
+  const lastBookingMs = useRef<number | null>(null);
   useDocumentTitle(pageTitle("scan"));
 
   function show(feedback: Feedback, failed = false) {
@@ -115,12 +119,24 @@ export function ScanPage() {
     dispatchCard({ type: "show", result, kind });
   }
 
+  // Returns request and notes how long it took since detectedAt, the time
+  // the scanner read the code (undefined for a code typed in).
+  function timed<T>(request: Promise<T>, detectedAt: number | undefined): Promise<T> {
+    if (detectedAt !== undefined) {
+      const note = () => {
+        lastBookingMs.current = performance.now() - detectedAt;
+      };
+      request.then(note, note);
+    }
+    return request;
+  }
+
   // Books code in the mode that is set now, or marks it for shopping in
   // mode mark, and reports the result.
-  function handleCode(code: string) {
+  function handleCode(code: string, detectedAt?: number) {
     const kind = mode;
     if (kind === "mark") {
-      mark(code).then(
+      timed(mark(code), detectedAt).then(
         (result) => {
           show(feedbackFor({ ok: true, mode: kind, result }));
           dispatchCard({ type: "show", result, kind });
@@ -129,7 +145,7 @@ export function ScanPage() {
       );
       return;
     }
-    book({ barcode: code, kind }).then(
+    timed(book({ barcode: code, kind }), detectedAt).then(
       (result) => showBooking(result, kind),
       (error: unknown) => show(feedbackFor({ ok: false, error }), true),
     );
@@ -137,13 +153,23 @@ export function ScanPage() {
 
   // Books or marks every accepted code. While the merge dialog or the
   // dialog for typing in a code lies over the camera, codes are ignored.
-  const { videoRef, phase, cameraError, track, cameras, restart, selectCamera } =
-    useScanner((code) => {
-      if (mergeSource !== null || manualOpen) {
-        return;
-      }
-      handleCode(code);
-    });
+  const {
+    videoRef,
+    phase,
+    cameraError,
+    track,
+    cameras,
+    chosenId,
+    restart,
+    selectCamera,
+    selectAutomatic,
+    timings,
+  } = useScanner((code) => {
+    if (mergeSource !== null || manualOpen) {
+      return;
+    }
+    handleCode(code, performance.now());
+  });
 
   // [+1]: books one more unit of the product on the card, with its kind.
   function plusOne(productId: string, kind: BookingMode) {
@@ -381,8 +407,13 @@ export function ScanPage() {
         <CameraSettings
           track={track}
           cameras={cameras}
+          chosenId={chosenId}
           onSelectCamera={selectCamera}
+          onSelectAutomatic={selectAutomatic}
         />
+        {settingsOpen && (
+          <ScanTimings read={() => ({ camera: timings(), bookingMs: lastBookingMs.current })} />
+        )}
         {/* The settings apply at once, so the button only closes (HIG, Sheets). */}
         <div className="mt-4 flex justify-end">
           <button

@@ -5,11 +5,20 @@ import { RoiDecoder } from "./decoder";
 import { accept, EMPTY_DEDUPE } from "./dedupe";
 import type { DedupeState } from "./dedupe";
 import { startLoop } from "./loop";
+import { addRead, summarizeReads } from "./timings";
+import type { ReadSample, ReadSummary } from "./timings";
 import { releaseWakeLock, requestWakeLock } from "./wakelock";
 
 export interface ScannerEvents {
   onHit(code: string): void;
   onError(message: string): void;
+}
+
+/** What the camera menu shows about the running session (F25). */
+export interface ScanTimings extends ReadSummary {
+  /** Size of the camera image in px, 0 before the first frame. */
+  width: number;
+  height: number;
 }
 
 export function errorMessage(error: unknown): string {
@@ -27,6 +36,8 @@ export class Scanner {
   private stream: MediaStream | null = null;
   private stopLoop: (() => void) | null = null;
   private wakeLock: WakeLockSentinel | null = null;
+  // The last reads of the running session, for timings().
+  private reads: readonly ReadSample[] = [];
   // Incremented by stop(), so that late results of an old session are dropped.
   private session = 0;
 
@@ -45,6 +56,7 @@ export class Scanner {
     this.stop();
     const session = this.session;
     this.decoder ??= new RoiDecoder();
+    this.reads = [];
 
     const stream = await openCamera(deviceId);
     if (session !== this.session) {
@@ -84,13 +96,27 @@ export class Scanner {
     this.wakeLock = null;
   }
 
+  /** The image size and read timings of the running session at now. */
+  timings(now: number): ScanTimings {
+    return {
+      width: this.video.videoWidth,
+      height: this.video.videoHeight,
+      ...summarizeReads(this.reads, now),
+    };
+  }
+
   private async tick(session: number): Promise<void> {
     if (!this.decoder) {
       return;
     }
+    const startedAt = performance.now();
     try {
       const code = await this.decoder.decode(this.video);
-      if (session !== this.session || code === null) {
+      if (session !== this.session) {
+        return;
+      }
+      this.reads = addRead(this.reads, { startedAt, durationMs: performance.now() - startedAt });
+      if (code === null) {
         return;
       }
       const { state, accepted } = accept(this.seen, code, performance.now());

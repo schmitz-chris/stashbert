@@ -22,7 +22,10 @@ type ImageConstraintSet = MediaTrackConstraintSet & {
 };
 type ImageSettings = MediaTrackSettings & { zoom?: number };
 
+// The camera chosen in the menu, and apart from it the camera the app chose
+// itself (F25), so that the next start opens it at once.
 const STORAGE_KEY = "stashbert.cameraId";
+const AUTO_STORAGE_KEY = "stashbert.autoCameraId";
 
 // Without a chosen camera, the default back camera is used.
 export function buildConstraints(deviceId?: string): MediaStreamConstraints {
@@ -91,22 +94,38 @@ export function setTorch(track: MediaStreamTrack, torch: boolean): Promise<void>
   return applyImageConstraint(track, { torch });
 }
 
-export function loadCameraId(): string | undefined {
+function load(key: string): string | undefined {
   try {
-    return localStorage.getItem(STORAGE_KEY) ?? undefined;
+    return localStorage.getItem(key) ?? undefined;
   } catch {
     return undefined;
   }
 }
 
-export function saveCameraId(deviceId: string | undefined): void {
+function save(key: string, deviceId: string | undefined): void {
   try {
     if (deviceId) {
-      localStorage.setItem(STORAGE_KEY, deviceId);
+      localStorage.setItem(key, deviceId);
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(key);
     }
   } catch {
     // Storage unavailable: the selection only lasts for this session.
   }
+}
+
+export function loadCameraId(): string | undefined {
+  return load(STORAGE_KEY);
+}
+
+export function saveCameraId(deviceId: string | undefined): void {
+  save(STORAGE_KEY, deviceId);
+}
+
+export function loadAutoCameraId(): string | undefined {
+  return load(AUTO_STORAGE_KEY);
+}
+
+export function saveAutoCameraId(deviceId: string | undefined): void {
+  save(AUTO_STORAGE_KEY, deviceId);
 }
