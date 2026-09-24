@@ -216,6 +216,7 @@ web/src/lib/*.ts               reine Funktionen mit *.test.ts daneben
 **Sprache und Stil:**
 
 - Code, Bezeichner und Commit-Messages auf Englisch. Dokumentation und UI-Texte auf Deutsch.
+- **MQTT-Topics und -Nachrichten sind immer Englisch** (Nutzervorgabe, ADR-0018): Topic-Namen, JSON-Schlüssel, feste Werte und die Namen und Modellangaben in der HA-Discovery. Mengen als Zahl mit Einheit, nicht als Text. Deutsche Texte entstehen erst in HA oder in der Oberfläche; Nutzerdaten wie Produktnamen bleiben, wie sie sind.
 - In Dokumentation, Kommentaren und Commit-Messages **keine Gedankenstriche** (weder Em- noch En-Dash). Stattdessen Komma, Doppelpunkt, Klammern oder einen neuen Satz.
 
 **Commits:**

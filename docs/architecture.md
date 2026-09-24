@@ -325,7 +325,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - `needs_review` wird nur dann `false`, wenn der Patch mindestens eines der Felder `name`, `brand` oder `package_size` enthält. Ein Patch nur mit `target` ändert `needs_review` nicht.
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
 - **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`, `crate_size|null`
-- **Summary** (Kapitel 11.5): `product_count`, `shopping_count`, `empty_count`, `review_count`, `shopping: [{name, amount}]` (höchstens 100), `shopping_truncated`
+- **Summary** (Kapitel 11.5): `product_count`, `shopping_count`, `empty_count`, `review_count`, `shopping: [{name, missing, quantity, unit}]` (höchstens 100), `shopping_truncated`
 - **MqttStatus** (Kapitel 11.7): `status` (`disabled`, `connecting`, `connected`), `targets: [{id, name}]`, `target: {id, name}|null`
 - **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".
 - **Merge:**
@@ -497,11 +497,11 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
 - **`shopping.changed`:** Die Outbox ergänzt beim Schreiben die Daten aus der Fachlogik (`product_id`, `name`, `missing_before`, `missing_after`) um den Zustand des Produkts nach dem Commit:
   - `marked`: vorgemerkt;
   - `on_list`: steht auf der Einkaufsliste (`missing > 0` oder `marked`);
-  - `amount`: Menge als Text (siehe unten);
+  - `quantity` und `unit`: Menge zum Einkaufen (siehe unten);
   - `list`: Kennung der gewählten Zielliste oder `""` (11.7).
-  Gibt es das Produkt nicht mehr (gelöscht oder zusammengeführt), sind `marked` und `on_list` `false` und `amount` ist `""`.
-- **`amount`:** mit Fehlbestand und Kastengröße `"1 Kasten"` bzw. `"N Kästen"` (N = `missing` durch `crate_size`, aufgerundet, ADR-0017); mit Fehlbestand ohne Kastengröße `"N Stück"`; ohne Fehlbestand (nur vorgemerkt oder nicht auf der Liste) `""`.
-- **`shopping.snapshot`:** `data` = `{list, items: [{product_id, name, on_list, amount}]}` für alle Produkte mit `target > 0` oder `marked`, sortiert wie die Einkaufsliste (nach Name). Ausgelöst durch `<p>/in/snapshot` (mehrere Anfragen innerhalb von 2 s ergeben einen Snapshot), `POST /shopping-list/snapshot` und den Wechsel der Zielliste (11.7).
+  Gibt es das Produkt nicht mehr (gelöscht oder zusammengeführt), sind `marked` und `on_list` `false` und `quantity` ist 0.
+- **`quantity` und `unit`:** Mit Kastengröße ist `unit` `"crate"` und `quantity` = `missing` durch `crate_size`, aufgerundet (ADR-0017); sonst ist `unit` `"piece"` und `quantity` = `missing`. Ohne Fehlbestand ist `quantity` 0. Alle Texte und Werte in Nachrichten sind Englisch (ADR-0018); die deutsche Anzeige („1 Kasten", „3 Stück") entsteht erst in HA.
+- **`shopping.snapshot`:** `data` = `{list, items: [{product_id, name, on_list, missing, quantity, unit}]}` für alle Produkte mit `target > 0` oder `marked`, sortiert wie die Einkaufsliste (nach Name). Ausgelöst durch `<p>/in/snapshot` (mehrere Anfragen innerhalb von 2 s ergeben einen Snapshot), `POST /shopping-list/snapshot` und den Wechsel der Zielliste (11.7).
 - Beispiel `shopping.changed`:
 
   ```json
@@ -517,7 +517,8 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
       "missing_after": 17,
       "marked": false,
       "on_list": true,
-      "amount": "1 Kasten",
+      "quantity": 1,
+      "unit": "crate",
       "list": "todo.bring_zuhause"
     }
   }
@@ -532,7 +533,7 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
 
 ### 11.5 Zusammenfassung
 
-- `Summary`: `product_count` (alle Produkte), `shopping_count` (Einträge der Einkaufsliste), `empty_count` (Bestand 0, wie der Filter „Leer"), `review_count` (`needs_review`, wie „Prüfen"), `shopping` (die ersten 100 Einträge der Einkaufsliste als `{name, amount}`, `amount` wie in 11.3), `shopping_truncated` (mehr als 100 Einträge).
+- `Summary`: `product_count` (alle Produkte), `shopping_count` (Einträge der Einkaufsliste), `empty_count` (Bestand 0, wie der Filter „Leer"), `review_count` (`needs_review`, wie „Prüfen"), `shopping` (die ersten 100 Einträge der Einkaufsliste als `{name, missing, quantity, unit}`, `quantity` und `unit` wie in 11.3), `shopping_truncated` (mehr als 100 Einträge).
 - `GET /summary` liefert sie immer, auch ohne MQTT.
 - Mit MQTT publiziert StashBert sie retained mit QoS 1 auf `<p>/state/summary`: nach jeder Verbindung, nach der Birth-Nachricht von HA und 1 s nach dem letzten von mehreren schnell aufeinander folgenden Ereignissen. Sie geht nicht über die Outbox; ohne Verbindung wird sie übersprungen und nach dem nächsten Verbinden gesendet.
 
@@ -544,32 +545,33 @@ Nur als Orientierung; nichts davon wird in M1 vorbereitet, außer den Leitplanke
 
   ```json
   {
-    "dev": {"ids": ["<p>"], "name": "StashBert", "mf": "StashBert", "mdl": "Vorratsinventar", "sw": "<v>"},
+    "dev": {"ids": ["<p>"], "name": "StashBert", "mf": "StashBert", "mdl": "Pantry inventory", "sw": "<v>"},
     "o": {"name": "StashBert", "sw": "<v>", "url": "https://github.com/schmitz-chris/stashbert"},
     "avty_t": "<p>/status",
     "qos": 1,
     "cmps": {
-      "shopping": {"p": "sensor", "uniq_id": "<p>_shopping", "def_ent_id": "sensor.<p>_shopping", "name": "Einkauf", "ic": "mdi:cart", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.shopping_count }}", "stat_cla": "measurement", "json_attr_t": "<p>/state/summary", "json_attr_tpl": "{{ {'items': value_json.shopping, 'truncated': value_json.shopping_truncated} | tojson }}"},
-      "empty": {"p": "sensor", "uniq_id": "<p>_empty", "def_ent_id": "sensor.<p>_empty", "name": "Leer", "ic": "mdi:package-variant", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.empty_count }}", "stat_cla": "measurement"},
-      "review": {"p": "sensor", "uniq_id": "<p>_review", "def_ent_id": "sensor.<p>_review", "name": "Zu prüfen", "ic": "mdi:clipboard-alert-outline", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.review_count }}", "stat_cla": "measurement"},
-      "products": {"p": "sensor", "uniq_id": "<p>_products", "def_ent_id": "sensor.<p>_products", "name": "Produkte", "ic": "mdi:archive", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.product_count }}", "stat_cla": "measurement"},
-      "stock": {"p": "event", "uniq_id": "<p>_stock", "def_ent_id": "event.<p>_stock", "name": "Buchung", "ic": "mdi:barcode-scan", "stat_t": "<p>/events/+", "evt_typ": ["stock.added", "stock.consumed", "stock.adjusted"], "val_tpl": "{% if value_json.type in ['stock.added', 'stock.consumed', 'stock.adjusted'] %}{{ {'event_type': value_json.type, 'product_id': value_json.data.product_id, 'delta': value_json.data.delta, 'stock_after': value_json.data.stock_after} | tojson }}{% endif %}"},
-      "resend": {"p": "button", "uniq_id": "<p>_resend", "def_ent_id": "button.<p>_resend", "name": "Einkaufsliste neu senden", "ic": "mdi:send", "ent_cat": "config", "cmd_t": "<p>/in/snapshot", "pl_prs": "{}"}
+      "shopping": {"p": "sensor", "uniq_id": "<p>_shopping", "def_ent_id": "sensor.<p>_shopping", "name": "Shopping list", "ic": "mdi:cart", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.shopping_count }}", "stat_cla": "measurement", "json_attr_t": "<p>/state/summary", "json_attr_tpl": "{{ {'items': value_json.shopping, 'truncated': value_json.shopping_truncated} | tojson }}"},
+      "empty": {"p": "sensor", "uniq_id": "<p>_empty", "def_ent_id": "sensor.<p>_empty", "name": "Empty products", "ic": "mdi:package-variant", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.empty_count }}", "stat_cla": "measurement"},
+      "review": {"p": "sensor", "uniq_id": "<p>_review", "def_ent_id": "sensor.<p>_review", "name": "Products to review", "ic": "mdi:clipboard-alert-outline", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.review_count }}", "stat_cla": "measurement"},
+      "products": {"p": "sensor", "uniq_id": "<p>_products", "def_ent_id": "sensor.<p>_products", "name": "Products", "ic": "mdi:archive", "stat_t": "<p>/state/summary", "val_tpl": "{{ value_json.product_count }}", "stat_cla": "measurement"},
+      "stock": {"p": "event", "uniq_id": "<p>_stock", "def_ent_id": "event.<p>_stock", "name": "Stock change", "ic": "mdi:barcode-scan", "stat_t": "<p>/events/+", "evt_typ": ["stock.added", "stock.consumed", "stock.adjusted"], "val_tpl": "{% if value_json.type in ['stock.added', 'stock.consumed', 'stock.adjusted'] %}{{ {'event_type': value_json.type, 'product_id': value_json.data.product_id, 'delta': value_json.data.delta, 'stock_after': value_json.data.stock_after} | tojson }}{% endif %}"},
+      "resend": {"p": "button", "uniq_id": "<p>_resend", "def_ent_id": "button.<p>_resend", "name": "Resend shopping list", "ic": "mdi:send", "ent_cat": "config", "cmd_t": "<p>/in/snapshot", "pl_prs": "{}"}
     }
   }
   ```
 
+- Alle Namen und Modellangaben im Payload sind Englisch (ADR-0018); umbenennen kann man die Entitäten in HA.
 - Keine Entität pro Produkt. `object_id` gibt es seit HA 2026.4 nicht mehr und wird nicht gesendet.
 
 ### 11.7 Zielliste (A10)
 
 - **Angebot:** HA publiziert die verfügbaren Listen retained auf `<p>/in/targets` als JSON-Array `[{"id": "todo.bring_zuhause", "name": "Zuhause"}]`. Gültig sind höchstens 50 Einträge mit `id` von 1 bis 255 und `name` von 1 bis 100 Zeichen (nach Trimmen). Ein ungültiges Payload wird mit `warn` geloggt und ignoriert; das letzte gültige Angebot bleibt. Das Angebot liegt nur im Speicher.
 - **Wahl:** gespeichert in `settings` unter `shopping_target_id` und `shopping_target_name`. `PUT /integrations/mqtt/target` mit einer `id` aus dem aktuellen Angebot setzt sie (sonst `unknown_target`), `{id: null}` hebt sie auf; ohne MQTT antwortet der Endpunkt mit `mqtt_disabled`.
-- **Wechsel:** Hatte die alte Wahl eine Liste, geht zuerst ein `shopping.snapshot` für die alte Liste mit `on_list: false` und `amount: ""` für alle Einträge hinaus (die Automation räumt sie dort ab), danach einer für die neue Liste, wenn es eine gibt.
+- **Wechsel:** Hatte die alte Wahl eine Liste, geht zuerst ein `shopping.snapshot` für die alte Liste mit `on_list: false` und `quantity: 0` für alle Einträge hinaus (die Automation räumt sie dort ab), danach einer für die neue Liste, wenn es eine gibt.
 - `MqttStatus.target` ist die gespeicherte Wahl, auch wenn sie gerade nicht im Angebot ist.
 
 ### 11.8 HA-Seite (Blueprints)
 
-- `deploy/homeassistant/stashbert_einkauf_todo.yaml`: reagiert auf `<p>/events/shopping.changed` und `<p>/events/shopping.snapshot`; schreibt in `data.list` oder, wenn leer, in die im Blueprint gewählte Standardliste; legt an, ändert (`amount` als Beschreibung, wenn die Liste das kann) oder entfernt nach `on_list`; prüft vorher mit `todo.get_items`, damit keine doppelten Einträge entstehen; `mode: queued` mit `max: 50`.
+- `deploy/homeassistant/stashbert_einkauf_todo.yaml`: reagiert auf `<p>/events/shopping.changed` und `<p>/events/shopping.snapshot`; schreibt in `data.list` oder, wenn leer, in die im Blueprint gewählte Standardliste; legt an, ändert (die Menge als deutsche Beschreibung wie „3 Stück" oder „1 Kasten", gebildet aus `quantity` und `unit` mit Einheitennamen als Blueprint-Eingaben, wenn die Liste Beschreibungen kann) oder entfernt nach `on_list`; prüft vorher mit `todo.get_items`, damit keine doppelten Einträge entstehen; `mode: queued` mit `max: 50`.
 - `deploy/homeassistant/stashbert_listen_melden.yaml`: publiziert beim Start von HA und stündlich die `todo`-Entitäten einer wählbaren Integration (Standard `bring`) retained auf `<p>/in/targets`.
 - `docs/home-assistant.md` beschreibt Einrichtung, ACL, Import der Blueprints und Fehlersuche.

@@ -1567,7 +1567,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
-Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.
+Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.
 
 ### B34: MQTT-Konfiguration und Verbindung
 
@@ -1591,13 +1591,13 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 - **Referenzen:** ADR-0018; architecture.md 11.3, 11.4, 6.6
 - **Umfang:**
   - Migration `0005_outbox.sql` und sqlc-Queries für die Tabelle `outbox` (11.4).
-  - Reine Funktion für `amount` (11.3) in `internal/domain`, damit die Zusammenfassung sie wiederverwendet.
+  - Reine Funktion für `quantity` und `unit` (11.3) in `internal/domain`, damit die Zusammenfassung sie wiederverwendet.
   - `outbox.Writer` als `events.Publisher`: ergänzt `shopping.changed` nach 11.3 (liest Produkt und die Einstellung `shopping_target_id`; fehlt sie, ist `list` `""`), schreibt die Zeile, weckt den Zusteller.
   - Zusteller nach 11.4 (Reihenfolge, Löschen nach PUBACK, Backoff, Aufräumen nach 7 Tagen) über ein Interface, das `internal/mqtt` erfüllt.
   - `main.go`: mit `MQTT_URL` ist der Publisher der Writer, und der Zusteller läuft; sonst bleibt `events.Nop`.
 - **Nicht im Umfang:** neue Ereignisauslöser, `shopping.snapshot`, Zusammenfassung, Discovery.
 - **Abnahmekriterien:**
-  1. Tests: `amount` (Stück, Kasten, Kästen, ohne Fehlbestand); Anreicherung von `shopping.changed` (vorhandenes, gelöschtes Produkt, mit Kastengröße, mit gespeicherter Zielliste); Reihenfolge; Löschen nach Erfolg; Behalten und erneuter Versuch nach Fehler; Aufräumen alter Einträge.
+  1. Tests: `quantity` und `unit` (ohne Kastengröße, mit Kastengröße aufgerundet, ohne Fehlbestand); Anreicherung von `shopping.changed` (vorhandenes, gelöschtes Produkt, mit Kastengröße, mit gespeicherter Zielliste); Reihenfolge; Löschen nach Erfolg; Behalten und erneuter Versuch nach Fehler; Aufräumen alter Einträge.
   2. Ende-zu-Ende-Test mit `mochi-mqtt`: eine Buchung über die HTTP-API erscheint als `<p>/events/stock.added` mit dem JSON aus 11.3.
   3. `make check` ist grün.
 
@@ -1624,7 +1624,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
   - Retained Veröffentlichung auf `<p>/state/summary` nach jeder Verbindung und 1 s nach dem letzten von schnell aufeinander folgenden Ereignissen (der Writer meldet Ereignisse); ohne Verbindung überspringen.
 - **Nicht im Umfang:** Discovery und die Reaktion auf die Birth-Nachricht von HA (B38).
 - **Abnahmekriterien:**
-  1. Tests: Zählungen (Einkauf mit Vormerkungen, leer, zu prüfen, alle), `amount` in `shopping`, Begrenzung auf 100 mit `shopping_truncated`; mehrere Ereignisse ergeben eine Veröffentlichung; Veröffentlichung nach dem Verbinden (mit `mochi-mqtt`).
+  1. Tests: Zählungen (Einkauf mit Vormerkungen, leer, zu prüfen, alle), `quantity` und `unit` in `shopping`, Begrenzung auf 100 mit `shopping_truncated`; mehrere Ereignisse ergeben eine Veröffentlichung; Veröffentlichung nach dem Verbinden (mit `mochi-mqtt`).
   2. `make check` ist grün.
 
 ### B38: HA-Discovery
