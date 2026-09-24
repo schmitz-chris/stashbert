@@ -1367,7 +1367,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F19: Farbrollen, Kontrast und Druckzustand
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** F18
 - **Referenzen:** ADR-0016; hig-pruefung.md H3, M2, M7, N8
 - **Umfang:**

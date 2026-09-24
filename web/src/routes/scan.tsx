@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useReducer, useState } from "react";
 import { CameraSettings } from "../components/CameraSettings";
 import { Dialog } from "../components/Dialog";
+import { FeedbackSymbol } from "../components/FeedbackSymbol";
 import { ManualCodeDialog } from "../components/ManualCodeDialog";
 import { MergeDialog } from "../components/MergeDialog";
 import { MarkResultCard, ResultCard } from "../components/ResultCard";
@@ -19,6 +20,7 @@ import { hiddenCard, resultCardReducer } from "../lib/resultCard";
 import {
   cameraErrorText,
   feedbackFor,
+  feedbackIcon,
   loadScanMode,
   saveScanMode,
   undoFeedbackFor,
@@ -39,25 +41,25 @@ const messageDuration = 2000;
 const cardTickInterval = 200;
 
 const modes: { mode: ScanMode; label: string; active: string }[] = [
-  { mode: "add", label: "Einlagern", active: "bg-emerald-600 text-white" },
-  { mode: "consume", label: "Entnehmen", active: "bg-sky-600 text-white" },
-  { mode: "mark", label: "Einkaufen", active: "bg-amber-700 text-white" },
+  { mode: "add", label: "Einlagern", active: "bg-accent text-white" },
+  { mode: "consume", label: "Entnehmen", active: "bg-consume text-white" },
+  { mode: "mark", label: "Einkaufen", active: "bg-marked text-white" },
 ];
 
 const flashClass: Record<FeedbackColor, string> = {
-  green: "bg-emerald-500/70",
-  blue: "bg-sky-500/70",
-  orange: "bg-amber-600/70",
-  yellow: "bg-amber-400/70",
-  red: "bg-red-600/70",
+  green: "bg-accent/70",
+  blue: "bg-consume/70",
+  orange: "bg-marked/70",
+  yellow: "bg-warning/70",
+  red: "bg-danger/70",
 };
 
 const messageClass: Record<FeedbackColor, string> = {
-  green: "bg-emerald-600 text-white",
-  blue: "bg-sky-600 text-white",
-  orange: "bg-amber-700 text-white",
-  yellow: "bg-amber-400 text-stone-900",
-  red: "bg-red-600 text-white",
+  green: "bg-accent text-white",
+  blue: "bg-consume text-white",
+  orange: "bg-marked text-white",
+  yellow: "bg-warning text-ink",
+  red: "bg-danger text-white",
 };
 
 // The strip the decoder reads (ROI), over the camera image.
@@ -263,7 +265,7 @@ export function ScanPage() {
             type="button"
             aria-pressed={mode === value}
             onClick={() => chooseMode(value)}
-            className={`min-h-14 rounded-xl text-lg font-semibold ${mode === value ? active : "bg-stone-200 text-stone-700"}`}
+            className={`pressable min-h-14 rounded-xl text-lg font-semibold ${mode === value ? active : "bg-fill text-ink-secondary"}`}
           >
             {label}
           </button>
@@ -306,7 +308,7 @@ export function ScanPage() {
           <button
             type="button"
             onClick={restart}
-            className="absolute inset-0 p-4 text-xl font-semibold text-white"
+            className="pressable absolute inset-0 p-4 text-xl font-semibold text-white"
           >
             Tippen zum Fortsetzen
           </button>
@@ -317,7 +319,7 @@ export function ScanPage() {
             <button
               type="button"
               onClick={restart}
-              className="min-h-11 rounded-lg bg-white px-4 font-medium text-stone-900"
+              className="pressable min-h-11 rounded-lg bg-surface px-4 font-medium text-ink"
             >
               Erneut versuchen
             </button>
@@ -328,7 +330,7 @@ export function ScanPage() {
           type="button"
           aria-label="Kamera-Einstellungen"
           onClick={() => setSettingsOpen(true)}
-          className="absolute top-2 right-2 flex size-12 items-center justify-center rounded-full bg-black/60 text-white shadow-md ring-1 ring-white/40"
+          className="pressable absolute top-2 right-2 flex size-12 items-center justify-center rounded-full bg-black/60 text-white shadow-md ring-1 ring-white/40"
         >
           <GearIcon />
         </button>
@@ -336,15 +338,16 @@ export function ScanPage() {
       <button
         type="button"
         onClick={openManual}
-        className="min-h-11 self-center rounded-lg border border-stone-300 bg-white px-4 font-medium text-stone-700"
+        className="pressable min-h-11 self-center rounded-lg border border-line-strong bg-surface px-4 font-medium text-ink-secondary"
       >
         Code eintippen
       </button>
 
       <p
         role="status"
-        className={`flex min-h-16 items-center justify-center rounded-xl px-3 text-center text-2xl font-bold ${shown ? messageClass[shown.feedback.color] : ""}`}
+        className={`flex min-h-16 items-center justify-center gap-2 rounded-xl px-3 text-center text-2xl font-bold ${shown ? messageClass[shown.feedback.color] : ""}`}
       >
+        {shown && <FeedbackSymbol icon={feedbackIcon(shown.feedback)} />}
         {shown?.feedback.text}
       </p>
       {content?.kind === "mark" && (
@@ -366,7 +369,7 @@ export function ScanPage() {
         />
       )}
       {!soundReady && (
-        <button type="button" className="min-h-11 text-sm text-stone-500">
+        <button type="button" className="pressable min-h-11 rounded-lg text-sm text-ink-tertiary">
           Für Ton einmal tippen
         </button>
       )}
@@ -392,7 +395,7 @@ export function ScanPage() {
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
-            className="min-h-11 rounded-lg bg-emerald-600 px-4 font-medium text-white"
+            className="pressable min-h-11 rounded-lg bg-accent px-4 font-medium text-white"
           >
             Fertig
           </button>

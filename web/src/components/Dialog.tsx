@@ -38,7 +38,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
           onClose();
         }
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl bg-white p-5 text-stone-900 shadow-xl backdrop:bg-stone-900/40"
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl bg-surface p-5 text-ink shadow-xl backdrop:bg-ink/40"
     >
       <h2 id={titleId} className="text-lg font-semibold">
         {title}

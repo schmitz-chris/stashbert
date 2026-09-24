@@ -12,7 +12,7 @@ interface Notice {
   failed: boolean;
 }
 
-const buttonClass = "min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
 
 /**
  * Shows whether product is marked for shopping (ADR-0015): marked, the
@@ -60,12 +60,12 @@ export function ShoppingListSection({ product }: { product: Product }) {
       </h2>
       {product.marked ? (
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <p className="font-medium text-amber-700">vorgemerkt</p>
+          <p className="font-medium text-marked">vorgemerkt</p>
           <button
             type="button"
             disabled={pending}
             onClick={unmarkProduct}
-            className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
           >
             Von der Liste nehmen
           </button>
@@ -75,14 +75,14 @@ export function ShoppingListSection({ product }: { product: Product }) {
           type="button"
           disabled={pending}
           onClick={markProduct}
-          className={`mt-2 bg-amber-700 text-white ${buttonClass}`}
+          className={`mt-2 bg-marked text-white ${buttonClass}`}
         >
           Vormerken
         </button>
       )}
       <p
         role="status"
-        className={`mt-1 text-sm font-medium ${notice?.failed ? "text-red-700" : "text-amber-700"}`}
+        className={`mt-1 text-sm font-medium ${notice?.failed ? "text-danger" : "text-marked"}`}
       >
         {notice?.text}
       </p>

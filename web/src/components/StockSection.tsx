@@ -37,7 +37,7 @@ export function StockSection({ product }: { product: Product }) {
       <h2 id={headingId} className="text-lg font-semibold">
         Bestand
       </h2>
-      <p className="mt-2 text-stone-700">
+      <p className="mt-2 text-ink-secondary">
         Aktuell: <span className="font-semibold tabular-nums">{product.stock}</span>
       </p>
       <form
@@ -52,7 +52,7 @@ export function StockSection({ product }: { product: Product }) {
         }}
         className="mt-4"
       >
-        <label htmlFor={inputId} className="block text-sm font-medium text-stone-700">
+        <label htmlFor={inputId} className="block text-sm font-medium text-ink-secondary">
           Neuer Bestand
         </label>
         <div className="mt-1 flex gap-2">
@@ -71,19 +71,19 @@ export function StockSection({ product }: { product: Product }) {
                 inventory.reset();
               }
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base"
           />
           <button
             type="submit"
             disabled={stock.trim() === "" || inventory.isPending}
-            className="min-h-11 shrink-0 rounded-lg bg-emerald-600 px-4 font-medium text-white disabled:opacity-40"
+            className="pressable min-h-11 shrink-0 rounded-lg bg-accent px-4 font-medium text-white disabled:opacity-40"
           >
             Bestand setzen
           </button>
         </div>
         <p
           role="status"
-          className={`mt-1 text-sm font-medium ${inventory.isError ? "text-red-700" : "text-emerald-700"}`}
+          className={`mt-1 text-sm font-medium ${inventory.isError ? "text-danger" : "text-accent"}`}
         >
           {notice}
         </p>

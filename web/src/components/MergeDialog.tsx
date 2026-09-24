@@ -4,8 +4,8 @@ import { productListQuery, productMergeMutation } from "../lib/api/queries";
 import { mergeCandidates, type Product } from "../lib/products";
 import { Dialog } from "./Dialog";
 
-const buttonClass = "min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
-const cancelClass = `border border-stone-300 bg-white text-stone-700 ${buttonClass}`;
+const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+const cancelClass = `border border-line-strong bg-surface text-ink-secondary ${buttonClass}`;
 
 interface MergeDialogProps {
   /** The product to merge; the dialog is open while it is not null. */
@@ -56,12 +56,12 @@ export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
       )}
       {source !== null && target !== null && (
         <>
-          <p className="mt-2 text-stone-700">
+          <p className="mt-2 text-ink-secondary">
             „{source.name}“ in „{target.name}“ zusammenführen? Barcodes,
             Verlauf und Bestand gehen auf „{target.name}“ über, „
             {source.name}“ wird gelöscht.
           </p>
-          <p role="status" className="mt-2 text-sm font-medium text-red-700">
+          <p role="status" className="mt-2 text-sm font-medium text-danger">
             {merge.isError ? "Zusammenführen fehlgeschlagen" : ""}
           </p>
           <div className="mt-4 flex justify-end gap-3">
@@ -72,7 +72,7 @@ export function MergeDialog({ source, onClose, onMerged }: MergeDialogProps) {
               type="button"
               disabled={merge.isPending}
               onClick={() => confirm(source, target)}
-              className={`bg-red-600 text-white ${buttonClass}`}
+              className={`bg-danger text-white ${buttonClass}`}
             >
               Zusammenführen
             </button>
@@ -97,26 +97,26 @@ function MergePicker({
   const products = useQuery(productListQuery);
   const [query, setQuery] = useState("");
 
-  let content = <p className="mt-3 text-stone-500">Produkte werden geladen …</p>;
+  let content = <p className="mt-3 text-ink-tertiary">Produkte werden geladen …</p>;
   if (products.data !== undefined) {
     const candidates = mergeCandidates(products.data, ownId, query);
     content =
       candidates.length === 0 ? (
-        <p className="mt-3 text-stone-500">Keine Treffer.</p>
+        <p className="mt-3 text-ink-tertiary">Keine Treffer.</p>
       ) : (
-        <ul className="mt-3 max-h-[50dvh] divide-y divide-stone-200 overflow-y-auto rounded-xl border border-stone-200">
+        <ul className="mt-3 max-h-[50dvh] divide-y divide-line overflow-y-auto rounded-xl border border-line">
           {candidates.map((candidate) => (
             <li key={candidate.id}>
               <button
                 type="button"
                 onClick={() => onPick(candidate)}
-                className="min-h-11 w-full px-3 py-2 text-left"
+                className="pressable min-h-11 w-full px-3 py-2 text-left"
               >
                 <span className="block font-medium break-words hyphens-auto">
                   {candidate.name}
                 </span>
                 {candidate.brand !== null && (
-                  <span className="block text-sm break-words text-stone-500">
+                  <span className="block text-sm break-words text-ink-tertiary">
                     {candidate.brand}
                   </span>
                 )}
@@ -127,7 +127,7 @@ function MergePicker({
       );
   } else if (products.isError && !products.isFetching) {
     content = (
-      <p className="mt-3 text-stone-700">
+      <p className="mt-3 text-ink-secondary">
         Die Produkte konnten nicht geladen werden.
       </p>
     );
@@ -141,7 +141,7 @@ function MergePicker({
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Name oder Marke suchen"
         aria-label="Zielprodukt suchen"
-        className="mt-3 min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base"
+        className="mt-3 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base"
       />
       {content}
       <div className="mt-4 flex justify-end">

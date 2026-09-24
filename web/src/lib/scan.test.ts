@@ -3,6 +3,7 @@ import type { Product } from "./products";
 import {
   cameraErrorText,
   feedbackFor,
+  feedbackIcon,
   loadScanMode,
   saveScanMode,
   undoFeedbackFor,
@@ -292,6 +293,44 @@ describe("undoFeedbackFor", () => {
       sound: "error",
       text,
     });
+  });
+});
+
+describe("feedbackIcon", () => {
+  const marked: MarkResult = {
+    product: { ...product, marked: true },
+    product_created: false,
+    already_listed: false,
+    message: "Vorgemerkt: Kidneybohnen",
+  };
+
+  it.each([
+    ["a booking in add mode", "check", feedbackFor({ ok: true, mode: "add", result: result("add") })],
+    ["a booking in consume mode", "check", feedbackFor({ ok: true, mode: "consume", result: result("consume") })],
+    ["a mark", "cart", feedbackFor({ ok: true, mode: "mark", result: marked })],
+    [
+      "a booking with a warning",
+      "warning",
+      feedbackFor({ ok: true, mode: "consume", result: result("consume", { warnings: ["clamped_to_zero"] }) }),
+    ],
+    ["an empty stock", "warning", feedbackFor({ ok: false, error: problem(409, "stock_already_zero") })],
+    ["an undone booking", "warning", undoFeedbackFor({ ok: true, result: result("consume") })],
+    ["an undone mark", "warning", unmarkFeedbackFor({ ok: true, product })],
+    ["an unknown barcode", "cross", feedbackFor({ ok: false, error: problem(404, "unknown_barcode") })],
+    ["a failed mark", "cross", feedbackFor({ ok: false, error: new TypeError("Failed to fetch"), mode: "mark" })],
+    ["a failed undo", "cross", undoFeedbackFor({ ok: false, error: problem(409, "already_reversed") })],
+  ] as const)("shows %s with the symbol %s", (_, icon, feedback) => {
+    expect(feedbackIcon(feedback)).toBe(icon);
+  });
+
+  it.each([
+    ["green", "check"],
+    ["blue", "check"],
+    ["orange", "cart"],
+    ["yellow", "warning"],
+    ["red", "cross"],
+  ] as const)("gives the color %s the symbol %s", (color, icon) => {
+    expect(feedbackIcon({ color, sound: "add", text: "" })).toBe(icon);
   });
 });
 

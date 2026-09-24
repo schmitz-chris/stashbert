@@ -4,16 +4,16 @@ import { unlockSound } from "../lib/sound";
 
 function sideLinkClass({ isActive }: NavLinkRenderProps) {
   const state = isActive
-    ? "bg-emerald-50 font-semibold text-emerald-700"
-    : "font-medium text-stone-500";
-  return `flex min-h-12 min-w-20 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-1 text-xs ${state}`;
+    ? "bg-accent-soft font-semibold text-accent"
+    : "font-medium text-ink-tertiary";
+  return `pressable flex min-h-12 min-w-20 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-1 text-xs ${state}`;
 }
 
 function scanLinkClass({ isActive }: NavLinkRenderProps) {
   const state = isActive
-    ? "bg-emerald-700 ring-4 ring-emerald-200"
-    : "bg-emerald-600";
-  return `flex size-16 -translate-y-3 flex-col items-center justify-center gap-0.5 rounded-full text-xs font-semibold text-white shadow-md ${state}`;
+    ? "bg-accent-strong ring-4 ring-accent/30"
+    : "bg-accent";
+  return `pressable flex size-16 -translate-y-3 flex-col items-center justify-center gap-0.5 rounded-full text-xs font-semibold text-white shadow-md ${state}`;
 }
 
 /** The bottom navigation bar of the views Vorrat, Scan and Einkauf. */
@@ -21,7 +21,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Hauptnavigation"
-      className="sticky bottom-0 z-20 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]"
+      className="sticky bottom-0 z-20 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="mx-auto grid h-16 max-w-md grid-cols-3 items-center">
         <li className="flex justify-center">

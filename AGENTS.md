@@ -198,6 +198,8 @@ web/src/lib/*.ts               reine Funktionen mit *.test.ts daneben
 - Keine Komponentenbibliothek. Tailwind-Klassen direkt im JSX.
 - Dialoge mit dem nativen `<dialog>` (`showModal()`), gekapselt in `components/Dialog.tsx`. Nie `window.confirm`, `alert` oder `prompt`.
 - Safe-Area-Abstände über `env(safe-area-inset-*)`.
+- Farben nur über die Rollen aus `src/index.css` (`@theme`, z. B. `bg-accent`, `text-danger`, `border-line-strong`), keine Palettenfarben wie `emerald-600` oder `stone-300` direkt. Ausgenommen sind Weiß auf Farbflächen und Schwarz oder Weiß über dem Kamerabild. Jede Rolle hat genau eine Bedeutung (ADR-0016).
+- Alles Tippbare bekommt den gemeinsamen Druckzustand aus `src/index.css`: `pressable` für Knöpfe und Links, `pressable-row` für Zeilen, die ein Link mit `::after` abdeckt.
 
 **Kamera** (bewährt im Test auf iPhone 15 und 16 Pro):
 

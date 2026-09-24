@@ -23,10 +23,10 @@ import { sourceNote } from "../lib/sourceNote";
 // How long the confirmation "Gespeichert" stays visible.
 const noticeDuration = 2000;
 
-const labelClass = "block text-sm font-medium text-stone-700";
+const labelClass = "block text-sm font-medium text-ink-secondary";
 const inputClass =
-  "mt-1 min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base aria-[invalid=true]:border-red-600";
-const buttonClass = "min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+  "mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base aria-[invalid=true]:border-danger";
+const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
 const sourceText = "Daten und Bild: Open Food Facts (ODbL / CC BY-SA 3.0)";
 
 export function ProductPage() {
@@ -37,7 +37,7 @@ export function ProductPage() {
   // no page of the app to go back to (reload, start of the installed app).
   const canGoBack = useLocation().key !== "default";
 
-  let content = <p className="mt-4 text-stone-500">Produkt wird geladen …</p>;
+  let content = <p className="mt-4 text-ink-tertiary">Produkt wird geladen …</p>;
   if (product.data !== undefined) {
     content = <ProductEditor key={product.data.id} product={product.data} />;
   } else if (problemCode(product.error) === "not_found") {
@@ -46,7 +46,7 @@ export function ProductPage() {
         <h1 className="mt-4 text-2xl font-semibold">Produkt nicht gefunden</h1>
         <Link
           to="/vorrat"
-          className="mt-6 inline-flex min-h-11 items-center rounded-lg bg-emerald-600 px-4 font-medium text-white"
+          className="pressable mt-6 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 font-medium text-white"
         >
           Zum Vorrat
         </Link>
@@ -55,11 +55,11 @@ export function ProductPage() {
   } else if (product.isError && !product.isFetching) {
     content = (
       <div className="mt-4">
-        <p className="text-stone-700">Das Produkt konnte nicht geladen werden.</p>
+        <p className="text-ink-secondary">Das Produkt konnte nicht geladen werden.</p>
         <button
           type="button"
           onClick={() => void product.refetch()}
-          className={`mt-3 bg-emerald-600 text-white ${buttonClass}`}
+          className={`mt-3 bg-accent text-white ${buttonClass}`}
         >
           Erneut versuchen
         </button>
@@ -78,7 +78,7 @@ export function ProductPage() {
             void navigate(-1);
           }
         }}
-        className="-ml-2 inline-flex min-h-11 items-center px-2 font-medium text-emerald-700"
+        className="pressable -ml-2 inline-flex min-h-11 items-center rounded-lg px-2 font-medium text-accent"
       >
         <span aria-hidden="true">‹&nbsp;</span>Zurück
       </Link>
@@ -162,20 +162,20 @@ function ProductEditor({ product }: { product: Product }) {
         {product.name}
       </h1>
       {product.needs_review && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
-          <p className="w-full text-amber-900">Bitte die Angaben prüfen.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-warning bg-warning-soft p-3">
+          <p className="w-full text-ink">Bitte die Angaben prüfen.</p>
           <button
             type="button"
             disabled={review.isPending}
             onClick={() =>
               review.mutate({ id: product.id, patch: { name: product.name } })
             }
-            className={`border border-amber-400 bg-white text-amber-900 ${buttonClass}`}
+            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
           >
             Passt so
           </button>
           <MergeSection product={product} />
-          <p role="status" className="text-sm font-medium text-red-700">
+          <p role="status" className="text-sm font-medium text-danger">
             {review.isError ? "Speichern fehlgeschlagen" : ""}
           </p>
         </div>
@@ -197,7 +197,7 @@ function ProductEditor({ product }: { product: Product }) {
           />
         </label>
         {nameMissing && (
-          <p id="product-name-hint" className="-mt-3 text-sm text-red-700">
+          <p id="product-name-hint" className="-mt-3 text-sm text-danger">
             Bitte einen Namen eingeben.
           </p>
         )}
@@ -229,13 +229,13 @@ function ProductEditor({ product }: { product: Product }) {
           <button
             type="submit"
             disabled={!changed || update.isPending}
-            className={`bg-emerald-600 text-white ${buttonClass}`}
+            className={`bg-accent text-white ${buttonClass}`}
           >
             Speichern
           </button>
           <p
             role="status"
-            className={`text-sm font-medium ${update.isError ? "text-red-700" : "text-emerald-700"}`}
+            className={`text-sm font-medium ${update.isError ? "text-danger" : "text-accent"}`}
           >
             {notice}
           </p>
@@ -246,7 +246,7 @@ function ProductEditor({ product }: { product: Product }) {
       <ShoppingListSection product={product} />
       <MovementHistory productId={product.id} />
       {source !== null && (
-        <p className="mt-6 text-sm text-stone-500">
+        <p className="mt-6 text-sm text-ink-tertiary">
           {source.link === null ? (
             sourceText
           ) : (
@@ -254,7 +254,7 @@ function ProductEditor({ product }: { product: Product }) {
               href={source.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center underline"
+              className="pressable inline-flex min-h-11 items-center rounded-lg underline"
             >
               {sourceText}
             </a>
@@ -267,7 +267,7 @@ function ProductEditor({ product }: { product: Product }) {
           remove.reset();
           setConfirmOpen(true);
         }}
-        className={`mt-8 w-full border border-red-300 bg-white text-red-700 ${buttonClass}`}
+        className={`mt-8 w-full border border-danger bg-surface text-danger ${buttonClass}`}
       >
         Produkt löschen
       </button>
@@ -276,17 +276,17 @@ function ProductEditor({ product }: { product: Product }) {
         onClose={() => setConfirmOpen(false)}
         title="Produkt löschen?"
       >
-        <p className="mt-2 text-stone-700">
+        <p className="mt-2 text-ink-secondary">
           „{product.name}“ wird mit seinen Barcodes und Buchungen gelöscht.
         </p>
-        <p role="status" className="mt-2 text-sm font-medium text-red-700">
+        <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Löschen fehlgeschlagen" : ""}
         </p>
         <div className="mt-4 flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setConfirmOpen(false)}
-            className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
           >
             Abbrechen
           </button>
@@ -298,7 +298,7 @@ function ProductEditor({ product }: { product: Product }) {
                 onSuccess: () => void navigate("/vorrat", { replace: true }),
               })
             }
-            className={`bg-red-600 text-white ${buttonClass}`}
+            className={`bg-danger text-white ${buttonClass}`}
           >
             Löschen
           </button>
@@ -380,9 +380,9 @@ function BarcodeSection({ product }: { product: Product }) {
         Barcodes
       </h2>
       {product.barcodes.length === 0 ? (
-        <p className="mt-2 text-stone-500">Noch keine Barcodes.</p>
+        <p className="mt-2 text-ink-tertiary">Noch keine Barcodes.</p>
       ) : (
-        <ul className="mt-2 divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+        <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {product.barcodes.map((barcode) => (
             <li
               key={barcode.code}
@@ -396,7 +396,7 @@ function BarcodeSection({ product }: { product: Product }) {
                   setRemoving(barcode.code);
                 }}
                 aria-label={`Barcode ${barcode.code} entfernen`}
-                className="min-h-11 min-w-11 shrink-0 px-3 font-medium text-red-700"
+                className="pressable min-h-11 min-w-11 shrink-0 px-3 font-medium text-danger"
               >
                 Entfernen
               </button>
@@ -429,12 +429,12 @@ function BarcodeSection({ product }: { product: Product }) {
             autoComplete="off"
             aria-invalid={codeRejected}
             aria-describedby={hint !== "" ? hintId : undefined}
-            className="min-h-11 min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono text-base aria-[invalid=true]:border-red-600"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
           />
           <button
             type="submit"
             disabled={code.trim() === "" || add.isPending}
-            className={`shrink-0 bg-emerald-600 text-white ${buttonClass}`}
+            className={`shrink-0 bg-accent text-white ${buttonClass}`}
           >
             Hinzufügen
           </button>
@@ -442,7 +442,7 @@ function BarcodeSection({ product }: { product: Product }) {
         <p
           id={hintId}
           role="status"
-          className="mt-1 text-sm font-medium text-red-700"
+          className="mt-1 text-sm font-medium text-danger"
         >
           {hint}
         </p>
@@ -452,11 +452,11 @@ function BarcodeSection({ product }: { product: Product }) {
         onClose={() => setRemoving(null)}
         title="Barcode entfernen?"
       >
-        <p className="mt-2 text-stone-700">
+        <p className="mt-2 text-ink-secondary">
           Der Barcode <span className="font-mono">{removing}</span> gehört dann
           nicht mehr zu „{product.name}“.
         </p>
-        <p role="status" className="mt-2 text-sm font-medium text-red-700">
+        <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError && problemCode(remove.error) !== "not_found"
             ? "Entfernen fehlgeschlagen"
             : ""}
@@ -465,7 +465,7 @@ function BarcodeSection({ product }: { product: Product }) {
           <button
             type="button"
             onClick={() => setRemoving(null)}
-            className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
           >
             Abbrechen
           </button>
@@ -477,7 +477,7 @@ function BarcodeSection({ product }: { product: Product }) {
                 confirmRemove(removing);
               }
             }}
-            className={`bg-red-600 text-white ${buttonClass}`}
+            className={`bg-danger text-white ${buttonClass}`}
           >
             Entfernen
           </button>

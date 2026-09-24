@@ -35,7 +35,7 @@ export function TorchButton({ track }: TorchButtonProps) {
       aria-label="Licht"
       aria-pressed={on}
       onClick={() => toggle(track)}
-      className={`absolute bottom-2 left-2 flex size-12 items-center justify-center rounded-full shadow-md ${on ? "bg-amber-400 text-stone-900" : "bg-black/60 text-white ring-1 ring-white/40"}`}
+      className={`pressable absolute bottom-2 left-2 flex size-12 items-center justify-center rounded-full shadow-md ${on ? "bg-surface text-ink" : "bg-black/60 text-white ring-1 ring-white/40"}`}
     >
       <svg
         aria-hidden="true"

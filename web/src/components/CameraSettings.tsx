@@ -24,13 +24,13 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
   const zoomId = useId();
 
   if (track === null) {
-    return <p className="mt-2 text-stone-700">Die Kamera läuft gerade nicht.</p>;
+    return <p className="mt-2 text-ink-secondary">Die Kamera läuft gerade nicht.</p>;
   }
   const range = zoomRange(track);
   const zoomValue = zoom?.track === track ? zoom.value : (currentZoom(track) ?? range?.min);
 
   if (cameras.length < 2 && range === null) {
-    return <p className="mt-2 text-stone-700">Diese Kamera hat keine Einstellungen.</p>;
+    return <p className="mt-2 text-ink-secondary">Diese Kamera hat keine Einstellungen.</p>;
   }
 
   function changeZoom(value: number) {
@@ -45,14 +45,14 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
     <div className="mt-3 flex flex-col gap-4">
       {cameras.length > 1 && (
         <div>
-          <label htmlFor={cameraId} className="block text-sm font-medium text-stone-700">
+          <label htmlFor={cameraId} className="block text-sm font-medium text-ink-secondary">
             Kamera
           </label>
           <select
             id={cameraId}
             value={track.getSettings().deviceId}
             onChange={(event) => onSelectCamera(event.target.value)}
-            className="mt-1 min-h-11 w-full rounded-lg border border-stone-300 bg-white px-2 text-base"
+            className="mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-2 text-base"
           >
             {cameras.map((camera) => (
               <option key={camera.deviceId} value={camera.deviceId}>
@@ -64,7 +64,7 @@ export function CameraSettings({ track, cameras, onSelectCamera }: CameraSetting
       )}
       {range !== null && zoomValue !== undefined && (
         <div>
-          <label htmlFor={zoomId} className="block text-sm font-medium text-stone-700">
+          <label htmlFor={zoomId} className="block text-sm font-medium text-ink-secondary">
             Zoom <span className="tabular-nums">{zoomValue.toFixed(1)}×</span>
           </label>
           <input

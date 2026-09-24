@@ -20,7 +20,7 @@ export function UpdateBanner() {
       <button
         type="button"
         onClick={() => void updateServiceWorker(true)}
-        className="min-h-12 w-full bg-green-700 px-4 py-2 font-medium text-white"
+        className="pressable min-h-12 w-full bg-accent px-4 py-2 font-medium text-white"
       >
         Neue Version verfügbar, tippen zum Aktualisieren
       </button>

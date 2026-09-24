@@ -30,19 +30,19 @@ export function ShoppingPage() {
         {list.data === undefined ? (
           list.isError && !list.isFetching ? (
             <div>
-              <p className="text-stone-700">
+              <p className="text-ink-secondary">
                 Die Einkaufsliste konnte nicht geladen werden.
               </p>
               <button
                 type="button"
                 onClick={() => void list.refetch()}
-                className="mt-3 min-h-11 rounded-lg bg-emerald-600 px-4 font-medium text-white"
+                className="pressable mt-3 min-h-11 rounded-lg bg-accent px-4 font-medium text-white"
               >
                 Erneut versuchen
               </button>
             </div>
           ) : (
-            <p className="text-stone-500">Einkaufsliste wird geladen …</p>
+            <p className="text-ink-tertiary">Einkaufsliste wird geladen …</p>
           )
         ) : (
           <ShoppingList items={list.data} />
@@ -54,11 +54,11 @@ export function ShoppingPage() {
 
 function ShoppingList({ items }: { items: ShoppingItem[] }) {
   if (items.length === 0) {
-    return <p className="text-stone-500">Alles da</p>;
+    return <p className="text-ink-tertiary">Alles da</p>;
   }
   return (
     <>
-      <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
         {items.map((item) => (
           <ShoppingRow key={item.product_id} item={item} />
         ))}
@@ -90,7 +90,7 @@ function ShoppingRow({ item }: { item: ShoppingItem }) {
       <div className="min-w-0 flex-1">
         <Link
           to={`/produkt/${encodeURIComponent(item.product_id)}`}
-          className="font-medium break-words hyphens-auto after:absolute after:inset-0"
+          className="pressable-row font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
           {quantity !== null && (
             <>
@@ -100,14 +100,14 @@ function ShoppingRow({ item }: { item: ShoppingItem }) {
           {item.name}
         </Link>
         {item.brand !== null && (
-          <p className="text-sm break-words hyphens-auto text-stone-500">
+          <p className="text-sm break-words hyphens-auto text-ink-tertiary">
             {item.brand}
           </p>
         )}
         {item.marked && (
-          <p className="text-xs font-medium text-amber-700">vorgemerkt</p>
+          <p className="text-xs font-medium text-marked">vorgemerkt</p>
         )}
-        <p role="status" className="text-sm font-medium text-red-700">
+        <p role="status" className="text-sm font-medium text-danger">
           {isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
       </div>
@@ -117,7 +117,7 @@ function ShoppingRow({ item }: { item: ShoppingItem }) {
           disabled={unmark.isPending}
           onClick={() => unmark.mutate(item.product_id)}
           aria-label={`Von der Liste nehmen: ${item.name}`}
-          className="relative z-10 min-h-11 shrink-0 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 disabled:opacity-40"
+          className="pressable relative z-10 min-h-11 shrink-0 rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-secondary disabled:opacity-40"
         >
           Von der Liste nehmen
         </button>
@@ -148,13 +148,13 @@ function ShareButton({ items }: { items: ShoppingItem[] }) {
       <button
         type="button"
         onClick={() => void share()}
-        className="min-h-11 w-full rounded-lg bg-emerald-600 px-4 font-medium text-white"
+        className="pressable min-h-11 w-full rounded-lg bg-accent px-4 font-medium text-white"
       >
         Als Text teilen
       </button>
       <p
         role="status"
-        className={`mt-2 text-sm font-medium ${notice === "failed" ? "text-red-700" : "text-emerald-700"}`}
+        className={`mt-2 text-sm font-medium ${notice === "failed" ? "text-danger" : "text-accent"}`}
       >
         {noticeText[notice]}
       </p>

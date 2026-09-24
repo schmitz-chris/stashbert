@@ -3,13 +3,13 @@ import { checkManualCode } from "../lib/manualCode";
 import type { ScanMode } from "../lib/scan";
 import { Dialog } from "./Dialog";
 
-const buttonClass = "min-h-11 rounded-lg px-4 font-medium";
+const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium";
 
 // The submit button per mode of the scan view: its text and colour.
 const submitButton: Record<ScanMode, { label: string; className: string }> = {
-  add: { label: "Einlagern", className: "bg-emerald-600 text-white" },
-  consume: { label: "Entnehmen", className: "bg-sky-600 text-white" },
-  mark: { label: "Vormerken", className: "bg-amber-700 text-white" },
+  add: { label: "Einlagern", className: "bg-accent text-white" },
+  consume: { label: "Entnehmen", className: "bg-consume text-white" },
+  mark: { label: "Vormerken", className: "bg-marked text-white" },
 };
 
 interface ManualCodeDialogProps {
@@ -68,7 +68,7 @@ function ManualCodeForm({
       }}
       className="mt-3"
     >
-      <label htmlFor={inputId} className="block text-sm font-medium text-stone-700">
+      <label htmlFor={inputId} className="block text-sm font-medium text-ink-secondary">
         Barcode
       </label>
       <input
@@ -82,16 +82,16 @@ function ManualCodeForm({
         autoComplete="off"
         aria-invalid={error !== null}
         aria-describedby={error !== null ? errorId : undefined}
-        className="mt-1 min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono text-base aria-[invalid=true]:border-red-600"
+        className="mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 font-mono text-base aria-[invalid=true]:border-danger"
       />
-      <p id={errorId} role="status" className="mt-1 text-sm font-medium text-red-700">
+      <p id={errorId} role="status" className="mt-1 text-sm font-medium text-danger">
         {error}
       </p>
       <div className="mt-4 flex justify-end gap-3">
         <button
           type="button"
           onClick={onCancel}
-          className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+          className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
         >
           Abbrechen
         </button>

@@ -15,10 +15,10 @@ import {
 const noticeDuration = 2000;
 
 const actionClass =
-  "inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 font-medium text-stone-800";
+  "pressable inline-flex min-h-11 items-center rounded-lg border border-line-strong bg-surface px-3 font-medium text-ink";
 
 const undoClass =
-  "min-h-11 shrink-0 rounded-lg bg-stone-200 px-3 font-medium text-stone-800 disabled:opacity-40";
+  "pressable min-h-11 shrink-0 rounded-lg bg-fill px-3 font-medium text-ink disabled:opacity-40";
 
 interface ResultCardProps {
   booking: CardBooking;
@@ -48,17 +48,19 @@ export function ResultCard({
 }: ResultCardProps) {
   const nameId = useId();
   const view = cardView(booking);
-  const plusOneClass = booking.kind === "add" ? "bg-emerald-600" : "bg-sky-600";
+  const plusOneClass = booking.kind === "add" ? "bg-accent" : "bg-consume";
 
   return (
-    <section aria-labelledby={nameId} className="rounded-xl bg-white p-3 shadow">
+    <section aria-labelledby={nameId} className="rounded-xl bg-surface p-3 shadow">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
             {view.title}
           </h2>
           {view.review && (
-            <p className="text-sm font-medium text-amber-700">Bitte prüfen</p>
+            <p className="w-fit rounded bg-warning px-1.5 text-sm font-medium text-ink">
+              Bitte prüfen
+            </p>
           )}
           <p className="text-xl font-bold tabular-nums">{view.stock}</p>
         </div>
@@ -66,7 +68,7 @@ export function ResultCard({
           type="button"
           disabled={disabled}
           onClick={onPlusOne}
-          className={`min-h-11 min-w-14 shrink-0 rounded-lg px-3 text-lg font-semibold text-white disabled:opacity-40 ${plusOneClass}`}
+          className={`pressable min-h-11 min-w-14 shrink-0 rounded-lg px-3 text-lg font-semibold text-white disabled:opacity-40 ${plusOneClass}`}
         >
           +1
         </button>
@@ -102,13 +104,13 @@ export function MarkResultCard({ mark, disabled, onUndo }: MarkResultCardProps) 
   const view = markCardView(mark);
 
   return (
-    <section aria-labelledby={nameId} className="rounded-xl bg-white p-3 shadow">
+    <section aria-labelledby={nameId} className="rounded-xl bg-surface p-3 shadow">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <h2 id={nameId} className="line-clamp-2 font-semibold break-words hyphens-auto">
             {view.title}
           </h2>
-          <p className="text-xl font-bold text-amber-700">{view.status}</p>
+          <p className="text-xl font-bold text-marked">{view.status}</p>
         </div>
         {view.undo && (
           <button type="button" disabled={disabled} onClick={onUndo} className={undoClass}>
@@ -159,9 +161,9 @@ function NewProductActions({
   }
 
   return (
-    <div className="mt-3 border-t border-stone-200 pt-3">
+    <div className="mt-3 border-t border-line pt-3">
       <div role="group" aria-label="Soll" className="flex items-center gap-2">
-        <span className="mr-1 text-sm font-medium text-stone-700">Soll</span>
+        <span className="mr-1 text-sm font-medium text-ink-secondary">Soll</span>
         {targetChoices.map((value) => {
           const pressed = product.target === value;
           return (
@@ -171,7 +173,7 @@ function NewProductActions({
               aria-pressed={pressed}
               disabled={update.isPending}
               onClick={() => chooseTarget(value)}
-              className={`size-11 shrink-0 rounded-lg text-lg font-semibold tabular-nums disabled:opacity-40 ${pressed ? "bg-emerald-600 text-white" : "bg-stone-200 text-stone-800"}`}
+              className={`pressable size-11 shrink-0 rounded-lg text-lg font-semibold tabular-nums disabled:opacity-40 ${pressed ? "bg-accent text-white" : "bg-fill text-ink"}`}
             >
               {value}
             </button>
@@ -180,7 +182,7 @@ function NewProductActions({
       </div>
       <p
         role="status"
-        className={`mt-1 min-h-5 text-sm font-medium ${status === "error" ? "text-red-700" : "text-emerald-700"}`}
+        className={`mt-1 min-h-5 text-sm font-medium ${status === "error" ? "text-danger" : "text-accent"}`}
       >
         {notice}
       </p>

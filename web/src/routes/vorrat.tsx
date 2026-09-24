@@ -31,7 +31,7 @@ const noticeDuration = 2000;
 // The buttons of a row: the tap area is 44 × 44 px, the visible face only
 // 40 × 40 px, so the three buttons leave more room for the name.
 const rowButtonClass = "flex size-11 items-center justify-center disabled:opacity-40";
-const rowButtonFaceClass = "flex size-9 items-center justify-center rounded-lg border";
+const rowButtonFaceClass = "pressable flex size-9 items-center justify-center rounded-lg border";
 
 export function StockPage() {
   const [query, setQuery] = useState("");
@@ -47,7 +47,7 @@ export function StockPage() {
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Name oder Marke suchen"
         aria-label="Vorrat durchsuchen"
-        className="mt-4 min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base"
+        className="mt-4 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base"
       />
       <div role="group" aria-label="Filter" className="mt-3 flex flex-wrap gap-2">
         {filters.map(({ value, label }) => (
@@ -56,7 +56,7 @@ export function StockPage() {
             type="button"
             aria-pressed={filter === value}
             onClick={() => setFilter(value)}
-            className="min-h-11 rounded-full border border-stone-300 bg-white px-3 font-medium text-stone-700 aria-pressed:border-emerald-600 aria-pressed:bg-emerald-600 aria-pressed:text-white"
+            className="pressable min-h-11 rounded-full border border-line-strong bg-surface px-3 font-medium text-ink-secondary aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-white"
           >
             {label}
           </button>
@@ -66,19 +66,19 @@ export function StockPage() {
         {products.data === undefined ? (
           products.isError && !products.isFetching ? (
             <div>
-              <p className="text-stone-700">
+              <p className="text-ink-secondary">
                 Der Vorrat konnte nicht geladen werden.
               </p>
               <button
                 type="button"
                 onClick={() => void products.refetch()}
-                className="mt-3 min-h-11 rounded-lg bg-emerald-600 px-4 font-medium text-white"
+                className="pressable mt-3 min-h-11 rounded-lg bg-accent px-4 font-medium text-white"
               >
                 Erneut versuchen
               </button>
             </div>
           ) : (
-            <p className="text-stone-500">Vorrat wird geladen …</p>
+            <p className="text-ink-tertiary">Vorrat wird geladen …</p>
           )
         ) : (
           <StockList
@@ -102,16 +102,16 @@ function StockList({
 }) {
   if (isEmpty) {
     return (
-      <p className="text-stone-500">
+      <p className="text-ink-tertiary">
         Noch keine Produkte. Scanne einen Barcode, um eines einzulagern.
       </p>
     );
   }
   if (products.length === 0) {
-    return <p className="text-stone-500">Keine Treffer.</p>;
+    return <p className="text-ink-tertiary">Keine Treffer.</p>;
   }
   return (
-    <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+    <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
       {products.map((product) => (
         <StockRow key={product.id} product={product} />
       ))}
@@ -162,27 +162,27 @@ function StockRow({ product }: { product: Product }) {
       <div className="min-w-0 flex-1">
         <Link
           to={`/produkt/${encodeURIComponent(product.id)}`}
-          className="line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
+          className="pressable-row line-clamp-2 font-medium break-words hyphens-auto after:absolute after:inset-0"
         >
           {product.name}
         </Link>
         {product.brand !== null && (
-          <p className="truncate text-sm text-stone-500">
+          <p className="truncate text-sm text-ink-tertiary">
             {product.brand}
           </p>
         )}
-        <p role="status" className="text-sm font-medium text-amber-700">
+        <p role="status" className="text-sm font-medium text-danger">
           {notice}
         </p>
       </div>
       {/* The stock large, below it the target; without a target only the stock. */}
       <div className="min-w-10 shrink-0 text-center tabular-nums">
-        <p className="text-xl font-semibold text-stone-900">
+        <p className="text-xl font-semibold text-ink">
           <span className="sr-only">Bestand </span>
           {product.stock}
         </p>
         {product.target > 0 && (
-          <p className="text-xs text-stone-500">Soll {product.target}</p>
+          <p className="text-xs text-ink-tertiary">Soll {product.target}</p>
         )}
       </div>
       <div className="relative z-10 flex shrink-0">
@@ -195,7 +195,7 @@ function StockRow({ product }: { product: Product }) {
           className={rowButtonClass}
         >
           <span
-            className={`${rowButtonFaceClass} ${cart.pressed ? "border-amber-700 bg-amber-700 text-white" : "border-stone-300 bg-white text-stone-700"}`}
+            className={`${rowButtonFaceClass} ${cart.pressed ? "border-marked bg-marked text-white" : "border-line-strong bg-surface text-ink-secondary"}`}
           >
             <CartIcon checked={cart.pressed} />
           </span>
@@ -207,7 +207,7 @@ function StockRow({ product }: { product: Product }) {
           aria-label={`Eins entnehmen: ${product.name}`}
           className={rowButtonClass}
         >
-          <span className={`${rowButtonFaceClass} border-stone-300 bg-white text-xl`}>
+          <span className={`${rowButtonFaceClass} border-line-strong bg-surface text-xl`}>
             −
           </span>
         </button>
@@ -218,7 +218,7 @@ function StockRow({ product }: { product: Product }) {
           aria-label={`Eins einlagern: ${product.name}`}
           className={rowButtonClass}
         >
-          <span className={`${rowButtonFaceClass} border-stone-300 bg-white text-xl`}>
+          <span className={`${rowButtonFaceClass} border-line-strong bg-surface text-xl`}>
             +
           </span>
         </button>
@@ -269,16 +269,16 @@ function ProductImage({ product }: { product: Product }) {
         src={imageUrl}
         loading="lazy"
         alt=""
-        className="size-10 shrink-0 rounded-lg bg-stone-100 object-cover"
+        className="size-10 shrink-0 rounded-lg bg-fill object-cover"
       />
     );
   }
   return (
     <div
       aria-hidden="true"
-      className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-stone-100"
+      className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-fill"
     >
-      <div className="size-5 rounded-md border-2 border-stone-300" />
+      <div className="size-5 rounded-md border-2 border-ink-tertiary" />
     </div>
   );
 }

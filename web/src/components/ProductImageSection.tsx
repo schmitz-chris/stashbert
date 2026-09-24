@@ -8,7 +8,7 @@ import { photoErrorText, productImageUrl } from "../lib/productImage";
 import type { Product } from "../lib/products";
 import { Dialog } from "./Dialog";
 
-const buttonClass = "min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
+const buttonClass = "pressable min-h-11 rounded-lg px-4 font-medium disabled:opacity-40";
 
 /**
  * The image of product on the product page, if it has one, and below it
@@ -41,7 +41,7 @@ export function ProductImageSection({ product }: { product: Product }) {
         <img
           src={imageUrl}
           alt=""
-          className="mt-2 h-48 w-full rounded-xl bg-white object-contain"
+          className="mt-2 h-48 w-full rounded-xl bg-surface object-contain"
         />
       )}
       <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -49,7 +49,7 @@ export function ProductImageSection({ product }: { product: Product }) {
           type="button"
           disabled={pending}
           onClick={() => inputRef.current?.click()}
-          className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+          className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
         >
           {upload.isPending ? "Wird hochgeladen …" : "Foto aufnehmen"}
         </button>
@@ -70,13 +70,13 @@ export function ProductImageSection({ product }: { product: Product }) {
               remove.reset();
               setConfirmOpen(true);
             }}
-            className={`border border-red-300 bg-white text-red-700 ${buttonClass}`}
+            className={`border border-danger bg-surface text-danger ${buttonClass}`}
           >
             Bild entfernen
           </button>
         )}
       </div>
-      <p role="status" className="mt-1 text-sm font-medium text-red-700">
+      <p role="status" className="mt-1 text-sm font-medium text-danger">
         {upload.isError ? photoErrorText(upload.error) : ""}
       </p>
       <Dialog
@@ -84,17 +84,17 @@ export function ProductImageSection({ product }: { product: Product }) {
         onClose={() => setConfirmOpen(false)}
         title="Bild entfernen?"
       >
-        <p className="mt-2 text-stone-700">
+        <p className="mt-2 text-ink-secondary">
           Das Bild von „{product.name}“ wird entfernt.
         </p>
-        <p role="status" className="mt-2 text-sm font-medium text-red-700">
+        <p role="status" className="mt-2 text-sm font-medium text-danger">
           {remove.isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
         <div className="mt-4 flex justify-end gap-3">
           <button
             type="button"
             onClick={() => setConfirmOpen(false)}
-            className={`border border-stone-300 bg-white text-stone-700 ${buttonClass}`}
+            className={`border border-line-strong bg-surface text-ink-secondary ${buttonClass}`}
           >
             Abbrechen
           </button>
@@ -106,7 +106,7 @@ export function ProductImageSection({ product }: { product: Product }) {
                 onSuccess: () => setConfirmOpen(false),
               })
             }
-            className={`bg-red-600 text-white ${buttonClass}`}
+            className={`bg-danger text-white ${buttonClass}`}
           >
             Entfernen
           </button>

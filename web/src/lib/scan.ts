@@ -58,6 +58,28 @@ export interface Feedback {
   text: string;
 }
 
+/**
+ * The symbol of a scan message, so that it does not rely on its color
+ * alone (ADR-0016): a check for a booking, a cart for a mark, an
+ * exclamation mark for a warning, a cross for an error.
+ */
+export type FeedbackIcon = "check" | "cart" | "warning" | "cross";
+
+/** Returns the symbol of feedback, given by its color. */
+export function feedbackIcon(feedback: Feedback): FeedbackIcon {
+  switch (feedback.color) {
+    case "green":
+    case "blue":
+      return "check";
+    case "orange":
+      return "cart";
+    case "yellow":
+      return "warning";
+    case "red":
+      return "cross";
+  }
+}
+
 function failure(text: string): Feedback {
   return { color: "red", sound: "error", text };
 }
