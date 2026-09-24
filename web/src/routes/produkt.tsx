@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Dialog } from "../components/Dialog";
 import { MergeSection } from "../components/MergeSection";
 import { MovementHistory } from "../components/MovementHistory";
+import { ShoppingListSection } from "../components/ShoppingListSection";
 import { StockSection } from "../components/StockSection";
 import { problemCode } from "../lib/api/client";
 import {
@@ -247,6 +248,7 @@ function ProductEditor({ product }: { product: Product }) {
       </form>
       <BarcodeSection product={product} />
       <StockSection product={product} />
+      <ShoppingListSection product={product} />
       <MovementHistory productId={product.id} />
       {source !== null && (
         <p className="mt-6 text-sm text-stone-500">

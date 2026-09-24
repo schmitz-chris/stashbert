@@ -109,17 +109,31 @@ describe("filterProducts", () => {
   const emptyRestock = product({ id: "c", stock: 0, target: 2, missing: 2 });
   const review = product({ id: "d", needs_review: true });
   const full = product({ id: "e", stock: 4, target: 3, missing: 0 });
-  const products = [restock, empty, emptyRestock, review, full];
+  const marked = product({ id: "f", stock: 4, target: 3, missing: 0, marked: true });
+  const markedRestock = product({
+    id: "g",
+    stock: 1,
+    target: 3,
+    missing: 2,
+    marked: true,
+  });
+  const products = [restock, empty, emptyRestock, review, full, marked, markedRestock];
 
   it("keeps all products for all", () => {
     expect(filterProducts(products, "all")).toEqual(products);
   });
 
-  it("keeps products with missing > 0 for restock", () => {
+  it("keeps products with missing > 0 or marked for restock", () => {
     expect(filterProducts(products, "restock")).toEqual([
       restock,
       emptyRestock,
+      marked,
+      markedRestock,
     ]);
+  });
+
+  it("keeps a marked product without a shortfall for restock", () => {
+    expect(filterProducts([full, marked], "restock")).toEqual([marked]);
   });
 
   it("keeps products with stock 0 for empty", () => {

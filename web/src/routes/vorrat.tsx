@@ -153,6 +153,9 @@ function StockRow({ product }: { product: Product }) {
             {product.brand}
           </p>
         )}
+        {product.marked && (
+          <p className="text-xs font-medium text-amber-700">vorgemerkt</p>
+        )}
         <p role="status" className="text-sm font-medium text-amber-700">
           {notice}
         </p>

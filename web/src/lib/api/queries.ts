@@ -245,6 +245,27 @@ export function markScanMutation(queryClient: QueryClient) {
   });
 }
 
+/**
+ * Marks the product with the given id for shopping with POST
+ * /shopping-list/items and product_id, for the product page (docs/plan.md,
+ * F16). A failed mark throws the Problem Details of the response. The
+ * cache is updated like after a scanned mark (markScanMutation).
+ */
+export function markProductMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (productId: string) => {
+      const { data, error, response } = await api.POST("/shopping-list/items", {
+        body: { product_id: productId },
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`POST /shopping-list/items: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (result) => cacheMarkResult(queryClient, result),
+  });
+}
+
 // Updates the cache after a mark: product from the result replaces the
 // cached product and its entry in the product list; if the mark created
 // the product, the list is fetched again. The shopping list is fetched
@@ -264,10 +285,10 @@ function cacheMarkResult(queryClient: QueryClient, { product, product_created }:
 
 /**
  * Removes the mark of the product with the given id for the result card
- * of the scan view: DELETE /shopping-list/items/{product_id}. Timeout and
- * errors are those of scanMovementMutation. The response holds no
- * product, so on success the product, the product list and the shopping
- * list are fetched again.
+ * of the scan view, the shopping view and the product page: DELETE
+ * /shopping-list/items/{product_id}. Timeout and errors are those of
+ * scanMovementMutation. The response holds no product, so on success the
+ * product, the product list and the shopping list are fetched again.
  */
 export function unmarkMutation(queryClient: QueryClient) {
   return mutationOptions({

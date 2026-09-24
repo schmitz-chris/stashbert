@@ -1292,7 +1292,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### F16: Vormerkungen in Einkauf und Vorrat
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B31, F12
 - **Referenzen:** ADR-0015
 - **Umfang:**

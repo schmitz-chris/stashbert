@@ -56,7 +56,8 @@ export function mergeCandidates(
 const filterPredicates: Record<ProductFilter, (product: Product) => boolean> =
   {
     all: () => true,
-    restock: (product) => product.missing > 0,
+    // A shortfall or a mark puts a product on the shopping list (ADR-0015).
+    restock: (product) => product.missing > 0 || product.marked,
     empty: (product) => product.stock === 0,
     review: (product) => product.needs_review,
   };

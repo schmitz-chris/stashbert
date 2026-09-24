@@ -1,10 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { shoppingListQuery } from "../lib/api/queries";
-import { shoppingText, type ShoppingItem } from "../lib/shopping";
+import { shoppingListQuery, unmarkMutation } from "../lib/api/queries";
+import {
+  shoppingQuantity,
+  shoppingText,
+  type ShoppingItem,
+} from "../lib/shopping";
 
-// How long the notice after sharing stays visible.
+// How long the notice after sharing or after a failed removal stays visible.
 const noticeDuration = 2000;
 
 // The notice after sharing: none, the text was copied, or sharing failed.
@@ -56,26 +60,69 @@ function ShoppingList({ items }: { items: ShoppingItem[] }) {
     <>
       <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
         {items.map((item) => (
-          <li key={item.product_id}>
-            <Link
-              to={`/produkt/${encodeURIComponent(item.product_id)}`}
-              className="flex min-h-11 flex-col justify-center px-3 py-2"
-            >
-              <span className="font-medium break-words hyphens-auto">
-                <span className="tabular-nums">{item.missing}</span> ×{" "}
-                {item.name}
-              </span>
-              {item.brand !== null && (
-                <span className="text-sm break-words hyphens-auto text-stone-500">
-                  {item.brand}
-                </span>
-              )}
-            </Link>
-          </li>
+          <ShoppingRow key={item.product_id} item={item} />
         ))}
       </ul>
       <ShareButton items={items} />
     </>
+  );
+}
+
+function ShoppingRow({ item }: { item: ShoppingItem }) {
+  const queryClient = useQueryClient();
+  const unmark = useMutation(unmarkMutation(queryClient));
+  const { isError, reset } = unmark;
+  const quantity = shoppingQuantity(item);
+
+  // Hides the notice of a failed removal after a short time.
+  useEffect(() => {
+    if (!isError) {
+      return;
+    }
+    const timer = setTimeout(reset, noticeDuration);
+    return () => clearTimeout(timer);
+  }, [isError, reset]);
+
+  // The link covers the whole row with its ::after box, so a tap anywhere
+  // outside the button opens the product. The button lies above it.
+  return (
+    <li className="relative flex min-h-11 items-center gap-2 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <Link
+          to={`/produkt/${encodeURIComponent(item.product_id)}`}
+          className="font-medium break-words hyphens-auto after:absolute after:inset-0"
+        >
+          {quantity !== null && (
+            <>
+              <span className="tabular-nums">{quantity}</span> ×{" "}
+            </>
+          )}
+          {item.name}
+        </Link>
+        {item.brand !== null && (
+          <p className="text-sm break-words hyphens-auto text-stone-500">
+            {item.brand}
+          </p>
+        )}
+        {item.marked && (
+          <p className="text-xs font-medium text-amber-700">vorgemerkt</p>
+        )}
+        <p role="status" className="text-sm font-medium text-red-700">
+          {isError ? "Entfernen fehlgeschlagen" : ""}
+        </p>
+      </div>
+      {item.marked && (
+        <button
+          type="button"
+          disabled={unmark.isPending}
+          onClick={() => unmark.mutate(item.product_id)}
+          aria-label={`Von der Liste nehmen: ${item.name}`}
+          className="relative z-10 min-h-11 shrink-0 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 disabled:opacity-40"
+        >
+          Von der Liste nehmen
+        </button>
+      )}
+    </li>
   );
 }
 
