@@ -1586,7 +1586,7 @@ Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapite
 
 ### B35: Outbox und Zustellung
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B34
 - **Referenzen:** ADR-0018; architecture.md 11.3, 11.4, 6.6
 - **Umfang:**

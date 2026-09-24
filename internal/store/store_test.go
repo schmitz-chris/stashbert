@@ -156,7 +156,7 @@ func TestMigratedTables(t *testing.T) {
 		t.Fatalf("read table_list: %v", err)
 	}
 
-	want := []string{"barcodes", "goose_db_version", "lookups", "movements", "products", "settings"}
+	want := []string{"barcodes", "goose_db_version", "lookups", "movements", "outbox", "products", "settings"}
 	if got := slices.Sorted(maps.Keys(strict)); !slices.Equal(got, want) {
 		t.Errorf("tables = %v, want %v", got, want)
 	}

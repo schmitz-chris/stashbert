@@ -49,10 +49,8 @@ func newAppWithImages(t *testing.T, pub events.Publisher, imageDir string) (http
 	return newAppWithDeps(t, app.Deps{Publisher: pub, Lookuper: lookup.NewDisabledClient(), ImageDir: imageDir})
 }
 
-// newAppWithDeps returns the handler from app.NewHandler with d and its
-// migrated database in t.TempDir(). It sets Version and DB of d, and Logger
-// to a discarding logger if d.Logger is nil.
-func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
+// newDB returns a migrated database in t.TempDir().
+func newDB(t *testing.T) *sql.DB {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -64,6 +62,17 @@ func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
 	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
 		t.Fatalf("store.Migrate: %v", err)
 	}
+	return db
+}
+
+// newAppWithDeps returns the handler from app.NewHandler with d and its
+// database, a new one from newDB if d.DB is nil. It sets Version of d, and
+// Logger to a discarding logger if d.Logger is nil.
+func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
+	t.Helper()
+	if d.DB == nil {
+		d.DB = newDB(t)
+	}
 	cfg, err := config.Load(func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
@@ -71,12 +80,12 @@ func newAppWithDeps(t *testing.T, d app.Deps) (http.Handler, *sql.DB) {
 	if d.Logger == nil {
 		d.Logger = slog.New(slog.DiscardHandler)
 	}
-	d.Version, d.DB = "dev", db
+	d.Version = "dev"
 	h, err := app.NewHandler(cfg, d)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	return h, db
+	return h, d.DB
 }
 
 func newHandler(t *testing.T) http.Handler {

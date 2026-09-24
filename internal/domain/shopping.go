@@ -21,6 +21,27 @@ func Missing(stock, target int64, minStock *int64) int64 {
 	return target - stock
 }
 
+// Units of the quantity to buy in MQTT messages (architecture.md, 11.3).
+const (
+	UnitPiece = "piece"
+	UnitCrate = "crate"
+)
+
+// ShoppingQuantity returns how much of a product to buy (architecture.md,
+// 11.3). With a crate size the unit is UnitCrate and the quantity is missing
+// divided by crateSize, rounded up (ADR-0017); otherwise the unit is
+// UnitPiece and the quantity is missing. Without anything missing the
+// quantity is 0.
+func ShoppingQuantity(missing int64, crateSize *int64) (quantity int64, unit string) {
+	if crateSize != nil && *crateSize > 0 {
+		if missing <= 0 {
+			return 0, UnitCrate
+		}
+		return (missing + *crateSize - 1) / *crateSize, UnitCrate
+	}
+	return max(missing, 0), UnitPiece
+}
+
 // ShoppingItem is a product on the shopping list (architecture.md, 6.5).
 type ShoppingItem struct {
 	ProductID string

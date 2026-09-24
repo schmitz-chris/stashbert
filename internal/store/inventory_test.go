@@ -111,8 +111,8 @@ func TestMigrateAfterInit(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("read goose version: %v", err)
 	}
-	if version != 4 {
-		t.Errorf("goose version = %d, want 4", version)
+	if version != 5 {
+		t.Errorf("goose version = %d, want 5", version)
 	}
 	if n := countRows(t, ctx, db, "settings"); n != 1 {
 		t.Errorf("settings has %d rows after migration, want 1", n)

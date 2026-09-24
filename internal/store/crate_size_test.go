@@ -36,8 +36,8 @@ func TestMigrateCrateSize(t *testing.T) {
 	mustInsert(t, ctx, db, "products", "p", row{"stock": 2, "target": 5, "marked": 1})
 	schemaBefore, productsBefore := schemaState(t, ctx, db), tableRows(t, ctx, db, "products")
 
-	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
-		t.Fatalf("Migrate: %v", err)
+	if _, err := p.UpTo(ctx, 4); err != nil {
+		t.Fatalf("migrate to 0004: %v", err)
 	}
 	if v := dbVersion(t, ctx, p); v != 4 {
 		t.Fatalf("version = %d, want 4", v)
@@ -60,8 +60,8 @@ func TestMigrateCrateSize(t *testing.T) {
 		t.Errorf("products after down:\n%s\nwant as before 0004:\n%s", after, productsBefore)
 	}
 
-	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
-		t.Fatalf("Migrate after down: %v", err)
+	if _, err := p.UpTo(ctx, 4); err != nil {
+		t.Fatalf("migrate to 0004 after down: %v", err)
 	}
 	if c := productCrateSize(t, ctx, db, "p"); c != nil {
 		t.Errorf("crate_size after migrating up again = %d, want NULL", *c)

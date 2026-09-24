@@ -32,6 +32,15 @@ type Movement struct {
 	CreatedAt      string
 }
 
+type Outbox struct {
+	Seq       int64
+	Topic     string
+	Payload   string
+	CreatedAt string
+	Attempts  int64
+	LastError *string
+}
+
 type Product struct {
 	ID             string
 	Name           string

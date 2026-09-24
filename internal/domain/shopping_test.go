@@ -32,3 +32,33 @@ func TestMissing(t *testing.T) {
 		}
 	}
 }
+
+func TestShoppingQuantity(t *testing.T) {
+	tests := []struct {
+		name      string
+		missing   int64
+		crateSize *int64
+		quantity  int64
+		unit      string
+	}{
+		{"without crate size", 3, nil, 3, "piece"},
+		{"without crate size, nothing missing", 0, nil, 0, "piece"},
+		{"crate size, rounded up", 17, new(int64(20)), 1, "crate"},
+		{"crate size, one bottle over a crate", 21, new(int64(20)), 2, "crate"},
+		{"crate size, exactly two crates", 40, new(int64(20)), 2, "crate"},
+		{"crate size, one bottle", 1, new(int64(24)), 1, "crate"},
+		{"crate size, nothing missing", 0, new(int64(20)), 0, "crate"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			quantity, unit := domain.ShoppingQuantity(tt.missing, tt.crateSize)
+			if quantity != tt.quantity || unit != tt.unit {
+				t.Errorf("ShoppingQuantity(%d, %v) = %d, %q, want %d, %q",
+					tt.missing, tt.crateSize, quantity, unit, tt.quantity, tt.unit)
+			}
+		})
+	}
+	if domain.UnitPiece != "piece" || domain.UnitCrate != "crate" {
+		t.Errorf("units = %q, %q, want piece, crate", domain.UnitPiece, domain.UnitCrate)
+	}
+}

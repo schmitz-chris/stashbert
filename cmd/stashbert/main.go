@@ -26,6 +26,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/mqtt"
+	"github.com/schmitz-chris/stashbert/internal/outbox"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -133,16 +134,26 @@ func run() error {
 	imageTransport.TLSHandshakeTimeout = 30 * time.Second
 	images := lookup.NewImageFetcher(db, &http.Client{Transport: imageTransport}, imageDir, lookup.DefaultImageHosts, logger)
 
-	// Without MQTT_URL, StashBert runs without MQTT (architecture.md, 11).
-	var mqttClient *mqtt.Client
+	// Without MQTT_URL, StashBert runs without MQTT and without outbox, and
+	// the events go to events.Nop (architecture.md, 11). With it, the events
+	// go into the outbox, and the deliverer publishes them after every
+	// connection and every new event (architecture.md, 11.4).
+	var (
+		mqttClient *mqtt.Client
+		deliverer  *outbox.Deliverer
+		publisher  events.Publisher = events.Nop{}
+	)
 	if cfg.MQTT.URL != "" {
 		if mqttClient, err = mqtt.New(cfg.MQTT, logger); err != nil {
 			return fmt.Errorf("create mqtt client: %w", err)
 		}
+		deliverer = outbox.NewDeliverer(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
+		mqttClient.OnConnect(func(context.Context) { deliverer.Wake() })
+		publisher = outbox.NewWriter(db, deliverer.Wake, logger)
 	}
 
 	handler, err := app.NewHandler(cfg, app.Deps{
-		Logger: logger, Version: version, DB: db, Publisher: events.Nop{}, Lookuper: off, ImageDir: imageDir,
+		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
 	})
 	if err != nil {
 		return fmt.Errorf("build handler: %w", err)
@@ -197,6 +208,21 @@ func run() error {
 		defer func() {
 			stopMQTT()
 			<-mqttDone
+		}()
+
+		// The deliverer also has its own context. Its deferred call runs
+		// before the one of the client, so it stops after the HTTP server and
+		// before the client publishes offline; undelivered events stay in the
+		// outbox for the next start.
+		deliverCtx, stopDeliverer := context.WithCancel(context.Background())
+		delivererDone := make(chan struct{})
+		go func() {
+			defer close(delivererDone)
+			deliverer.Run(deliverCtx, outbox.MinBackoff, outbox.MaxBackoff)
+		}()
+		defer func() {
+			stopDeliverer()
+			<-delivererDone
 		}()
 	}
 
