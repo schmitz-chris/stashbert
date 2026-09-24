@@ -1296,7 +1296,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 - **Abhängig von:** B31, F12
 - **Referenzen:** ADR-0015
 - **Umfang:**
-  - Einkaufsansicht: vorgemerkte Produkte ohne Fehlbestand erscheinen ohne Mengenangabe mit dem Hinweis „vorgemerkt"; vorgemerkte mit Fehlbestand wie bisher mit Menge. Jeder vorgemerkte Eintrag hat „Von der Liste nehmen" (entfernt nur die Vormerkung). `shoppingText` nimmt vorgemerkte Einträge ohne Menge als reinen Namen auf.
+  - Einkaufsansicht: vorgemerkte Produkte ohne Fehlbestand erscheinen ohne Mengenangabe (der Hinweis „vorgemerkt" entfiel am 24.09.2026, weil der orange Wagen-Knopf die Vormerkung zeigt); vorgemerkte mit Fehlbestand wie bisher mit Menge. Jeder vorgemerkte Eintrag hat „Von der Liste nehmen" (entfernt nur die Vormerkung). `shoppingText` nimmt vorgemerkte Einträge ohne Menge als reinen Namen auf.
   - Vorrat: der Filter „Nachkaufen" zeigt `missing > 0` oder `marked`; vorgemerkte Zeilen haben einen kleinen Hinweis.
   - Produktseite: Hinweis „vorgemerkt" mit „Von der Liste nehmen" bzw. Button „Vormerken" (per `product_id`).
 - **Nicht im Umfang:** Mengen für Vormerkungen.

@@ -164,9 +164,6 @@ function ShoppingRow({
             )}
           </p>
         )}
-        {item.marked && (
-          <p className="text-xs font-medium text-marked">vorgemerkt</p>
-        )}
         <p role="status" className="text-sm font-medium text-danger">
           {unmark.isError ? "Entfernen fehlgeschlagen" : ""}
         </p>
