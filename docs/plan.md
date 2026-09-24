@@ -1146,7 +1146,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### R03: CI: Image bauen
 
-- **Status:** offen (optionaler Weg nach ADR-0014)
+- **Status:** wartet auf Nutzer (Workflow `image.yml` steht, `actionlint` ohne Befund, Multi-Arch-Build lokal geprüft; Tag und GHCR prüft der Nutzer)
 - **Abhängig von:** R01, F01
 - **Referenzen:** ADR-0003, ADR-0012
 - **Umfang:**
