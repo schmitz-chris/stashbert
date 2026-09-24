@@ -88,7 +88,8 @@ func countRows(t *testing.T, ctx context.Context, db *sql.DB, table string) int 
 	return n
 }
 
-// TestMigrateAfterInit applies 0002 to a database that is at version 0001 and holds data.
+// TestMigrateAfterInit applies 0002 and the later migrations to a database
+// that is at version 0001 and holds data.
 func TestMigrateAfterInit(t *testing.T) {
 	ctx := testContext(t)
 	db := openDB(t, ctx)
@@ -110,8 +111,8 @@ func TestMigrateAfterInit(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT max(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("read goose version: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("goose version = %d, want 2", version)
+	if version != 3 {
+		t.Errorf("goose version = %d, want 3", version)
 	}
 	if n := countRows(t, ctx, db, "settings"); n != 1 {
 		t.Errorf("settings has %d rows after migration, want 1", n)
@@ -131,6 +132,7 @@ func TestInventoryColumns(t *testing.T) {
 			"stock INTEGER NOT NULL DEFAULT 0", "target INTEGER NOT NULL DEFAULT 0", "min_stock INTEGER NULL",
 			"note TEXT NULL", "origin TEXT NOT NULL", "lookup_state TEXT NOT NULL", "needs_review INTEGER NOT NULL",
 			"image_source_url TEXT NULL", "image_file TEXT NULL", "created_at TEXT NOT NULL", "updated_at TEXT NOT NULL",
+			"marked INTEGER NOT NULL DEFAULT 0",
 		},
 		"barcodes": {
 			"code TEXT NOT NULL", "product_id TEXT NOT NULL", "units INTEGER NOT NULL DEFAULT 1", "created_at TEXT NOT NULL",
@@ -204,6 +206,8 @@ func TestInventoryChecks(t *testing.T) {
 		{"products", row{"stock": 0, "target": 0, "min_stock": 0}},
 		{"products", row{"stock": 7, "target": 3, "min_stock": 3}},
 		{"products", row{"needs_review": 1}},
+		{"products", row{"marked": 0}},
+		{"products", row{"marked": 1}},
 		{"barcodes", row{"units": 1}},
 		{"movements", row{"delta": 0, "stock_after": 0}},
 		{"movements", row{"delta": -3, "stock_after": 0}},
@@ -235,6 +239,7 @@ func TestInventoryChecks(t *testing.T) {
 		{"products", row{"origin": "foo"}},
 		{"products", row{"lookup_state": "foo"}},
 		{"products", row{"needs_review": 2}},
+		{"products", row{"marked": 2}},
 		{"barcodes", row{"units": 0}},
 		{"movements", row{"kind": "foo"}},
 		{"movements", row{"stock_after": -1}},

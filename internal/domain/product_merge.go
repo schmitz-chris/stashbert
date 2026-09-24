@@ -19,7 +19,8 @@ import (
 // targetID (architecture.md 6.5, Merge) and returns the target. In one
 // transaction it moves the barcodes and movements of the source to the
 // target, books the stock of the source on the target (see mergeStock) and
-// deletes the source. The other fields of the target stay as they are.
+// deletes the source. The target is marked for shopping if the source or the
+// target was (ADR-0015). The other fields of the target stay as they are.
 //
 // After the commit it publishes the events of the merge movement to pub (see
 // publishMovementEvents), if there is one. Then it finishes the deletion of
@@ -63,7 +64,11 @@ func MergeProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imag
 	if err := q.MoveProductMovements(ctx, db.MoveProductMovementsParams{TargetID: target.ID, SourceID: source.ID}); err != nil {
 		return Product{}, fmt.Errorf("merge product %s: move movements to %s: %w", source.ID, target.ID, err)
 	}
-	p, m, err := mergeStock(ctx, q, source.Stock, target)
+	marked := target.Marked
+	if source.Marked != 0 {
+		marked = 1
+	}
+	p, m, err := mergeStock(ctx, q, source.Stock, marked, target)
 	if err != nil {
 		return Product{}, fmt.Errorf("merge product %s: %w", source.ID, err)
 	}
@@ -82,14 +87,20 @@ func MergeProduct(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, imag
 }
 
 // mergeStock books stock, the stock of the merged source, on the stored
-// product target and returns the target with its barcodes. A stock above 0
-// results in a movement of kind merge with delta stock, the new stock of the
-// target as stock_after and neither barcode nor reverses_id; the new stock
-// and updated_at are stored at the target, and the movement is returned.
-// Otherwise nothing is booked and target stays unchanged, including its
-// updated_at; the movement is nil then.
-func mergeStock(ctx context.Context, q *db.Queries, stock int64, target db.Product) (Product, *Movement, error) {
+// product target, stores marked (0 or 1) at it and returns the target with
+// its barcodes. A stock above 0 results in a movement of kind merge with
+// delta stock, the new stock of the target as stock_after and neither barcode
+// nor reverses_id; the new stock, marked and updated_at are stored at the
+// target, and the movement is returned. Otherwise nothing is booked and the
+// movement is nil; if marked differs from the one of target, only marked and
+// updated_at are stored, else target stays unchanged, including its
+// updated_at.
+func mergeStock(ctx context.Context, q *db.Queries, stock, marked int64, target db.Product) (Product, *Movement, error) {
 	if stock <= 0 {
+		if marked != target.Marked {
+			p, err := updateStock(ctx, q, target.ID, target.Stock, marked, store.FormatTime(time.Now()))
+			return p, nil, err
+		}
 		barcodes, err := q.ListProductBarcodes(ctx, target.ID)
 		if err != nil {
 			return Product{}, nil, fmt.Errorf("list barcodes of product %s: %w", target.ID, err)
@@ -110,7 +121,7 @@ func mergeStock(ctx context.Context, q *db.Queries, stock int64, target db.Produ
 	if err != nil {
 		return Product{}, nil, fmt.Errorf("insert merge movement for product %s: %w", target.ID, err)
 	}
-	p, err := updateStock(ctx, q, target.ID, row.StockAfter, now)
+	p, err := updateStock(ctx, q, target.ID, row.StockAfter, marked, now)
 	if err != nil {
 		return Product{}, nil, err
 	}

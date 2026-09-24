@@ -123,14 +123,14 @@ func TestGetProduct(t *testing.T) {
 	}{
 		{"p2", `{
 			"id": "p2", "name": "kidneybohnen", "brand": "Bonduelle", "package_size": "400 g", "note": "Im Keller",
-			"stock": 2, "target": 5, "min_stock": null, "missing": 3,
+			"stock": 2, "target": 5, "min_stock": null, "missing": 3, "marked": false,
 			"needs_review": true, "origin": "openfoodfacts", "lookup_state": "done", "has_image": true,
 			"barcodes": [{"code": "0034000470693", "units": 6}, {"code": "4001686301265", "units": 1}],
 			"created_at": "2026-09-23T12:00:00.123Z", "updated_at": "2026-09-24T08:30:00.456Z"
 		}`},
 		{"p3", `{
 			"id": "p3", "name": "Kidneybohnen", "brand": null, "package_size": null, "note": null,
-			"stock": 0, "target": 4, "min_stock": 1, "missing": 4,
+			"stock": 0, "target": 4, "min_stock": 1, "missing": 4, "marked": false,
 			"needs_review": false, "origin": "manual", "lookup_state": "none", "has_image": false,
 			"barcodes": [],
 			"created_at": "2026-09-23T12:00:00Z", "updated_at": "2026-09-23T12:00:00Z"

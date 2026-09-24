@@ -219,7 +219,7 @@ export interface paths {
         };
         /**
          * Einkaufsliste, sortiert nach Name
-         * @description Alle Produkte mit missing größer 0, sortiert nach Name ohne Beachtung der Groß- und Kleinschreibung.
+         * @description Alle Produkte mit missing größer 0 oder mit Vormerkung (marked), sortiert nach Name ohne Beachtung der Groß- und Kleinschreibung.
          */
         get: operations["getShoppingList"];
         put?: never;
@@ -267,6 +267,8 @@ export interface components {
             min_stock: number | null;
             /** @description Fehlmenge für die Einkaufsliste. Nur lesen, wird berechnet. */
             missing: number;
+            /** @description Für den Einkauf vorgemerkt. Nur lesen; eine Buchung add beendet die Vormerkung. */
+            marked: boolean;
             needs_review: boolean;
             /** @enum {string} */
             origin: "openfoodfacts" | "openbeautyfacts" | "openpetfoodfacts" | "openproductsfacts" | "manual" | "placeholder";
@@ -381,12 +383,14 @@ export interface components {
             product_id: string;
             name: string;
             brand: string | null;
-            /** @description Fehlmenge, die gekauft werden muss. Immer größer 0. */
+            /** @description Fehlmenge, die gekauft werden muss. 0 bei einem vorgemerkten Produkt ohne Fehlbestand. */
             missing: number;
             /** @description Bestand. */
             stock: number;
             /** @description Sollbestand. */
             target: number;
+            /** @description Für den Einkauf vorgemerkt. Nur lesen. */
+            marked: boolean;
         };
         ShoppingList: {
             items: components["schemas"]["ShoppingItem"][];
@@ -839,7 +843,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Die Produkte, bei denen etwas fehlt. */
+            /** @description Die Produkte, bei denen etwas fehlt oder die vorgemerkt sind. */
             200: {
                 headers: {
                     [name: string]: unknown;

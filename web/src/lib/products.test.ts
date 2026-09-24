@@ -21,6 +21,7 @@ function product(fields: Partial<Product>): Product {
     target: 1,
     min_stock: null,
     missing: 0,
+    marked: false,
     needs_review: false,
     origin: "manual",
     lookup_state: "none",

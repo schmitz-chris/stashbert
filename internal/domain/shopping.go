@@ -29,15 +29,18 @@ type ShoppingItem struct {
 	Missing   int64
 	Stock     int64
 	Target    int64
+	Marked    bool
 }
 
 // ShoppingListFromDB returns the stored products of which something is
-// missing (architecture.md, 5), computed with Missing, and keeps their order.
+// missing (architecture.md, 5), computed with Missing, or which are marked
+// for shopping (ADR-0015), and keeps their order. Missing stays the computed
+// amount, so it is 0 for a marked product of which nothing is missing.
 func ShoppingListFromDB(products []db.Product) []ShoppingItem {
 	var items []ShoppingItem
 	for _, p := range products {
 		missing := Missing(p.Stock, p.Target, p.MinStock)
-		if missing <= 0 {
+		if missing <= 0 && p.Marked == 0 {
 			continue
 		}
 		items = append(items, ShoppingItem{
@@ -47,6 +50,7 @@ func ShoppingListFromDB(products []db.Product) []ShoppingItem {
 			Missing:   missing,
 			Stock:     p.Stock,
 			Target:    p.Target,
+			Marked:    p.Marked != 0,
 		})
 	}
 	return items

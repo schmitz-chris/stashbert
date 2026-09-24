@@ -172,7 +172,7 @@ func TestRestoreBackup(t *testing.T) {
 		t.Fatalf("stored movements = %d, want 7", n)
 	}
 	checkShoppingList(t, h, `{"items": [{"product_id": "`+beansID+`", "name": "Kidneybohnen", "brand": "Bonduelle",
-		"missing": 4, "stock": 1, "target": 5}]}`)
+		"missing": 4, "stock": 1, "target": 5, "marked": false}]}`)
 
 	backupDir := filepath.Join(t.TempDir(), "backups")
 	now := time.Date(2026, 9, 24, 3, 0, 0, 0, time.UTC)

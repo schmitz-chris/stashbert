@@ -15,7 +15,7 @@ func TestProductsFromDB(t *testing.T) {
 	image := "a.jpg"
 	products := []db.Product{
 		{ID: "a", Name: "Kidneybohnen", Stock: 2, Target: 5, Origin: "manual", LookupState: "none",
-			NeedsReview: 1, ImageFile: &image, CreatedAt: stored, UpdatedAt: stored},
+			NeedsReview: 1, Marked: 1, ImageFile: &image, CreatedAt: stored, UpdatedAt: stored},
 		{ID: "b", Name: "Mehl", Stock: 2, Target: 4, MinStock: new(int64(1)), Origin: "manual", LookupState: "none",
 			CreatedAt: stored, UpdatedAt: stored},
 	}
@@ -32,7 +32,7 @@ func TestProductsFromDB(t *testing.T) {
 	}
 
 	want := []domain.Product{
-		{ID: "a", Name: "Kidneybohnen", Stock: 2, Target: 5, Missing: 3, NeedsReview: true, Origin: "manual",
+		{ID: "a", Name: "Kidneybohnen", Stock: 2, Target: 5, Missing: 3, Marked: true, NeedsReview: true, Origin: "manual",
 			LookupState: "none", HasImage: true, CreatedAt: storedTime, UpdatedAt: storedTime,
 			Barcodes: []domain.Barcode{{Code: "0034000470693", Units: 6}, {Code: "4001686301265", Units: 1}}},
 		{ID: "b", Name: "Mehl", Stock: 2, Target: 4, MinStock: new(int64(1)), Missing: 0, Origin: "manual",

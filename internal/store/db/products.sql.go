@@ -58,7 +58,7 @@ func (q *Queries) GetBarcode(ctx context.Context, code string) (Barcode, error) 
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at FROM products
+SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked FROM products
 WHERE id = ?
 `
 
@@ -81,6 +81,7 @@ func (q *Queries) GetProduct(ctx context.Context, id string) (Product, error) {
 		&i.ImageFile,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Marked,
 	)
 	return i, err
 }
@@ -119,7 +120,7 @@ const insertProduct = `-- name: InsertProduct :one
 INSERT INTO products (id, name, brand, package_size, target, min_stock, note,
     origin, lookup_state, needs_review, image_source_url, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
 `
 
 type InsertProductParams struct {
@@ -171,6 +172,7 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (P
 		&i.ImageFile,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Marked,
 	)
 	return i, err
 }
@@ -243,7 +245,7 @@ func (q *Queries) ListProductBarcodes(ctx context.Context, productID string) ([]
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at FROM products
+SELECT id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked FROM products
 ORDER BY name COLLATE NOCASE, id
 `
 
@@ -272,6 +274,7 @@ func (q *Queries) ListProducts(ctx context.Context) ([]Product, error) {
 			&i.ImageFile,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Marked,
 		); err != nil {
 			return nil, err
 		}
@@ -307,7 +310,7 @@ UPDATE products
 SET name = ?, brand = ?, package_size = ?, target = ?, min_stock = ?, note = ?,
     needs_review = ?, updated_at = ?
 WHERE id = ?
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
 `
 
 type UpdateProductParams struct {
@@ -351,6 +354,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.ImageFile,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Marked,
 	)
 	return i, err
 }

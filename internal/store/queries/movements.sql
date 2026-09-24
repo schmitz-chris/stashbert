@@ -17,7 +17,7 @@ SELECT EXISTS (SELECT 1 FROM movements WHERE reverses_id = ?);
 
 -- name: UpdateProductStock :one
 UPDATE products
-SET stock = ?, updated_at = ?
+SET stock = ?, marked = ?, updated_at = ?
 WHERE id = ?
 RETURNING *;
 

@@ -21,6 +21,8 @@ type Product struct {
 	Target      int64
 	MinStock    *int64
 	Missing     int64
+	// Marked is true if the product is marked for shopping (ADR-0015).
+	Marked      bool
 	NeedsReview bool
 	Origin      string
 	LookupState string
@@ -64,6 +66,7 @@ func ProductFromDB(p db.Product, barcodes []db.Barcode) (Product, error) {
 		Target:      p.Target,
 		MinStock:    p.MinStock,
 		Missing:     Missing(p.Stock, p.Target, p.MinStock),
+		Marked:      p.Marked != 0,
 		NeedsReview: p.NeedsReview != 0,
 		Origin:      p.Origin,
 		LookupState: p.LookupState,

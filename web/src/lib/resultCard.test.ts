@@ -24,6 +24,7 @@ const product: Product = {
   target: 3,
   min_stock: null,
   missing: 0,
+  marked: false,
   needs_review: false,
   origin: "manual",
   lookup_state: "none",

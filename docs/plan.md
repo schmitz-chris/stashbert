@@ -1240,7 +1240,7 @@ Alle F-Tasks setzen P0-6 voraus. Gemeinsame Regeln: AGENTS.md (Abschnitte Fronte
 
 ### B30: Vormerkung im Datenmodell und in der Einkaufsliste
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B26, B25
 - **Referenzen:** ADR-0015, architecture.md 5, 6.2, 6.3, 6.5
 - **Umfang:**

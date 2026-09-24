@@ -186,6 +186,7 @@ func productResponse(p domain.Product) Product {
 		Target:      int(p.Target),
 		MinStock:    minStock,
 		Missing:     int(p.Missing),
+		Marked:      p.Marked,
 		NeedsReview: p.NeedsReview,
 		Origin:      ProductOrigin(p.Origin),
 		LookupState: ProductLookupState(p.LookupState),

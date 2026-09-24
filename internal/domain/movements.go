@@ -72,7 +72,8 @@ type MovementResult struct {
 // Book books in for the product with in.ProductID or the product of the
 // barcode in.Barcode in one transaction: it reads the product, applies the
 // rules of architecture.md 6.3, inserts the movement and stores the new stock
-// and updated_at at the product. The delta of the movement is the actual
+// and updated_at at the product. A movement add also ends the marking for
+// shopping of the product (ADR-0015). The delta of the movement is the actual
 // change of the stock. Booked by barcode, the amount of add and consume is
 // quantity times the units of the barcode and the movement keeps the
 // normalized barcode. After the commit it publishes the events of the
@@ -192,7 +193,11 @@ func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("book movement for product %s: %w", cur.ID, err)
 	}
-	p, err := updateStock(ctx, q, cur.ID, stockAfter, now)
+	marked := cur.Marked
+	if in.Kind == "add" {
+		marked = 0
+	}
+	p, err := updateStock(ctx, q, cur.ID, stockAfter, marked, now)
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("book movement: %w", err)
 	}
@@ -226,11 +231,12 @@ func book(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, in NewMoveme
 	}, nil
 }
 
-// updateStock stores stock and updated_at now at the product with id and
-// returns the changed product with its barcodes.
-func updateStock(ctx context.Context, q *db.Queries, id string, stock int64, now string) (Product, error) {
+// updateStock stores stock, marked (0 or 1) and updated_at now at the
+// product with id and returns the changed product with its barcodes.
+func updateStock(ctx context.Context, q *db.Queries, id string, stock, marked int64, now string) (Product, error) {
 	updated, err := q.UpdateProductStock(ctx, db.UpdateProductStockParams{
 		Stock:     stock,
+		Marked:    marked,
 		UpdatedAt: now,
 		ID:        id,
 	})

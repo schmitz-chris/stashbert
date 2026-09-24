@@ -19,7 +19,8 @@ import (
 // ReverseMovement reverses the movement with id in one transaction
 // (architecture.md 6.3, Storno): it reads the movement and its product,
 // inserts a movement of kind reversal with reverses_id id and without barcode
-// and stores the new stock and updated_at at the product. The reversal aims
+// and stores the new stock and updated_at at the product; its marking for
+// shopping stays as it is, also for the reversal of an add. The reversal aims
 // at the change -delta of the movement; if the stock would become negative,
 // it becomes 0 with the warning clamped_to_zero. The delta of the reversal is
 // the actual change of the stock. After the commit it publishes the events of
@@ -108,7 +109,7 @@ func ReverseMovement(ctx context.Context, sqlDB *sql.DB, pub events.Publisher, i
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("reverse movement %s: %w", id, err)
 	}
-	p, err := updateStock(ctx, q, cur.ID, stockAfter, now)
+	p, err := updateStock(ctx, q, cur.ID, stockAfter, cur.Marked, now)
 	if err != nil {
 		return MovementResult{}, fmt.Errorf("reverse movement %s: %w", id, err)
 	}

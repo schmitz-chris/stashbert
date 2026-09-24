@@ -382,11 +382,11 @@ paths:
       operationId: getShoppingList
       summary: Einkaufsliste, sortiert nach Name
       description: >-
-        Alle Produkte mit missing größer 0, sortiert nach Name ohne Beachtung
-        der Groß- und Kleinschreibung.
+        Alle Produkte mit missing größer 0 oder mit Vormerkung (marked),
+        sortiert nach Name ohne Beachtung der Groß- und Kleinschreibung.
       responses:
         "200":
-          description: Die Produkte, bei denen etwas fehlt.
+          description: Die Produkte, bei denen etwas fehlt oder die vorgemerkt sind.
           content:
             application/json:
               schema:
@@ -453,6 +453,7 @@ components:
         - target
         - min_stock
         - missing
+        - marked
         - needs_review
         - origin
         - lookup_state
@@ -483,6 +484,11 @@ components:
         missing:
           type: integer
           description: Fehlmenge für die Einkaufsliste. Nur lesen, wird berechnet.
+        marked:
+          type: boolean
+          description: >-
+            Für den Einkauf vorgemerkt. Nur lesen; eine Buchung add beendet die
+            Vormerkung.
         needs_review:
           type: boolean
         origin:
@@ -728,6 +734,7 @@ components:
         - missing
         - stock
         - target
+        - marked
       properties:
         product_id:
           type: string
@@ -737,13 +744,18 @@ components:
           type: [string, "null"]
         missing:
           type: integer
-          description: Fehlmenge, die gekauft werden muss. Immer größer 0.
+          description: >-
+            Fehlmenge, die gekauft werden muss. 0 bei einem vorgemerkten
+            Produkt ohne Fehlbestand.
         stock:
           type: integer
           description: Bestand.
         target:
           type: integer
           description: Sollbestand.
+        marked:
+          type: boolean
+          description: Für den Einkauf vorgemerkt. Nur lesen.
     ShoppingList:
       type: object
       required:

@@ -7,8 +7,8 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/domain"
 )
 
-// GetShoppingList returns the products of which something is missing, sorted
-// by name like ListProducts.
+// GetShoppingList returns the products of which something is missing or
+// which are marked for shopping, sorted by name like ListProducts.
 func (s *Server) GetShoppingList(ctx context.Context, request GetShoppingListRequestObject) (GetShoppingListResponseObject, error) {
 	rows, err := s.queries.ListProducts(ctx)
 	if err != nil {
@@ -24,6 +24,7 @@ func (s *Server) GetShoppingList(ctx context.Context, request GetShoppingListReq
 			Missing:   int(it.Missing),
 			Stock:     int(it.Stock),
 			Target:    int(it.Target),
+			Marked:    it.Marked,
 		}
 	}
 	return GetShoppingList200JSONResponse{Items: items}, nil

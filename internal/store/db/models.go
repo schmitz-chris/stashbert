@@ -48,6 +48,7 @@ type Product struct {
 	ImageFile      *string
 	CreatedAt      string
 	UpdatedAt      string
+	Marked         int64
 }
 
 type Setting struct {

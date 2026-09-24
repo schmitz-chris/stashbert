@@ -8,6 +8,7 @@ const kidneyBeans: ShoppingItem = {
   missing: 3,
   stock: 2,
   target: 5,
+  marked: false,
 };
 
 const flour: ShoppingItem = {
@@ -17,6 +18,7 @@ const flour: ShoppingItem = {
   missing: 4,
   stock: 0,
   target: 4,
+  marked: false,
 };
 
 const pasta: ShoppingItem = {
@@ -26,6 +28,7 @@ const pasta: ShoppingItem = {
   missing: 1,
   stock: 4,
   target: 5,
+  marked: false,
 };
 
 describe("shoppingText", () => {

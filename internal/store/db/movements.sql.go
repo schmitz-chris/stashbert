@@ -312,19 +312,25 @@ func (q *Queries) MoveProductMovements(ctx context.Context, arg MoveProductMovem
 
 const updateProductStock = `-- name: UpdateProductStock :one
 UPDATE products
-SET stock = ?, updated_at = ?
+SET stock = ?, marked = ?, updated_at = ?
 WHERE id = ?
-RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at
+RETURNING id, name, brand, package_size, stock, target, min_stock, note, origin, lookup_state, needs_review, image_source_url, image_file, created_at, updated_at, marked
 `
 
 type UpdateProductStockParams struct {
 	Stock     int64
+	Marked    int64
 	UpdatedAt string
 	ID        string
 }
 
 func (q *Queries) UpdateProductStock(ctx context.Context, arg UpdateProductStockParams) (Product, error) {
-	row := q.db.QueryRowContext(ctx, updateProductStock, arg.Stock, arg.UpdatedAt, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateProductStock,
+		arg.Stock,
+		arg.Marked,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	var i Product
 	err := row.Scan(
 		&i.ID,
@@ -342,6 +348,7 @@ func (q *Queries) UpdateProductStock(ctx context.Context, arg UpdateProductStock
 		&i.ImageFile,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Marked,
 	)
 	return i, err
 }
