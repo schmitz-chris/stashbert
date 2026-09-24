@@ -20,3 +20,4 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0014](0014-betrieb-im-lxc.md) | Betrieb im Proxmox-LXC mit systemd | angenommen |
 | [0015](0015-vormerken-fuer-den-einkauf.md) | Vormerken für den Einkauf | angenommen |
 | [0016](0016-oberflaeche-nach-hig.md) | Oberfläche nach Apples Human Interface Guidelines, kein Dark Mode in M1 | angenommen |
+| [0017](0017-kaesten.md) | Kästen (Wasser, Bier) ohne eigenen Barcode | angenommen |

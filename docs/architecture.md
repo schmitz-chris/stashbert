@@ -162,6 +162,7 @@ Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Al
 | `lookup_state` | TEXT | `none`, `pending`, `done`, `not_found` |
 | `needs_review` | INTEGER | 0/1 |
 | `marked` | INTEGER | 0/1, Standard 0: für den Einkauf vorgemerkt (ADR-0015) |
+| `crate_size` | INTEGER | NULL, 2 bis 100: Flaschen pro Kasten (ADR-0017); Bestand und Soll bleiben in Flaschen |
 | `image_source_url` | TEXT | NULL, Bild-URL von OFF |
 | `image_file` | TEXT | NULL, Dateiname in `DATA_DIR/images/` |
 | `created_at`, `updated_at` | TEXT | `updated_at` ändert sich bei jeder Änderung der Zeile `products`, also bei Stammdaten (PATCH), jeder Buchung (auch `inventory` mit `delta` 0), Storno, Zusammenführen und Nachladen. Barcodes zuordnen oder entfernen ändert es nicht. |
@@ -305,17 +306,17 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 - **Product:**
   - `id`, `name`, `brand|null`, `package_size|null`, `note|null`
   - `stock` (nur lesen), `target`, `min_stock|null`, `missing` (nur lesen), `marked` (nur lesen, ADR-0015)
-  - `needs_review`, `origin`, `lookup_state`, `has_image`
+  - `needs_review`, `origin`, `lookup_state`, `has_image`, `crate_size|null` (ADR-0017)
   - `barcodes: Barcode[]`, `created_at`, `updated_at`
 - **Barcode:** `code`, `units`
 - **Leere Texte:** `brand`, `package_size` und `note` werden getrimmt; ist das Ergebnis leer, wird `NULL` gespeichert (bei Anlegen und Ändern).
-- **ProductCreate:** `name` (Pflicht), `brand?`, `package_size?`, `target?` (Standard 0), `min_stock?`, `note?`, `barcodes?: [{code, units?}]`
+- **ProductCreate:** `name` (Pflicht), `brand?`, `package_size?`, `target?` (Standard 0), `min_stock?`, `note?`, `crate_size?`, `barcodes?: [{code, units?}]`
 - **ProductPatch (JSON Merge Patch):**
-  - Felder: `name`, `brand`, `package_size`, `target`, `min_stock`, `note`.
+  - Felder: `name`, `brand`, `package_size`, `target`, `min_stock`, `note`, `crate_size` (ADR-0017).
   - `null` löscht ein nullbares Feld.
   - `needs_review` wird nur dann `false`, wenn der Patch mindestens eines der Felder `name`, `brand` oder `package_size` enthält. Ein Patch nur mit `target` ändert `needs_review` nicht.
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
-- **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`
+- **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`, `crate_size|null`
 - **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".
 - **Merge:**
   - Barcodes und Buchungen der Quelle gehen auf das Ziel über.

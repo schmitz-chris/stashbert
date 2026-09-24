@@ -1500,6 +1500,53 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
   2. `make check` ist grün; Bildschirmfotos in 320, 390 und 402 px sowie mit großer Schrift.
   3. (Nutzer) Die Liste wirkt stimmig.
 
+## Phase 1j: Kästen (ADR-0017)
+
+### B33: Kastengröße im Datenmodell und in der API
+
+- **Status:** offen
+- **Abhängig von:** B31
+- **Referenzen:** ADR-0017; architecture.md 5, 6.5
+- **Umfang:**
+  - Migration `0004_crate_size.sql`: `products.crate_size INTEGER NULL CHECK (crate_size IS NULL OR crate_size BETWEEN 2 AND 100)`, mit Down-Migration.
+  - `crate_size` (nullbar im 3.1-Stil, `minimum: 2`, `maximum: 100`) in `Product` (Pflichtfeld, Wert oder null), `ProductCreate` (optional), `ProductPatch` (optional, `null` löscht) und `ShoppingItem` (Pflichtfeld).
+  - Fachlogik und Handler: anlegen, ändern (PATCH setzt `needs_review` wegen `crate_size` nicht zurück), lesen, Einkaufsliste; Zusammenführen übernimmt die Kastengröße der Quelle nur, wenn das Ziel keine hat.
+  - `make generate` erzeugt auch `web/src/lib/api/schema.d.ts`; Frontend-Test-Fixtures bekommen `crate_size: null`, sonst keine Frontend-Änderung.
+- **Nicht im Umfang:** Oberfläche (F27, F28), Umrechnung in Kästen (rein im Frontend).
+- **Abnahmekriterien (Tests):**
+  1. Anlegen, Ändern, Löschen (`null`) der Kastengröße; Grenzen 1 und 101 ergeben 400.
+  2. Einkaufsliste und Produktliste liefern `crate_size`.
+  3. Zusammenführen nach der Regel oben; Migration hin und zurück; `make check` ist grün.
+
+### F27: Kastengröße auf der Produktseite und Kästen in der Einkaufsliste
+
+- **Status:** offen
+- **Abhängig von:** B33, F26
+- **Referenzen:** ADR-0017
+- **Umfang:**
+  - Produktseite, Formular: Feld „Kastengröße" (Zahl, 2 bis 100, leer bedeutet kein Kasten, Hilfetext „Flaschen pro Kasten"), gespeichert über den bestehenden PATCH mit `diffPatch`.
+  - Einkaufsliste: für Produkte mit Kastengröße und Fehlbestand „N Kasten"/„N Kästen" (aufgerundet) mit dem Zusatz „fehlen M Flaschen"; geteilter Text „N Kasten <Name>" bzw. „N Kästen <Name>". Die Umrechnung als reine Funktion mit Tests.
+  - Vorrat-Status aus F26: bei Kastengröße zusätzlich „(Kasten zu N)" nicht nötig; unverändert lassen.
+- **Nicht im Umfang:** Scan-Frage (F28).
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Umrechnung (17 von 20 ergibt 1 Kasten, 21 ergibt 2 Kästen, genau 20 ergibt 1 Kasten, ohne Kastengröße unverändert) und den geteilten Text.
+  2. `make check` ist grün.
+
+### F28: Frage „Flasche oder Kasten" beim Einlagern
+
+- **Status:** offen
+- **Abhängig von:** F27
+- **Referenzen:** ADR-0017; F08 bis F11
+- **Umfang:**
+  - Im Modus Einlagern sucht die Scan-Ansicht das Produkt zum (normalisierten) Barcode in der zwischengespeicherten Produktliste (reine Funktion). Hat es eine Kastengröße, erscheint vor dem Buchen ein Sheet mit zwei großen Knöpfen „Flasche" und „Kasten (N Flaschen)"; gebucht wird `quantity` 1 bzw. N. Solange das Sheet offen ist, werden Scans ignoriert; „Abbrechen" bucht nichts. „Code eintippen" verhält sich gleich.
+  - Ohne Kastengröße (oder Produkt nicht im Cache, oder neu angelegt) wird wie bisher sofort 1 gebucht. Die Ergebniskarte im Modus Einlagern zeigt dann „War ein Kasten": Auswahl 6, 12, 20, 24 oder eine andere Zahl (2 bis 100); danach wird die Kastengröße per PATCH gespeichert und `N − 1` per `product_id` nachgebucht (mit Idempotency-Key). Die Karte zeigt danach das neue Ergebnis.
+  - Entnehmen und Einkaufen fragen nicht.
+- **Nicht im Umfang:** Kästen beim Entnehmen, Inventur-Ablauf (bleibt „Bestand setzen").
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Produktsuche per Barcode im Cache und die Entscheidung Frage ja/nein.
+  2. `make check` ist grün.
+  3. (Nutzer) Kasten Bier einlagern: erst „War ein Kasten" mit Größe, beim nächsten Kasten die Frage vorab.
+
 ---
 
 ## Später (bewusst nicht Teil dieses Plans)
