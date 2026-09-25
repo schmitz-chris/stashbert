@@ -1,5 +1,5 @@
 #!/bin/sh
-# Spielt eine Sicherung aus GET /api/v1/backup ein (ADR-0019,
+# Spielt ein Backup aus GET /api/v1/backup ein (ADR-0019,
 # architecture.md 9.3). Aufruf als root im Container:
 #
 #   stashbert-restore <archiv.tar.gz>
@@ -37,7 +37,7 @@ trap 'exit 1' HUP INT TERM
 
 tar -xzf "$src" -C "$tmp" || die "Das Archiv $src ließ sich nicht entpacken. Nichts geändert."
 [ -f "$tmp/stashbert.db" ] ||
-	die "Das Archiv enthält keine stashbert.db. Ist es eine Sicherung aus StashBert? Nichts geändert."
+	die "Das Archiv enthält keine stashbert.db. Ist es ein Backup aus StashBert? Nichts geändert."
 
 old=$data_dir/vor-restore-$(date -u +%Y%m%d-%H%M%S)
 [ ! -e "$old" ] || die "$old gibt es schon. Bitte in einer Sekunde noch einmal versuchen."
@@ -76,4 +76,4 @@ sleep 5
 systemctl is-active --quiet stashbert ||
 	die "Der Dienst läuft nicht. Details: journalctl -u stashbert. Der alte Stand liegt in $old."
 echo "Dienst stashbert läuft."
-echo "Sicherung eingespielt. Der alte Stand liegt in $old"
+echo "Backup eingespielt. Der alte Stand liegt in $old"

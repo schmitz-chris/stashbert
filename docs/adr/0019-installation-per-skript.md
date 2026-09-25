@@ -22,7 +22,7 @@
   - `SHA256SUMS` über alle Assets.
 - **Kein Debian-Paket:** Das Binary ist statisch gelinkt und braucht keine weiteren Pakete; `install.sh` legt Benutzer, Unit und Konfiguration an. Ein `.deb` bräuchte ein neues Werkzeug und für `apt upgrade` ein eigenes, signiertes Paketarchiv.
 - **Update im Container:** `stashbert-update` ermittelt das neueste Release über die Weiterleitung von `releases/latest`, lädt Archiv und `SHA256SUMS`, prüft die Prüfsumme und ruft `install.sh` auf. Ist die Version schon installiert, ändert es nichts. Wie bei den community-scripts ruft `/usr/bin/update` es auf; das legt das Proxmox-Skript an.
-- **Restore im Container:** `stashbert-restore <archiv>` spielt eine Sicherung aus `GET /backup` ein. Der bisherige Stand wird verschoben, nicht gelöscht.
+- **Restore im Container:** `stashbert-restore <archiv>` spielt ein Backup aus `GET /backup` ein. Der bisherige Stand wird verschoben, nicht gelöscht.
 - **Proxmox-Skript:** ein eigenes `proxmox.sh` im Stil der community-scripts, aber ohne deren Gerüst. Aufruf auf dem Proxmox-Host:
 
   ```
@@ -30,7 +30,7 @@
   ```
 
   - Es legt einen unprivilegierten Debian-13-LXC an: `nesting=1`, 1 Kern, 512 MB RAM, 8 GB Platte, DHCP oder feste IP, Start mit dem Host.
-  - Es installiert über `stashbert-update`, trägt auf Wunsch `OFF_CONTACT` und MQTT ein und spielt auf Wunsch eine Sicherung ein (Datei auf dem Host oder Adresse einer laufenden Instanz).
+  - Es installiert über `stashbert-update`, trägt auf Wunsch `OFF_CONTACT` und MQTT ein und spielt auf Wunsch ein Backup ein (Datei auf dem Host oder Adresse einer laufenden Instanz).
   - Die Konsole des Containers meldet root automatisch an, wie bei den community-scripts. Zugang dazu hat nur, wer Proxmox verwalten darf.
   - `--dry-run` zeigt die ändernden Befehle, ohne sie auszuführen.
 - **Der Weg ohne Skript bleibt:** Archiv in einen Container kopieren, entpacken, `sh install.sh`.

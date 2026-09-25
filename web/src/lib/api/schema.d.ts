@@ -330,7 +330,7 @@ export interface paths {
         };
         /**
          * Zustand für die Einstellungen
-         * @description Version, Größe der Datenbank, die regelmäßigen Sicherungen in DATA_DIR/backups und ob Open Food Facts eingerichtet ist. Verbindungsdaten und Geheimnisse gibt der Endpunkt nicht aus.
+         * @description Version, Größe der Datenbank, die regelmäßigen Backups in DATA_DIR/backups und ob Open Food Facts eingerichtet ist. Verbindungsdaten und Geheimnisse gibt der Endpunkt nicht aus.
          */
         get: operations["getSystemStatus"];
         put?: never;
@@ -349,8 +349,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Sicherung herunterladen
-         * @description Frische Sicherung als tar-Archiv mit gzip: stashbert.db (eine Kopie per VACUUM INTO) und der Ordner images/ mit allen Bilddateien. Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API gibt es nicht.
+         * Backup herunterladen
+         * @description Frisches Backup als tar-Archiv mit gzip: stashbert.db (eine Kopie per VACUUM INTO) und der Ordner images/ mit allen Bilddateien. Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API gibt es nicht.
          */
         get: operations["downloadBackup"];
         put?: never;
@@ -621,14 +621,14 @@ export interface components {
              * @description Bytes der Datenbankdatei stashbert.db samt WAL-Datei (stashbert.db-wal), falls es sie gibt.
              */
             database_size: number;
-            /** @description Anzahl der regelmäßigen Sicherungen stashbert-<YYYYMMDD-HHMMSS>.db in DATA_DIR/backups, ohne die Sicherungen vor Migrationen (pre-migration-*). */
+            /** @description Anzahl der regelmäßigen Backups stashbert-<YYYYMMDD-HHMMSS>.db in DATA_DIR/backups, ohne die Backups vor Migrationen (pre-migration-*). */
             backup_count: number;
             /**
              * Format: date-time
-             * @description Zeit der neuesten regelmäßigen Sicherung, gelesen aus ihrem Dateinamen (UTC, auf die Sekunde), oder null ohne Sicherung.
+             * @description Zeit des neuesten regelmäßigen Backups, gelesen aus ihrem Dateinamen (UTC, auf die Sekunde), oder null ohne Backup.
              */
             last_backup_at: string | null;
-            /** @description Anzahl der aufbewahrten täglichen Sicherungen (BACKUP_KEEP). */
+            /** @description Anzahl der aufbewahrten täglichen Backups (BACKUP_KEEP). */
             backup_keep: number;
             /** @description true, wenn OFF_CONTACT gesetzt ist und unbekannte Barcodes bei Open Food Facts nachgeschlagen werden. */
             open_food_facts: boolean;
@@ -1347,7 +1347,7 @@ export interface operations {
             /** @description Das Archiv. */
             200: {
                 headers: {
-                    /** @description attachment; filename="stashbert-<YYYYMMDD-HHMMSS>.tar.gz" mit der Zeit der Sicherung in UTC. */
+                    /** @description attachment; filename="stashbert-<YYYYMMDD-HHMMSS>.tar.gz" mit der Zeit des Backups in UTC. */
                     "Content-Disposition": string;
                     [name: string]: unknown;
                 };

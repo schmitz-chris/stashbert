@@ -539,7 +539,7 @@ paths:
       operationId: getSystemStatus
       summary: Zustand für die Einstellungen
       description: >-
-        Version, Größe der Datenbank, die regelmäßigen Sicherungen in
+        Version, Größe der Datenbank, die regelmäßigen Backups in
         DATA_DIR/backups und ob Open Food Facts eingerichtet ist.
         Verbindungsdaten und Geheimnisse gibt der Endpunkt nicht aus.
       responses:
@@ -558,9 +558,9 @@ paths:
   /backup:
     get:
       operationId: downloadBackup
-      summary: Sicherung herunterladen
+      summary: Backup herunterladen
       description: >-
-        Frische Sicherung als tar-Archiv mit gzip: stashbert.db (eine Kopie
+        Frisches Backup als tar-Archiv mit gzip: stashbert.db (eine Kopie
         per VACUUM INTO) und der Ordner images/ mit allen Bilddateien.
         Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung
         (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API
@@ -572,7 +572,7 @@ paths:
             Content-Disposition:
               description: >-
                 attachment; filename="stashbert-<YYYYMMDD-HHMMSS>.tar.gz" mit
-                der Zeit der Sicherung in UTC.
+                der Zeit des Backups in UTC.
               required: true
               schema:
                 type: string
@@ -1142,18 +1142,18 @@ components:
         backup_count:
           type: integer
           description: >-
-            Anzahl der regelmäßigen Sicherungen
+            Anzahl der regelmäßigen Backups
             stashbert-<YYYYMMDD-HHMMSS>.db in DATA_DIR/backups, ohne die
-            Sicherungen vor Migrationen (pre-migration-*).
+            Backups vor Migrationen (pre-migration-*).
         last_backup_at:
           type: [string, "null"]
           format: date-time
           description: >-
-            Zeit der neuesten regelmäßigen Sicherung, gelesen aus ihrem
-            Dateinamen (UTC, auf die Sekunde), oder null ohne Sicherung.
+            Zeit des neuesten regelmäßigen Backups, gelesen aus ihrem
+            Dateinamen (UTC, auf die Sekunde), oder null ohne Backup.
         backup_keep:
           type: integer
-          description: Anzahl der aufbewahrten täglichen Sicherungen (BACKUP_KEEP).
+          description: Anzahl der aufbewahrten täglichen Backups (BACKUP_KEEP).
         open_food_facts:
           type: boolean
           description: >-
