@@ -1565,6 +1565,25 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ---
 
+## Phase 1k: Unbekannte Barcodes beim Scannen benennen
+
+### F31: Namensfeld auf der Ergebniskarte
+
+- **Status:** offen
+- **Abhängig von:** F10, B36a
+- **Referenzen:** Nutzer-Rückmeldung vom 25.09.2026 (keine kostenpflichtigen Quellen; unbekannte Produkte sollen sich beim Scannen benennen lassen); architecture.md 6.5 (`needs_review` nach PATCH des Namens), 7.2, 7.3 (Nachladen überschreibt nur bei `needs_review`); ADR-0016
+- **Umfang:**
+  - Zeigt die Ergebniskarte ein Platzhalter-Produkt (`origin = placeholder`, beim ersten Scan und bei jedem späteren Scan, solange es Platzhalter ist), steht statt „Name ändern" ein Textfeld „Name" (leer, Platzhaltertext „Wie heißt das Produkt?") mit dem Knopf „Speichern". Absenden auch mit der Eingabetaste.
+  - Speichern sendet `PATCH /products/{id}` nur mit `name` (getrimmt, 1 bis 120 Zeichen; leer lässt sich nicht speichern). Danach zeigt die Karte den neuen Namen; der Cache wird aus der Antwort aktualisiert. Fehler: „Speichern fehlgeschlagen" unter dem Feld bis zur nächsten Aktion.
+  - Solange das Feld den Fokus hat, ignoriert die Scan-Ansicht erkannte Codes (wie bei den Dialogen), damit die Karte beim Tippen nicht durch einen neuen Scan ersetzt wird.
+  - Soll-Schnellauswahl und „Stattdessen zu vorhandenem Produkt" bleiben unverändert. Bei Produkten mit Namen aus Open Food Facts bleibt „Name ändern".
+  - Die Entscheidung, ob das Feld erscheint, ist eine reine Funktion mit Vitest-Tests.
+- **Nicht im Umfang:** Marke oder Packungsgröße auf der Karte, weitere Datenquellen, Änderungen am Backend.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Entscheidung (Platzhalter neu, Platzhalter erneut gescannt, Produkt aus Open Food Facts, nach dem Speichern) und für das Trimmen und Prüfen des Namens.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) und mit großer Schrift.
+  3. (Nutzer) Unbekannten Barcode scannen, Namen auf der Karte eintragen, Produkt erscheint mit diesem Namen im Vorrat.
+
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
 Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.
