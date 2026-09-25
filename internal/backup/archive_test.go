@@ -122,8 +122,12 @@ func TestNewArchive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Only files go into the archive, no subdirectories.
+	// Only files go into the archive, no subdirectories and no hidden
+	// temporary files of an image being written.
 	if err := os.Mkdir(filepath.Join(imageDir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(imageDir, ".a.jpg-123.tmp"), []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	tmp := useTempDir(t)

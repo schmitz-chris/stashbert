@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -86,7 +87,9 @@ func (a *Archive) Close() error {
 }
 
 // writeArchive writes the tar.gz with the file at dbPath as stashbert.db and
-// the directory images/ with the regular files of imageDir to w.
+// the directory images/ with the regular files of imageDir to w. Hidden
+// files are left out: they are temporary files of an image being written,
+// which Stage would reject when the archive is restored (ADR-0020).
 func writeArchive(ctx context.Context, w io.Writer, dbPath, imageDir string) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
@@ -102,7 +105,7 @@ func writeArchive(ctx context.Context, w io.Writer, dbPath, imageDir string) err
 		return fmt.Errorf("backup archive: %w", err)
 	}
 	for _, e := range entries {
-		if !e.Type().IsRegular() {
+		if !e.Type().IsRegular() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		// A client that went away does not need the rest of the archive.
