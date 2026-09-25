@@ -1668,7 +1668,7 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
 
 ### L05: Proxmox-Skript
 
-- **Status:** wartet auf Nutzer (Skript und Makefile stehen, shellcheck ohne Befund, Durchlauf mit Attrappen für `pct`, `pveam`, `pvesm` und `pvesh` im Debian-13-Container bestanden; den Einzeiler auf dem Proxmox-Host prüft der Nutzer)
+- **Status:** erledigt (am 25.09.2026 mit `v0.2.0` auf dem Proxmox-Host des Nutzers: Container läuft, Konsole ohne Passwort, `update` meldet aktuell; `v0.1.0` scheiterte an `umask 077`, behoben)
 - **Abhängig von:** L04
 - **Referenzen:** ADR-0019, ADR-0014, docs/betrieb.md 2, pct(1), pveam(1), pvesm(1) und pvesh(1) der Proxmox-Doku
 - **Umfang:** `deploy/proxmox.sh` (bash, `set -Eeuo pipefail`), läuft als root auf dem Proxmox-Host, Texte auf Deutsch.
@@ -1706,7 +1706,7 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
 
 ### L06: Betriebsanleitung für das Skript
 
-- **Status:** wartet auf Nutzer
+- **Status:** erledigt
 - **Abhängig von:** L05
 - **Referenzen:** ADR-0019, docs/betrieb.md
 - **Umfang:**
