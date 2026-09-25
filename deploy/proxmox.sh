@@ -201,7 +201,12 @@ done
 for c in pct pveam pvesm pvesh; do
 	command -v "$c" >/dev/null 2>&1 || die "$c nicht gefunden. Das Skript gehört auf den Proxmox-Host."
 done
-umask 077
+# pct, pveam und alles, was pct exec im Container startet, erben die umask.
+# Mit 077 legte Proxmox Dateien wie /etc/resolv.conf nur für root lesbar an,
+# und apt (lädt als _apt) konnte keine Namen auflösen. Protokoll und
+# temporäre Dateien bleiben trotzdem privat: mktemp legt sie mit 0600 bzw.
+# 0700 an.
+umask 022
 TMP=$(mktemp -d)
 
 ROOT_STORES=$(list_storages rootdir)
