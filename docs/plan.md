@@ -1724,6 +1724,70 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
   1. Alle Befehle passen zu den Skripten, zum Makefile und zum Workflow (gegenlesen).
   2. (Nutzer) Die Anleitung führt zu einer laufenden Instanz.
 
+## Phase 1n: Backup einspielen (ADR-0020)
+
+Nutzerentscheidung vom 25.09.2026: Ein Backup lässt sich in den Einstellungen einspielen. Die Oberfläche sagt „Backup", nicht „Sicherung". Gemeinsame Referenzen: ADR-0020, architecture.md 4.4, 6.2, 6.4 und 9.3.
+
+### B41: Backup einspielen per API
+
+- **Status:** offen
+- **Abhängig von:** B40
+- **Referenzen:** ADR-0020, architecture.md 4.4, 6.2 (`POST /backup/restore`), 6.4, 9.3; `internal/backup/archive.go` (Aufbau des Archivs)
+- **Umfang:**
+  - **Spec** (contract-first): `POST /backup/restore` (`restoreBackup`), Body `application/gzip` (binär), Antwort 202 ohne Body, `default` mit `Problem`; die Codes in der `description`.
+  - **Prüfen und bereitlegen** (`internal/backup`, z. B. `restore.go`):
+    - Das Archiv wird beim Lesen nach `DATA_DIR/restore/incoming-<zufall>/` entpackt (`archive/tar`, `compress/gzip`), nie ganz in den Speicher.
+    - Erlaubt sind nur die reguläre Datei `stashbert.db`, der Ordner `images/` und reguläre Dateien darin, deren Namen dem Muster der gespeicherten Produktbilder folgen. Alles andere (andere Pfade, `..`, absolute Pfade, Links, Geräte) ergibt `invalid_backup`. Entpackt höchstens 4 GB; mehr ergibt `backup_too_large`.
+    - Fehlt `stashbert.db`, ist es kein gültiges gzip-tar oder besteht die Datenbank `PRAGMA integrity_check` nicht: `invalid_backup`.
+    - Enthält `goose_db_version` eine Version, die neuer ist als die neueste eingebettete Migration: `backup_too_new`.
+    - Bei Erfolg wird `incoming-…` in `DATA_DIR/restore/pending/` umbenannt. Liegt dort schon ein Backup oder läuft gerade ein Einspielen: `restore_in_progress`. Bei jedem Fehler wird `incoming-…` gelöscht, der laufende Betrieb bleibt unberührt.
+  - **Einspielen beim Start** (`internal/backup`, aufgerufen in `main` vor `app.OpenAndMigrate`):
+    - Liegt `DATA_DIR/restore/pending/` bereit, verschiebt StashBert `stashbert.db`, `-wal`, `-shm` und `images/` (was davon vorhanden ist) nach `DATA_DIR/vor-restore-<YYYYMMDD-HHMMSS>/` (UTC) und legt Datenbank und Bilder aus `pending/` ab.
+    - Danach wird `DATA_DIR/restore/` entfernt, auch Reste von `incoming-…`.
+    - Jeder Schritt steht im Log. Scheitert ein Schritt, bricht der Start mit Fehler ab, statt mit halbem Stand zu laufen.
+  - **Neustart im Prozess** (`cmd/stashbert`, nur Verdrahtung):
+    - Der Handler meldet nach dem Bereitlegen über eine Abhängigkeit in `ServerDeps` einen Neustart an und antwortet 202.
+    - `main` fährt dann herunter wie bei SIGTERM (HTTP-Server mit `Shutdown`, damit die 202 noch ankommt; Hintergrundjobs; MQTT; Datenbank) und durchläuft den Start erneut im selben Prozess: Backup einspielen, Datenbank öffnen und migrieren, Dienste starten, Port öffnen.
+    - SIGINT und SIGTERM beenden weiterhin ganz.
+  - **Route** in `internal/app`: `POST /api/v1/backup/restore` geht am Validator vorbei zum generierten Handler, mit `http.MaxBytesReader` (1 GB, Überschreitung: 413 `backup_too_large`) und Lese- und Schreibfrist 10 min per `http.ResponseController`. Ein anderer Content-Type als `application/gzip` oder `application/x-gzip` ergibt `invalid_request`.
+  - Neue Codes in `internal/httpx` bzw. dort, wo die vorhandenen Codes stehen, nach architecture.md 6.4.
+- **Nicht im Umfang:** Oberfläche (F33), automatisches Löschen alter `vor-restore-…`-Ordner, Einspielen einzelner `.db`-Dateien ohne Archiv, Anmeldung.
+- **Abnahmekriterien:**
+  1. Tests für das Prüfen:
+     - Ein Archiv aus `GET /backup` wird bereitgelegt.
+     - Diese Archive werden abgelehnt und hinterlassen keine Reste: ohne `stashbert.db`, mit `../`, mit absolutem Pfad, mit Link, mit fremder Datei, kein gzip, kaputte Datenbank, zu neue Migrationsversion, zu groß (mit kleinem Limit im Test).
+     - Ein zweites Bereitlegen ergibt `restore_in_progress`.
+  2. Tests für das Einspielen beim Start: Der alte Stand liegt in `vor-restore-…`, die neuen Daten und Bilder sind da, `restore/` ist weg; ohne `pending/` ändert sich nichts.
+  3. API-Test gegen `app.NewHandler`: 202 und der Neustart ist angemeldet; 413 bei Überschreitung; `invalid_request` bei falschem Content-Type. Ein Durchlauf „bereitlegen, einspielen, `OpenAndMigrate`" zeigt die Produkte, Barcodes und Buchungen des Backups (wie `restore_test.go`).
+  4. Von Hand gegen einen laufenden Server (Bericht): Einspielen per `curl`, StashBert ist nach wenigen Sekunden mit den neuen Daten wieder da, derselbe Prozess läuft weiter.
+  5. `make check` ist grün.
+
+### F33: Backup einspielen in den Einstellungen
+
+- **Status:** offen
+- **Abhängig von:** B41, F32
+- **Referenzen:** ADR-0020, ADR-0016, architecture.md 4.2, 6.2; `components/Dialog.tsx`
+- **Umfang:**
+  - **Umbenennen:** Der Abschnitt heißt „Backup". Aus „Letzte Sicherung" wird „Letztes Backup", aus „Sicherung herunterladen" wird „Backup herunterladen"; die übrigen Texte des Abschnitts entsprechend, ohne „Sicherung".
+  - **Knopf „Backup einspielen"** unter „Backup herunterladen", als zweitrangiger Knopf. Er öffnet eine Dateiauswahl (`<input type="file">`, `.tar.gz` und gzip).
+  - **Rückfrage** im Dialog nach der Auswahl: Titel „Backup einspielen?", Text „Alle Produkte, Bestände und Bilder werden durch das Backup „<Dateiname>" ersetzt. Der jetzige Stand bleibt auf dem Server als Kopie erhalten.", Knöpfe „Abbrechen" und „Einspielen" (Rolle `danger`).
+  - **Hochladen** über den generierten Client mit der Datei als Body und `Content-Type: application/gzip`. Währenddessen „Backup wird eingespielt …", Knöpfe gesperrt.
+  - **Nach 202:** `GET /health` etwa alle 500 ms abfragen, höchstens 60 s. Sobald StashBert antwortet, alle Queries neu laden und „Backup eingespielt" zeigen.
+  - **Fehler** über `problemCode`:
+    - `invalid_backup`: „Das ist kein Backup von StashBert."
+    - `backup_too_new`: „Das Backup stammt von einer neueren Version. Bitte zuerst StashBert aktualisieren."
+    - `backup_too_large`: „Das Backup ist zu groß (höchstens 1 GB)."
+    - `restore_in_progress`: „Es wird gerade schon ein Backup eingespielt."
+    - Sonst: „Einspielen fehlgeschlagen".
+    - Antwortet StashBert nach 60 s nicht: „StashBert antwortet nicht. Bitte die Seite später neu laden."
+  - Texte und die Zuordnung der Fehler als reine Funktionen in `lib/settings.ts` mit Vitest-Tests.
+- **Nicht im Umfang:** Fortschrittsbalken beim Hochladen, Auswahl älterer Backups vom Server, Löschen der `vor-restore-…`-Ordner.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für Texte und Fehlerzuordnung.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) vom Abschnitt „Backup", vom Dialog und vom Zustand nach dem Einspielen.
+  3. Von Hand gegen einen laufenden Server (Bericht): ein Backup einer anderen Instanz über die Oberfläche einspielen; danach zeigt die Vorrat-Ansicht deren Produkte.
+  4. (Nutzer) Auf dem iPhone ein Backup aus der Dateien-App einspielen.
+
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
 Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.

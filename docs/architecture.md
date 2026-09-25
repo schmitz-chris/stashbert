@@ -100,7 +100,7 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
   - Scanner
   - Einkauf
   - Produktdetail
-  - Einstellungen (ab F32): Home Assistant, Sicherung, Über StashBert
+  - Einstellungen (ab F32): Home Assistant, Backup (herunterladen, ab F33 auch einspielen), Über StashBert
 - Navigation: untere Leiste mit Vorrat, Scan (mittig, hervorgehoben) und Einkauf. Die Einstellungen öffnet ein Zahnrad oben rechts in der Vorrat-Ansicht (Nutzerentscheidung vom 25.09.2026), kein viertes Symbol in der Leiste.
 - Verbindungsdaten und Geheimnisse (MQTT, `OFF_CONTACT` usw.) bleiben in der Konfigurationsdatei; die Einstellungen zeigen nur an, ob sie gesetzt sind. Ohne Anmeldung (ADR-0013) könnte sonst jeder im Heimnetz sie ändern.
 
@@ -130,7 +130,8 @@ Kette für `/api/v1/` von außen nach innen:
 Routenspezifische Ergänzungen, jeweils **vor** dem Validator:
 
 - `PUT /api/v1/products/{id}/image`: ein `http.MaxBytesReader` begrenzt den Body auf 2 MB, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
-- `GET /api/v1/backup`: die Schreibfrist wird per `http.ResponseController` auf 10 min verlängert, damit das Herunterladen einer Sicherung nicht an `WriteTimeout` (30 s) scheitert (B40).
+- `GET /api/v1/backup`: die Schreibfrist wird per `http.ResponseController` auf 10 min verlängert, damit das Herunterladen eines Backups nicht an `WriteTimeout` (30 s) scheitert (B40).
+- `POST /api/v1/backup/restore` umgeht den Validator, weil er den Body ganz in den Speicher lesen würde; der Handler prüft das Archiv selbst (ADR-0020). Ein `http.MaxBytesReader` begrenzt den Body auf 1 GB (Überschreitung: 413 `backup_too_large`), Lese- und Schreibfrist werden auf 10 min verlängert (B41).
 - Mit MQTT meldet eine Middleware jede erfolgreiche ändernde Anfrage an die Zusammenfassung (11.5).
 
 Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict-Middleware: oapi-codegen übergibt ihr die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
@@ -245,7 +246,8 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `POST /shopping-list/snapshot` | `sendShoppingSnapshot` | Einkaufsliste per MQTT neu senden (`shopping.snapshot`, Kapitel 11.3) | 202 | `mqtt_disabled` (409) |
 | `GET /summary` | `getSummary` | Zusammenfassung (Kapitel 11.5) | 200 `Summary` | |
 | `GET /system` | `getSystemStatus` | Zustand für die Einstellungen: `version`, `database_size` (Bytes der Datenbankdatei samt WAL), `backup_count`, `last_backup_at` (Zeitstempel oder `null`), `backup_keep`, `open_food_facts` (ob `OFF_CONTACT` gesetzt ist) | 200 `SystemStatus` | |
-| `GET /backup` | `downloadBackup` | frische Sicherung als `application/gzip`: ein tar-Archiv mit `stashbert.db` (per `VACUUM INTO`) und dem Ordner `images/`; Dateiname `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` per `Content-Disposition`. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API gibt es bewusst nicht | 200 Datei | |
+| `GET /backup` | `downloadBackup` | frisches Backup als `application/gzip`: ein tar-Archiv mit `stashbert.db` (per `VACUUM INTO`) und dem Ordner `images/`; Dateiname `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` per `Content-Disposition`. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz | 200 Datei | |
+| `POST /backup/restore` | `restoreBackup` | Backup einspielen (ADR-0020): Body ist ein Archiv aus `GET /backup` als `application/gzip`, höchstens 1 GB. Wird geprüft und nach `DATA_DIR/restore/pending/` gelegt; danach startet StashBert im Prozess neu und spielt es vor dem Öffnen der Datenbank ein (9.3) | 202 ohne Body | `invalid_backup` (422), `backup_too_new` (422), `backup_too_large` (413), `restore_in_progress` (409), `invalid_request` |
 | `GET /integrations/mqtt` | `getMqttStatus` | Verbindung, angebotene und gewählte Zielliste (Kapitel 11.7) | 200 `MqttStatus` | |
 | `PUT /integrations/mqtt/target` | `setShoppingTarget` | Zielliste wählen `{id}` oder mit `{id: null}` aufheben | 200 `MqttStatus` | `mqtt_disabled` (409), `unknown_target` (422), `invalid_request` |
 
@@ -316,6 +318,10 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `mqtt_disabled` | 409 |
 | `unknown_target` | 422 |
 | `invalid_image` | 422 |
+| `invalid_backup` | 422 |
+| `backup_too_new` | 422 |
+| `backup_too_large` | 413 |
+| `restore_in_progress` | 409 |
 | `internal` | 500 |
 
 ### 6.5 Schemas (Kurzform)
@@ -456,7 +462,8 @@ Danach wird mit `target = 0` gebucht.
 
 - **Beim Start und danach alle 24 h:** `VACUUM INTO 'DATA_DIR/backups/stashbert-<YYYYMMDD-HHMMSS>.db'`. Es bleiben die neuesten `BACKUP_KEEP` Dateien erhalten.
 - **Vor Migrationen:** Stehen Migrationen an und existiert die DB schon, wird vorher `pre-migration-<YYYYMMDD-HHMMSS>.db` geschrieben (wird nicht automatisch gelöscht).
-- **Restore:** Dienst stoppen (`systemctl stop stashbert`), `stashbert.db`, `-wal` und `-shm` in `DATA_DIR` entfernen, Backup als `stashbert.db` ablegen (Besitzer `stashbert`), Dienst starten.
+- **Restore über die Oberfläche (ADR-0020):** `POST /backup/restore` entpackt das Archiv nach `DATA_DIR/restore/`, prüft es und legt es als `DATA_DIR/restore/pending/` bereit. Dann fährt StashBert herunter wie bei SIGTERM und startet im selben Prozess neu. Beim Start, vor dem Öffnen der Datenbank, verschiebt es den bisherigen Stand (`stashbert.db`, `-wal`, `-shm`, `images/`) nach `DATA_DIR/vor-restore-<YYYYMMDD-HHMMSS>/` (UTC) und legt Datenbank und Bilder aus `pending/` ab. Reste eines abgebrochenen Uploads in `DATA_DIR/restore/` räumt der Start weg.
+- **Restore im Container:** `stashbert-restore <archiv>` (ADR-0019), gleiche Ablage des alten Stands. Von Hand: Dienst stoppen (`systemctl stop stashbert`), `stashbert.db`, `-wal` und `-shm` in `DATA_DIR` entfernen, Backup als `stashbert.db` ablegen (Besitzer `stashbert`), Dienst starten.
 - **Zusätzlich:** Proxmox-Snapshots bzw. vzdump sichern den ganzen Container.
 
 ## 10. Später (nicht M1)

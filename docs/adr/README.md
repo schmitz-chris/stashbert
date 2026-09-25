@@ -23,3 +23,4 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0017](0017-kaesten.md) | Kästen (Wasser, Bier) ohne eigenen Barcode | angenommen |
 | [0018](0018-home-assistant-ueber-mqtt.md) | Home Assistant über MQTT (M2) | angenommen |
 | [0019](0019-installation-per-skript.md) | Installation per Proxmox-Skript und GitHub-Releases | angenommen |
+| [0020](0020-backup-einspielen.md) | Backup über die Oberfläche einspielen | angenommen |
