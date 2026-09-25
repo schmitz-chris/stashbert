@@ -1788,6 +1788,114 @@ Nutzerentscheidung vom 25.09.2026: Ein Backup lässt sich in den Einstellungen e
   3. Von Hand gegen einen laufenden Server (Bericht): ein Backup einer anderen Instanz über die Oberfläche einspielen; danach zeigt die Vorrat-Ansicht deren Produkte.
   4. (Nutzer) Auf dem iPhone ein Backup aus der Dateien-App einspielen.
 
+## Phase 1o: Produkterkennung per Foto (ADR-0021)
+
+Nutzerentscheidung vom 25.09.2026: OpenAI und Google Gemini lesen Name, Marke und Menge vom Produktfoto, nur auf der Produktseite; der API-Schlüssel wird in den Einstellungen eingegeben. Gemeinsame Referenzen: ADR-0021, architecture.md 4.2, 4.4, 6.2, 6.4, 6.5.
+
+### B42: Produkterkennung im Server
+
+- **Status:** offen
+- **Abhängig von:** B41, B32
+- **Referenzen:** ADR-0021; architecture.md 4.4, 6.2 (`GET`/`PUT /integrations/recognition`, `POST /products/{id}/recognition`), 6.4, 6.5, 9.3; `internal/lookup` (Muster für ausgehende HTTP-Anfragen)
+- **Umfang:**
+  - **Spec** (contract-first): die drei Operationen und die Schemas `RecognitionSettings`, `RecognitionSettingsUpdate` und `RecognitionResult` nach architecture.md 6.
+  - **`internal/recognize`:**
+    - Schnittstelle mit zwei Anbietern, `openai` und `gemini`, direkt per `net/http` (keine neue Abhängigkeit).
+    - OpenAI: Responses API, Bild als Data-URL in `input_image`, Structured Outputs über `text.format` mit `json_schema` (strict).
+    - Gemini: `generateContent`, Bild als `inline_data`, `generationConfig` mit `responseMimeType: application/json` und `responseSchema`, Schlüssel im Header `x-goog-api-key`.
+    - Die aktuellen Formate und Standardmodelle vorher in der offiziellen Doku nachschlagen (OpenAI: developers.openai.com, Google: ai.google.dev). Standardmodell ist jeweils ein günstiges Modell mit Bildverständnis.
+    - Anweisung an das Modell (Englisch):
+      - Name, Marke und Menge so lesen, wie sie auf der Packung stehen;
+      - Menge mit Einheit, z. B. „500 g";
+      - was nicht lesbar ist, bleibt `null`;
+      - nichts erfinden.
+    - Schlüsselprüfung über die Modell-Liste des Anbieters: 401 oder 403 ergeben `invalid_api_key`, andere Fehler `recognition_failed`.
+    - Basis-URLs für Tests überschreibbar.
+    - Zeitlimit 60 s je Anfrage.
+    - Der Schlüssel erscheint nie im Log und nie in einer Fehlermeldung.
+  - **Einstellungen:**
+    - `recognition_provider`, `recognition_model` und `recognition_api_key` in `settings`.
+    - `PUT` ohne `api_key` behält einen gesetzten Schlüssel nur, wenn der Anbieter gleich bleibt; ein neuer Anbieter braucht einen neuen Schlüssel (sonst `invalid_request`).
+    - `provider: null` löscht alle drei.
+    - Leeres `model` bedeutet: Standardmodell.
+    - `key_hint` sind die letzten vier Zeichen.
+  - **Erkennung:** `POST /products/{id}/recognition` liest das gespeicherte Produktfoto und fragt den eingerichteten Anbieter. Nur die Antwort geht zurück, am Produkt ändert sich nichts. Gekürzt und getrimmt nach den Längengrenzen aus architecture.md 5.
+  - **Route** in `internal/app`: Schreibfrist 90 s für `POST /api/v1/products/{id}/recognition` (wie beim Backup).
+  - **Backup:** `GET /backup` löscht `recognition_api_key` aus der Kopie per `VACUUM INTO`, bevor sie ins Archiv geht (über die vorhandene sqlc-Abfrage `DeleteSetting` auf der Kopie).
+- **Nicht im Umfang:** Oberfläche (F34, F35), Erkennung beim Scannen, Websuche, weitere Anbieter, automatisches Speichern.
+- **Abnahmekriterien:**
+  1. Tests mit nachgebildeten Anbietern (`httptest`):
+     - je Anbieter eine erfolgreiche Erkennung, auch mit `null`-Feldern;
+     - der Request hat die richtige Form (Modell, Bild, Schema, Schlüssel im richtigen Header);
+     - 401 wird `invalid_api_key`, 500 und Zeitüberschreitung werden `recognition_failed`.
+  2. API-Tests: Einstellungen setzen, ändern und löschen; der Schlüssel kommt in keiner Antwort vor; `recognition_disabled` ohne Anbieter; `no_image` ohne Foto; `not_found`.
+  3. Test: Das Archiv von `GET /backup` enthält den Schlüssel nicht, die laufende Datenbank behält ihn.
+  4. `make check` ist grün.
+  5. (Nutzer) Mit echtem Schlüssel von OpenAI oder Google erkennt StashBert ein Produkt vom Foto.
+
+### F34: Produkterkennung in den Einstellungen
+
+- **Status:** offen
+- **Abhängig von:** B42, F33
+- **Referenzen:** ADR-0021, ADR-0016; architecture.md 4.2
+- **Umfang:**
+  - Neuer Abschnitt „Produkterkennung" in `/einstellungen`, zwischen „Backup" und „Über StashBert".
+  - **Anbieter:** Auswahl „Aus", „OpenAI" und „Google Gemini".
+  - **API-Schlüssel:** Passwortfeld; ist einer gesetzt, steht darüber „Gespeichert, endet auf …abcd", und das Feld darf leer bleiben.
+  - **Modell:** Textfeld mit dem Standardmodell als Platzhalter.
+  - **Knöpfe:** „Speichern"; „Ausschalten" mit Rückfrage, löscht den Schlüssel.
+  - **Hinweistext:** „Fotos werden an OpenAI bzw. Google geschickt. Kosten entstehen nur, wenn du auf der Produktseite „Mit KI erkennen" antippst." Bei Gemini zusätzlich: „Im kostenlosen Zugang darf Google die Eingaben zur Verbesserung seiner Produkte nutzen."
+  - **Meldungen:** „Gespeichert"; `invalid_api_key`: „Der Schlüssel wird nicht angenommen."; `recognition_failed`: „Der Anbieter ist gerade nicht erreichbar."
+  - Texte und Zuordnungen als reine Funktionen in `lib/` mit Vitest-Tests.
+- **Nicht im Umfang:** Auswahl aus einer Modell-Liste, mehrere Schlüssel.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für Texte und Fehlerzuordnung.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite): aus, eingerichtet, Fehler.
+  3. (Nutzer) Schlüssel auf dem iPhone eingeben.
+
+### F35: „Mit KI erkennen" auf der Produktseite
+
+- **Status:** offen
+- **Abhängig von:** F34
+- **Referenzen:** ADR-0021, ADR-0016; `components/ProductImageSection.tsx`, `routes/produkt.tsx`
+- **Umfang:**
+  - **Knopf:** „Mit KI erkennen" im Bildbereich der Produktseite. Er erscheint, wenn ein Anbieter eingerichtet ist (`GET /integrations/recognition`). Ohne Foto ist er gesperrt, mit dem Hinweis „Erst ein Foto aufnehmen".
+  - **Während der Anfrage:** Tippen ruft `POST /products/{id}/recognition` auf. Solange steht dort „Wird erkannt …", und der Knopf ist gesperrt.
+  - **Ergebnis:** Die erkannten Felder (nur die nicht leeren) kommen in das Bearbeitungsformular der Seite. Dazu der Hinweis „Vorschlag eingetragen. Bitte prüfen und speichern." Gespeichert wird erst mit dem normalen Speichern.
+  - **Fehlermeldungen:**
+    - `no_image`: „Erst ein Foto aufnehmen";
+    - `recognition_disabled`: „Produkterkennung ist nicht eingerichtet";
+    - `invalid_api_key`: „Der API-Schlüssel wird nicht angenommen";
+    - sonst: „Erkennung fehlgeschlagen".
+  - Zuordnung der Ergebnisse zum Formular als reine Funktion mit Vitest-Tests.
+- **Nicht im Umfang:** Erkennung beim Scannen oder auf der Ergebniskarte, automatisches Speichern.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Zuordnung und die Fehlertexte.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite): Knopf, während der Erkennung, Vorschlag im Formular (mit nachgebildetem Anbieter).
+  3. (Nutzer) Ein unbekanntes Produkt fotografieren und mit KI erkennen lassen.
+
+## Phase 1p: Zusammenführen leichter
+
+Nutzerwunsch vom 25.09.2026: Gleiche Produkte verschiedener Marken (z. B. Milch von Aldi und Rewe) sollen leicht zu einem Produkt werden, damit jeder dieser Barcodes „Milch" bucht.
+
+### F36: Andere Produkte hierher übernehmen
+
+- **Status:** offen
+- **Abhängig von:** F06c
+- **Referenzen:** architecture.md 6.5 (Merge), ADR-0016; `components/MergeDialog.tsx`, `components/MergeSection.tsx`, `routes/produkt.tsx`
+- **Umfang:**
+  - **Wo:** Auf jeder Produktseite, nicht nur bei „Bitte die Angaben prüfen", gibt es unterhalb der Barcodes den Knopf „Andere Produkte hierher übernehmen".
+  - **Auswahl:** Er öffnet das Sheet mit Suche und Liste wie beim vorhandenen Zusammenführen, ohne das eigene Produkt, aber mit **Mehrfachauswahl**. Am Ende steht „Übernehmen (N)".
+  - **Rückfrage:** „N Produkte in „<Name>" übernehmen? Ihre Barcodes, Bestände und Verläufe gehen auf dieses Produkt über, die Produkte selbst verschwinden."
+  - **Ausführen:** für jedes gewählte Produkt `POST /products/{quelle}/merge` mit diesem Produkt als Ziel, nacheinander. Bei einem Fehler anhalten und melden, welche schon übernommen sind.
+  - Das vorhandene „Mit vorhandenem Produkt zusammenführen" im Prüf-Kasten bleibt (andere Richtung, passend zum gerade gescannten Platzhalter).
+  - Auswahl und Rückfragetext als reine Funktionen mit Vitest-Tests.
+- **Nicht im Umfang:** Änderungen am Server, Zusammenführen aus der Vorrat-Liste heraus, Rückgängig.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für Auswahl und Texte.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite): Knopf, Sheet mit zwei gewählten Produkten, Rückfrage, Ergebnis.
+  3. (Nutzer) Zwei Milchsorten in ein Produkt „Milch" übernehmen; danach bucht jeder der Barcodes auf „Milch".
+
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
 Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.

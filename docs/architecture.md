@@ -100,9 +100,10 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
   - Scanner
   - Einkauf
   - Produktdetail
-  - Einstellungen (ab F32): Home Assistant, Backup (herunterladen, ab F33 auch einspielen), Über StashBert
+  - Einstellungen (ab F32): Home Assistant, Backup (herunterladen, ab F33 auch einspielen), Produkterkennung (ab F34, ADR-0021), Über StashBert
 - Navigation: untere Leiste mit Vorrat, Scan (mittig, hervorgehoben) und Einkauf. Die Einstellungen öffnet ein Zahnrad oben rechts in der Vorrat-Ansicht (Nutzerentscheidung vom 25.09.2026), kein viertes Symbol in der Leiste.
 - Verbindungsdaten und Geheimnisse (MQTT, `OFF_CONTACT` usw.) bleiben in der Konfigurationsdatei; die Einstellungen zeigen nur an, ob sie gesetzt sind. Ohne Anmeldung (ADR-0013) könnte sonst jeder im Heimnetz sie ändern.
+- Ausnahme (Nutzerentscheidung, ADR-0021): Anbieter, Modell und API-Schlüssel der Produkterkennung werden in den Einstellungen gesetzt. Der Schlüssel wird nur geschrieben, nie ausgeliefert, und fehlt im Archiv von `GET /backup`.
 
 ### 4.3 Scanner im Browser
 
@@ -131,6 +132,7 @@ Routenspezifische Ergänzungen, jeweils **vor** dem Validator:
 
 - `PUT /api/v1/products/{id}/image`: ein `http.MaxBytesReader` begrenzt den Body auf 2 MB, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
 - `GET /api/v1/backup`: die Schreibfrist wird per `http.ResponseController` auf 10 min verlängert, damit das Herunterladen eines Backups nicht an `WriteTimeout` (30 s) scheitert (B40).
+- `POST /api/v1/products/{id}/recognition`: die Schreibfrist wird auf 90 s verlängert, weil die Antwort des Anbieters länger dauern kann als `WriteTimeout` (B42).
 - `POST /api/v1/backup/restore` umgeht den Validator, weil er den Body ganz in den Speicher lesen würde; der Handler prüft das Archiv selbst (ADR-0020). Ein `http.MaxBytesReader` begrenzt den Body auf 1 GB (Überschreitung: 413 `backup_too_large`), Lese- und Schreibfrist werden auf 10 min verlängert (B41).
 - Mit MQTT meldet eine Middleware jede erfolgreiche ändernde Anfrage an die Zusammenfassung (11.5).
 
@@ -152,7 +154,7 @@ Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict
 
 Alle Spalten sind `NOT NULL`, sofern hier nicht ausdrücklich „NULL" steht. Alle Zeitstempel: TEXT im festen Format RFC 3339 UTC mit Millisekunden, Go-Layout `2006-01-02T15:04:05.000Z` (Hilfsfunktion in `internal/store`). Alle IDs: TEXT, UUIDv7 in Kleinbuchstaben.
 
-**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 ohne Einträge; ab M2 `shopping_target_id` und `shopping_target_name` (Zielliste, 11.7).
+**`settings`**: `key` TEXT PK, `value` TEXT NOT NULL. In M1 ohne Einträge; ab M2 `shopping_target_id` und `shopping_target_name` (Zielliste, 11.7); ab B42 `recognition_provider`, `recognition_model` und `recognition_api_key` (ADR-0021).
 
 **`outbox`** (M2): Warteschlange der MQTT-Nachrichten, siehe 11.4.
 
@@ -246,8 +248,11 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `POST /shopping-list/snapshot` | `sendShoppingSnapshot` | Einkaufsliste per MQTT neu senden (`shopping.snapshot`, Kapitel 11.3) | 202 | `mqtt_disabled` (409) |
 | `GET /summary` | `getSummary` | Zusammenfassung (Kapitel 11.5) | 200 `Summary` | |
 | `GET /system` | `getSystemStatus` | Zustand für die Einstellungen: `version`, `database_size` (Bytes der Datenbankdatei samt WAL), `backup_count`, `last_backup_at` (Zeitstempel oder `null`), `backup_keep`, `open_food_facts` (ob `OFF_CONTACT` gesetzt ist) | 200 `SystemStatus` | |
-| `GET /backup` | `downloadBackup` | frisches Backup als `application/gzip`: ein tar-Archiv mit `stashbert.db` (per `VACUUM INTO`) und dem Ordner `images/`; Dateiname `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` per `Content-Disposition`. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz | 200 Datei | |
+| `GET /backup` | `downloadBackup` | frisches Backup als `application/gzip`: ein tar-Archiv mit `stashbert.db` (per `VACUUM INTO`) und dem Ordner `images/`; Dateiname `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` per `Content-Disposition`. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz. Der API-Schlüssel der Produkterkennung wird aus der Kopie entfernt (ADR-0021) | 200 Datei | |
 | `POST /backup/restore` | `restoreBackup` | Backup einspielen (ADR-0020): Body ist ein Archiv aus `GET /backup` als `application/gzip`, höchstens 1 GB. Wird geprüft und nach `DATA_DIR/restore/pending/` gelegt; danach startet StashBert im Prozess neu und spielt es vor dem Öffnen der Datenbank ein (9.3) | 202 ohne Body | `invalid_backup` (422), `backup_too_new` (422), `backup_too_large` (413), `restore_in_progress` (409), `invalid_request` |
+| `GET /integrations/recognition` | `getRecognitionSettings` | Produkterkennung (ADR-0021): Anbieter, Modell, ob ein Schlüssel gesetzt ist und seine letzten vier Zeichen, die Standardmodelle | 200 `RecognitionSettings` | |
+| `PUT /integrations/recognition` | `setRecognitionSettings` | `{provider, model?, api_key?}` setzen; `provider: null` schaltet ab und löscht den Schlüssel. Ohne `api_key` bleibt ein gesetzter Schlüssel, wenn der Anbieter gleich bleibt. Ein neuer Schlüssel wird mit der Modell-Liste des Anbieters geprüft | 200 `RecognitionSettings` | `invalid_api_key` (422), `recognition_failed` (502), `invalid_request` |
+| `POST /products/{id}/recognition` | `recognizeProduct` | liest Name, Marke und Menge vom gespeicherten Foto (ADR-0021); speichert nichts | 200 `RecognitionResult` | `not_found`, `recognition_disabled` (409), `no_image` (409), `invalid_api_key` (422), `recognition_failed` (502) |
 | `GET /integrations/mqtt` | `getMqttStatus` | Verbindung, angebotene und gewählte Zielliste (Kapitel 11.7) | 200 `MqttStatus` | |
 | `PUT /integrations/mqtt/target` | `setShoppingTarget` | Zielliste wählen `{id}` oder mit `{id: null}` aufheben | 200 `MqttStatus` | `mqtt_disabled` (409), `unknown_target` (422), `invalid_request` |
 
@@ -321,6 +326,10 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
 | `invalid_backup` | 422 |
 | `backup_too_new` | 422 |
 | `backup_too_large` | 413 |
+| `recognition_disabled` | 409 |
+| `no_image` | 409 |
+| `invalid_api_key` | 422 |
+| `recognition_failed` | 502 |
 | `restore_in_progress` | 409 |
 | `internal` | 500 |
 
@@ -341,6 +350,8 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
 - **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`, `crate_size|null`
 - **Summary** (Kapitel 11.5): `product_count`, `shopping_count`, `empty_count`, `review_count`, `shopping: [{name, missing, quantity, unit}]` (höchstens 100), `shopping_truncated`
+- **RecognitionSettings** (ADR-0021): `provider` (`openai`, `gemini` oder `null`), `model|null`, `key_set`, `key_hint|null` (letzte vier Zeichen), `default_models: {openai, gemini}`
+- **RecognitionResult:** `name|null`, `brand|null`, `package_size|null`; `null`, wenn auf dem Foto nicht lesbar
 - **MqttStatus** (Kapitel 11.7): `status` (`disabled`, `connecting`, `connected`), `targets: [{id, name}]`, `target: {id, name}|null`
 - **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".
 - **Merge:**
