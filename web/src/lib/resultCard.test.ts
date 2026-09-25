@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { Movement } from "./movements";
 import type { Product } from "./products";
 import {
+  asksForName,
   cardView,
   formatStockChange,
   hiddenCard,
   markCardView,
+  maxNameLength,
+  nameToSave,
+  openGtinDbUrl,
+  placeholderCode,
   resultCardReducer,
   targetChoices,
   type CardBooking,
@@ -385,6 +390,143 @@ describe("markCardView", () => {
       status: "vorgemerkt",
       undo: true,
     });
+  });
+});
+
+describe("asksForName", () => {
+  function booking(result: MovementResult): CardBooking {
+    return { result, kind: "add", merged: false };
+  }
+
+  it("asks for the name of a new placeholder", () => {
+    expect(asksForName(booking(created))).toBe(true);
+  });
+
+  it("asks for the name of a placeholder scanned again, in both modes", () => {
+    const again: MovementResult = {
+      ...created,
+      movement: movement({ id: "01a0ce63-0000-7000-8000-000000000004", stock_after: 2 }),
+      product: { ...created.product, stock: 2, target: 3 },
+      product_created: false,
+      warnings: [],
+    };
+    expect(asksForName(booking(again))).toBe(true);
+    expect(asksForName({ result: again, kind: "consume", merged: false })).toBe(true);
+  });
+
+  it("does not ask for the name of a product from Open Food Facts", () => {
+    const found: MovementResult = {
+      ...created,
+      product: {
+        ...created.product,
+        name: "Kidneybohnen",
+        origin: "openfoodfacts",
+        lookup_state: "done",
+      },
+      warnings: [],
+    };
+    expect(found.product.needs_review).toBe(true);
+    expect(asksForName(booking(found))).toBe(false);
+  });
+
+  it("does not ask again after the name was saved", () => {
+    const saved = run(shownNew, {
+      type: "update",
+      product: { ...created.product, name: "Kaffeebohnen", needs_review: false },
+    });
+    if (saved.status === "hidden" || saved.content.kind === "mark") {
+      throw new Error("no booking card");
+    }
+    expect(saved.content.result.product.origin).toBe("placeholder");
+    expect(asksForName(saved.content)).toBe(false);
+    expect(cardView(saved.content).title).toBe("Neu: Kaffeebohnen");
+  });
+
+  it("does not ask for the name of a known product", () => {
+    expect(asksForName(booking(first))).toBe(false);
+  });
+});
+
+describe("nameToSave", () => {
+  it("trims the name", () => {
+    expect(nameToSave("  Kaffeebohnen \t")).toBe("Kaffeebohnen");
+  });
+
+  it.each([
+    ["an empty text", ""],
+    ["a text of spaces", "   "],
+    ["a text of a line break", "\n"],
+  ])("returns null for %s", (_name, text) => {
+    expect(nameToSave(text)).toBeNull();
+  });
+
+  it("accepts one character and 120 characters", () => {
+    expect(nameToSave("X")).toBe("X");
+    const longest = "a".repeat(maxNameLength);
+    expect(nameToSave(` ${longest} `)).toBe(longest);
+  });
+
+  it("returns null for 121 characters", () => {
+    expect(nameToSave("a".repeat(maxNameLength + 1))).toBeNull();
+  });
+
+  it("counts characters, not UTF-16 units", () => {
+    const emoji = "🥫".repeat(maxNameLength);
+    expect(emoji.length).toBe(2 * maxNameLength);
+    expect(nameToSave(emoji)).toBe(emoji);
+    expect(nameToSave(`${emoji}🥫`)).toBeNull();
+  });
+
+  it("has a limit of 120 characters", () => {
+    expect(maxNameLength).toBe(120);
+  });
+});
+
+describe("placeholderCode", () => {
+  it("returns the code of the booking", () => {
+    expect(placeholderCode({ result: created, kind: "add", merged: false })).toBe(
+      "4001234567890",
+    );
+  });
+
+  it("returns the barcode of the product for a booking without a code", () => {
+    const plusOne: MovementResult = {
+      ...created,
+      movement: { ...created.movement, barcode: null },
+      product_created: false,
+    };
+    expect(placeholderCode({ result: plusOne, kind: "add", merged: false })).toBe(
+      "2000000000008",
+    );
+  });
+
+  it("returns null without a code", () => {
+    const none: MovementResult = {
+      ...created,
+      movement: { ...created.movement, barcode: null },
+      product: { ...created.product, barcodes: [] },
+    };
+    expect(placeholderCode({ result: none, kind: "add", merged: false })).toBeNull();
+  });
+});
+
+describe("openGtinDbUrl", () => {
+  it("links to the page of a 13-digit code", () => {
+    expect(openGtinDbUrl("4006381333931")).toBe(
+      "https://opengtindb.org/index.php?cmd=ean1&ean=4006381333931",
+    );
+  });
+
+  it("links to the page of an 8-digit code", () => {
+    expect(openGtinDbUrl("96385074")).toBe(
+      "https://opengtindb.org/index.php?cmd=ean1&ean=96385074",
+    );
+  });
+
+  it("encodes the code", () => {
+    expect(openGtinDbUrl("12 3&x=4")).toBe(
+      "https://opengtindb.org/index.php?cmd=ean1&ean=12%203%26x%3D4",
+    );
   });
 });
 

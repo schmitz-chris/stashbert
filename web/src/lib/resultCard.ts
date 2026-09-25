@@ -169,6 +169,53 @@ export function cardView({ result, merged }: CardBooking): CardView {
   };
 }
 
+/**
+ * Returns whether the result card of booking asks for the name of its
+ * product (docs/plan.md, F31): as long as the product is a placeholder
+ * (origin placeholder) that still needs a review, on the booking that
+ * created it and on every later one. Saving a name sets needs_review to
+ * false (architecture.md 6.5), so the field is gone afterwards; a product
+ * named by Open Food Facts never gets it.
+ */
+export function asksForName({ result }: CardBooking): boolean {
+  const { product } = result;
+  return product.origin === "placeholder" && product.needs_review;
+}
+
+/** The most characters a product name may have (architecture.md 5). */
+export const maxNameLength = 120;
+
+/**
+ * Returns the name to save from text, the input of the name field on the
+ * result card: trimmed, with 1 to maxNameLength characters, counted like
+ * the server counts them (code points, not UTF-16 units). An empty or too
+ * long name cannot be saved; then it returns null.
+ */
+export function nameToSave(text: string): string | null {
+  const name = text.trim();
+  const length = [...name].length;
+  return length >= 1 && length <= maxNameLength ? name : null;
+}
+
+/**
+ * Returns the barcode of the placeholder on the card of booking, to look
+ * it up at OpenGTINDB (docs/plan.md, F31): the code of the booking, or the
+ * first barcode of the product for a booking without one ([+1]). Returns
+ * null if there is neither.
+ */
+export function placeholderCode({ result }: CardBooking): string | null {
+  return result.movement.barcode ?? result.product.barcodes[0]?.code ?? null;
+}
+
+/**
+ * Returns the address of the page of code at OpenGTINDB, which the card of
+ * a placeholder links to (docs/plan.md, F31). StashBert only links to it
+ * and never requests it itself.
+ */
+export function openGtinDbUrl(code: string): string {
+  return `https://opengtindb.org/index.php?cmd=ean1&ean=${encodeURIComponent(code)}`;
+}
+
 /** What the result card shows for a mark (docs/plan.md, F15). */
 export interface MarkCardView {
   /** The name of the product, as "Neu: <name>" if the mark created it. */

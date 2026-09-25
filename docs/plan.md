@@ -1569,7 +1569,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 
 ### F31: Namensfeld auf der Ergebniskarte
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F10, B36a
 - **Referenzen:** Nutzer-Rückmeldung vom 25.09.2026 (keine kostenpflichtigen Quellen; unbekannte Produkte sollen sich beim Scannen benennen lassen); architecture.md 6.5 (`needs_review` nach PATCH des Namens), 7.2, 7.3 (Nachladen überschreibt nur bei `needs_review`); ADR-0016
 - **Umfang:**
@@ -1577,6 +1577,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
   - Speichern sendet `PATCH /products/{id}` nur mit `name` (getrimmt, 1 bis 120 Zeichen; leer lässt sich nicht speichern). Danach zeigt die Karte den neuen Namen; der Cache wird aus der Antwort aktualisiert. Fehler: „Speichern fehlgeschlagen" unter dem Feld bis zur nächsten Aktion.
   - Solange das Feld den Fokus hat, ignoriert die Scan-Ansicht erkannte Codes (wie bei den Dialogen), damit die Karte beim Tippen nicht durch einen neuen Scan ersetzt wird.
   - Soll-Schnellauswahl und „Stattdessen zu vorhandenem Produkt" bleiben unverändert. Bei Produkten mit Namen aus Open Food Facts bleibt „Name ändern".
+  - Nachtrag (Nutzer, 25.09.2026): Neben dem Namensfeld ein Link „Bei OpenGTINDB nachsehen", der `https://opengtindb.org/index.php?cmd=ean1&ean=<code>` (Code des Platzhalters) in einem neuen Tab bzw. im Browser öffnet (`target="_blank"`, `rel="noopener noreferrer"`). StashBert selbst fragt OpenGTINDB nie ab (keine automatische Abfrage der Webseite, die Schnittstelle braucht eine kostenpflichtige Kennung); ist die Seite nicht erreichbar, betrifft das nur den geöffneten Tab. Die URL entsteht in einer reinen Funktion mit Test.
   - Die Entscheidung, ob das Feld erscheint, ist eine reine Funktion mit Vitest-Tests.
 - **Nicht im Umfang:** Marke oder Packungsgröße auf der Karte, weitere Datenquellen, Änderungen am Backend.
 - **Abnahmekriterien:**

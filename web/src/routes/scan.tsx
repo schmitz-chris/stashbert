@@ -116,6 +116,8 @@ export function ScanPage() {
   // From reading the last code to the answer of the server, for the camera
   // menu (F25); a ref, so that measuring renders nothing.
   const lastBookingMs = useRef<number | null>(null);
+  // The name field on the card of a placeholder (F31).
+  const nameInput = useRef<HTMLInputElement>(null);
   useDocumentTitle(pageTitle("scan"));
 
   function show(feedback: Feedback, failed = false) {
@@ -182,8 +184,9 @@ export function ScanPage() {
   }
 
   // Books or marks every accepted code. While a dialog or a sheet lies over
-  // the camera (merge, typing in a code, "Flasche oder Kasten"), codes are
-  // ignored.
+  // the camera (merge, typing in a code, "Flasche oder Kasten") or while the
+  // name field on the card has the focus (F31), codes are ignored, so a scan
+  // does not replace the card while the name is typed.
   const {
     videoRef,
     phase,
@@ -196,7 +199,8 @@ export function ScanPage() {
     selectAutomatic,
     timings,
   } = useScanner((code) => {
-    if (mergeSource !== null || manualOpen || question !== null) {
+    const naming = nameInput.current !== null && nameInput.current === document.activeElement;
+    if (mergeSource !== null || manualOpen || question !== null || naming) {
       return;
     }
     handleCode(code, performance.now());
@@ -410,6 +414,7 @@ export function ScanPage() {
           key={content.result.movement.id}
           booking={content}
           disabled={repeat.isPending || reversal.isPending}
+          nameInputRef={nameInput}
           onPlusOne={() => plusOne(content.result.product.id, content.kind)}
           onUndo={() => undo(content.result.movement.id)}
           onProductChange={(product) => dispatchCard({ type: "update", product })}

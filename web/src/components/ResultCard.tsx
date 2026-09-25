@@ -1,12 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useState, type Ref } from "react";
 import { Link } from "react-router";
 import { productUpdateMutation } from "../lib/api/queries";
 import { productLinkState } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
 import {
+  asksForName,
   cardView,
   markCardView,
+  maxNameLength,
+  nameToSave,
+  openGtinDbUrl,
+  placeholderCode,
   targetChoices,
   type CardBooking,
   type CardMark,
@@ -27,9 +32,14 @@ interface ResultCardProps {
   booking: CardBooking;
   /** Locks both buttons, while an action of the card runs. */
   disabled: boolean;
+  /**
+   * The name field of a placeholder, so the scan view can ignore codes
+   * while it has the focus (docs/plan.md, F31).
+   */
+  nameInputRef: Ref<HTMLInputElement>;
   onPlusOne: () => void;
   onUndo: () => void;
-  /** Called with the product from the response after its target changed. */
+  /** Called with the product from the response after its target or its name changed. */
   onProductChange: (product: Product) => void;
   /** Called by "Stattdessen zu vorhandenem Produkt". */
   onMerge: () => void;
@@ -41,12 +51,15 @@ interface ResultCardProps {
  * The result card of the scan view: the product of the booking, its
  * stock before and after, and the buttons [+1] and [Rückgängig]. For a
  * booking that created its product it also offers the target chips, a
- * link to the product page and the merge into another product. The card
- * has no time limit; [×] closes it.
+ * link to the product page and the merge into another product. For a
+ * placeholder it asks for the name instead of the link and links to its
+ * code at OpenGTINDB (F31), also when it was scanned again. The card has
+ * no time limit; [×] closes it.
  */
 export function ResultCard({
   booking,
   disabled,
+  nameInputRef,
   onPlusOne,
   onUndo,
   onProductChange,
@@ -55,6 +68,7 @@ export function ResultCard({
 }: ResultCardProps) {
   const nameId = useId();
   const view = cardView(booking);
+  const naming = asksForName(booking);
   const plusOneClass = booking.kind === "add" ? "bg-accent" : "bg-consume";
 
   return (
@@ -80,12 +94,25 @@ export function ResultCard({
           Rückgängig
         </button>
       </div>
-      {view.isNew && (
-        <NewProductActions
-          product={booking.result.product}
-          onProductChange={onProductChange}
-          onMerge={onMerge}
-        />
+      {(view.isNew || naming) && (
+        <div className="mt-3 space-y-3 border-t border-line pt-3">
+          {naming && (
+            <NameForm
+              productId={booking.result.product.id}
+              code={placeholderCode(booking)}
+              inputRef={nameInputRef}
+              onSaved={onProductChange}
+            />
+          )}
+          {view.isNew && (
+            <NewProductActions
+              product={booking.result.product}
+              rename={!naming}
+              onProductChange={onProductChange}
+              onMerge={onMerge}
+            />
+          )}
+        </div>
       )}
     </section>
   );
@@ -144,14 +171,104 @@ function CardTitle({ id, title, onClose }: { id: string; title: string; onClose:
   );
 }
 
+// The name field of a placeholder (docs/plan.md, F31), empty at first.
+// "Speichern" and the Enter key send a PATCH with only the trimmed name;
+// an empty name cannot be saved. A failure stays below the field until the
+// next input or the next save (ADR-0016). Below it a plain link opens the
+// page of code at OpenGTINDB in a new tab; StashBert never requests it.
+function NameForm({
+  productId,
+  code,
+  inputRef,
+  onSaved,
+}: {
+  productId: string;
+  code: string | null;
+  inputRef: Ref<HTMLInputElement>;
+  onSaved: (product: Product) => void;
+}) {
+  const queryClient = useQueryClient();
+  const rename = useMutation(productUpdateMutation(queryClient));
+  const [text, setText] = useState("");
+  const inputId = useId();
+  const errorId = useId();
+  const name = nameToSave(text);
+
+  function save() {
+    if (name === null || rename.isPending) {
+      return;
+    }
+    rename.mutate({ id: productId, patch: { name } }, { onSuccess: onSaved });
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <label htmlFor={inputId} className="block text-sm font-medium text-ink-secondary">
+        Name
+      </label>
+      {/* "Speichern" moves below the field when the line is too narrow. */}
+      <div className="mt-1 flex flex-wrap justify-end gap-2">
+        <input
+          ref={inputRef}
+          id={inputId}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            if (rename.isError) {
+              rename.reset();
+            }
+          }}
+          placeholder="Wie heißt das Produkt?"
+          maxLength={maxNameLength}
+          autoComplete="off"
+          aria-invalid={rename.isError}
+          aria-describedby={rename.isError ? errorId : undefined}
+          className="min-h-11 min-w-0 flex-1 basis-48 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base placeholder:text-ink-tertiary aria-[invalid=true]:border-danger"
+        />
+        <button
+          type="submit"
+          disabled={name === null || rename.isPending}
+          className="pressable min-h-11 shrink-0 rounded-lg bg-accent px-4 font-medium text-white disabled:opacity-40"
+        >
+          Speichern
+        </button>
+      </div>
+      <p id={errorId} role="status" className="mt-1 min-h-5 text-sm font-medium text-danger">
+        {rename.isError ? "Speichern fehlgeschlagen" : ""}
+      </p>
+      {code !== null && (
+        <a
+          href={openGtinDbUrl(code)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`mt-1 ${actionClass}`}
+        >
+          {/* The name of the site is not hyphenated, only broken if it does not fit. */}
+          <span>
+            Bei <span className="hyphens-manual wrap-anywhere">OpenGTINDB</span> nachsehen
+          </span>
+        </a>
+      )}
+    </form>
+  );
+}
+
 // The actions for a new product: the target chips, which send a PATCH
-// with only the target, "Name ändern" and the merge.
+// with only the target, "Name ändern" (only with rename; a placeholder has
+// the name field instead) and the merge.
 function NewProductActions({
   product,
+  rename,
   onProductChange,
   onMerge,
 }: {
   product: Product;
+  rename: boolean;
   onProductChange: (product: Product) => void;
   onMerge: () => void;
 }) {
@@ -183,7 +300,7 @@ function NewProductActions({
   }
 
   return (
-    <div className="mt-3 border-t border-line pt-3">
+    <div>
       <div role="group" aria-label="Soll" className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm font-medium text-ink-secondary">Soll</span>
         {targetChoices.map((value) => {
@@ -209,13 +326,15 @@ function NewProductActions({
         {notice}
       </p>
       <div className="mt-1 flex flex-wrap gap-2">
-        <Link
-          to={`/produkt/${encodeURIComponent(product.id)}`}
-          state={productLinkState("scan")}
-          className={actionClass}
-        >
-          Name ändern
-        </Link>
+        {rename && (
+          <Link
+            to={`/produkt/${encodeURIComponent(product.id)}`}
+            state={productLinkState("scan")}
+            className={actionClass}
+          >
+            Name ändern
+          </Link>
+        )}
         <button type="button" onClick={onMerge} className={actionClass}>
           Stattdessen zu vorhandenem Produkt
         </button>
