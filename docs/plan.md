@@ -1836,7 +1836,7 @@ Nutzerentscheidung vom 25.09.2026: OpenAI, Google Gemini und Claude (Anthropic) 
 
 ### F34: Produkterkennung in den Einstellungen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B42, F33
 - **Referenzen:** ADR-0021, ADR-0016; architecture.md 4.2
 - **Umfang:**

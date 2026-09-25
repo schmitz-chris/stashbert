@@ -12,6 +12,7 @@ import {
   withoutBarcode,
   type Product,
 } from "../products";
+import type { RecognitionSettingsUpdate } from "../recognition";
 import type { MarkResult, MovementResult } from "../scan";
 import { api, problemCode } from "./client";
 
@@ -763,4 +764,45 @@ export const backupRestoreMutation = mutationOptions({
 export async function healthAnswers(signal: AbortSignal): Promise<boolean> {
   const { response } = await api.GET("/health", { signal });
   return response.ok;
+}
+
+/**
+ * The settings of the product recognition (ADR-0021): provider, model,
+ * whether a key is stored with its last four characters, and the default
+ * models. The key itself is never sent.
+ */
+export const recognitionSettingsQuery = queryOptions({
+  queryKey: ["integrations", "recognition"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET("/integrations/recognition");
+    if (!response.ok || data === undefined) {
+      throw error ?? new Error(`GET /integrations/recognition: status ${response.status}`);
+    }
+    return data;
+  },
+});
+
+/**
+ * Sets provider, model and API key of the product recognition with PUT
+ * /integrations/recognition, or switches it off with provider null, which
+ * deletes the key. The server checks a new key with the provider before
+ * it answers. A refused change throws the Problem Details of the
+ * response. On success the settings from the response replace the cached
+ * settings.
+ */
+export function recognitionSettingsMutation(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (update: RecognitionSettingsUpdate) => {
+      const { data, error, response } = await api.PUT("/integrations/recognition", {
+        body: update,
+      });
+      if (!response.ok || data === undefined) {
+        throw error ?? new Error(`PUT /integrations/recognition: status ${response.status}`);
+      }
+      return data;
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(recognitionSettingsQuery.queryKey, settings);
+    },
+  });
 }

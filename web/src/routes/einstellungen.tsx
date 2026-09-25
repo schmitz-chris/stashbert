@@ -9,11 +9,32 @@ import {
   backupRestoreMutation,
   healthAnswers,
   mqttStatusQuery,
+  recognitionSettingsMutation,
+  recognitionSettingsQuery,
   shoppingSnapshotMutation,
   shoppingTargetMutation,
   systemStatusQuery,
 } from "../lib/api/queries";
 import { pageTitle } from "../lib/pageTitle";
+import {
+  defaultModel,
+  isProviderChoice,
+  keyHintText,
+  keyMissing,
+  keyRefused,
+  providerChoices,
+  providerLabel,
+  recognitionNote,
+  recognitionUpdate,
+  saveNotice,
+  toRecognitionForm,
+  turnOffErrorText,
+  turnOffQuestion,
+  turnOffTitle,
+  withChoice,
+  type RecognitionForm,
+  type RecognitionSettings,
+} from "../lib/recognition";
 import {
   backupCountText,
   formatSize,
@@ -28,13 +49,23 @@ import {
 } from "../lib/settings";
 import { noTarget, targetChoice, type MqttStatus } from "../lib/shoppingTarget";
 
-// How long the notice after sending the list stays visible. Failures stay
-// until the next action (ADR-0016).
+// How long the notices after sending the list and after saving stay
+// visible. Failures stay until the next action (ADR-0016).
 const noticeDuration = 2000;
 
+// Bordered buttons with the color of their text left open.
+const borderedButtonClass =
+  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 py-2 font-medium disabled:opacity-40";
 // Secondary buttons (docs/plan.md, F22).
-const secondaryButtonClass =
-  "pressable min-h-11 rounded-lg border border-line-strong bg-surface px-4 py-2 font-medium text-accent disabled:opacity-40";
+const secondaryButtonClass = `${borderedButtonClass} text-accent`;
+// "Speichern" of the product recognition, the one filled button of the page
+// (docs/plan.md, F22).
+const primaryButtonClass =
+  "pressable min-h-11 rounded-lg bg-accent px-4 py-2 font-medium text-white disabled:opacity-40";
+
+const labelClass = "block text-sm font-medium text-ink-secondary";
+const inputClass =
+  "mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base aria-[invalid=true]:border-danger";
 
 // The download of a fresh backup. A download is navigation, not an API
 // call, so it is the one address of the API outside the generated client
@@ -45,7 +76,8 @@ const backupUrl = "/api/v1/backup";
 // herunterladen" (stashbert-<time>.tar.gz), by extension and by type.
 const backupFileTypes = ".gz,.tar.gz,application/gzip,application/x-gzip";
 
-// The color of the notice about restoring a backup.
+// The color of the notices about restoring a backup and about saving the
+// product recognition.
 const noticeToneClass: Record<RestoreNotice["tone"], string> = {
   progress: "text-ink-secondary",
   success: "text-accent",
@@ -54,9 +86,11 @@ const noticeToneClass: Record<RestoreNotice["tone"], string> = {
 
 /**
  * The settings (docs/plan.md, F32), opened by the gear in the stock view:
- * Home Assistant, the backups and information about StashBert. Connection
- * data stays in the configuration file of the server; the page only shows
- * whether it is set (architecture.md, 4.2).
+ * Home Assistant, the backups, the product recognition and information
+ * about StashBert. Connection data stays in the configuration file of the
+ * server; the page only shows whether it is set. The one exception is the
+ * key of the product recognition, which is set here but never shown
+ * (architecture.md, 4.2).
  */
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -95,6 +129,7 @@ export function SettingsPage() {
       </PageHeading>
       <HomeAssistantSection />
       <BackupSection />
+      <RecognitionSection />
       <AboutSection />
     </>
   );
@@ -406,6 +441,226 @@ function BackupSection() {
         />
       </Dialog>
     </Section>
+  );
+}
+
+/**
+ * The section "Produkterkennung" (docs/plan.md, F34, ADR-0021): provider,
+ * API key and model of the recognition of products from their photo, with
+ * "Speichern", "Ausschalten" and a note where the photos go.
+ */
+function RecognitionSection() {
+  const recognition = useQuery(recognitionSettingsQuery);
+  const settings = recognition.data;
+
+  return (
+    <Section title="Produkterkennung">
+      {settings === undefined ? (
+        <>
+          <Card>
+            <LoadState
+              failed={recognition.isError && !recognition.isFetching}
+              onRetry={() => void recognition.refetch()}
+            />
+          </Card>
+          <p className="mt-2 px-4 text-sm text-ink-tertiary">{recognitionNote("off")}</p>
+        </>
+      ) : (
+        <RecognitionControls settings={settings} />
+      )}
+    </Section>
+  );
+}
+
+// The form of the product recognition for the stored settings. The typed
+// key lives only in the state of the form and in the password field; it
+// is never shown elsewhere and never stored in the browser.
+function RecognitionControls({ settings }: { settings: RecognitionSettings }) {
+  const queryClient = useQueryClient();
+  const save = useMutation(recognitionSettingsMutation(queryClient));
+  const turnOff = useMutation(recognitionSettingsMutation(queryClient));
+  const [form, setForm] = useState<RecognitionForm>(() => toRecognitionForm(settings));
+  // Whether the last tap on "Speichern" was stopped for a missing key.
+  const [blocked, setBlocked] = useState(false);
+  // Whether the question before switching off is shown.
+  const [asking, setAsking] = useState(false);
+  const providerId = useId();
+  const keyId = useId();
+  const keyHintId = useId();
+  const noticeId = useId();
+  const modelId = useId();
+
+  // Hides "Gespeichert" after a short time; a failure stays until the next
+  // action (ADR-0016).
+  const { isSuccess: saved, reset: resetSave } = save;
+  useEffect(() => {
+    if (!saved) {
+      return;
+    }
+    const timer = setTimeout(resetSave, noticeDuration);
+    return () => clearTimeout(timer);
+  }, [saved, resetSave]);
+
+  const keyHint = keyHintText(settings, form.choice);
+  const notice = saveNotice(save.status, save.error, blocked);
+  const keyInvalid = keyRefused(save.error, blocked);
+  // The key field is described by the line about the stored key and by the
+  // message that refused the key.
+  const keyDescription = [keyHint !== "" && keyHintId, keyInvalid && noticeId]
+    .filter(Boolean)
+    .join(" ");
+  const busy = save.isPending || turnOff.isPending;
+
+  // A change of a field ends the message of the last try (ADR-0016).
+  function edit(next: RecognitionForm) {
+    setForm(next);
+    setBlocked(false);
+    if (save.isError) {
+      save.reset();
+    }
+  }
+
+  // Switching off goes only through "Ausschalten" and its question.
+  function submit() {
+    if (form.choice === "off") {
+      return;
+    }
+    if (keyMissing(settings, form)) {
+      setBlocked(true);
+      return;
+    }
+    setBlocked(false);
+    save.mutate(recognitionUpdate(form), {
+      onSuccess: (stored) => setForm(toRecognitionForm(stored)),
+    });
+  }
+
+  function confirmTurnOff() {
+    turnOff.mutate(
+      { provider: null },
+      {
+        onSuccess: (stored) => {
+          setAsking(false);
+          setBlocked(false);
+          save.reset();
+          setForm(toRecognitionForm(stored));
+        },
+      },
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <label htmlFor={providerId} className={labelClass}>
+            Anbieter
+          </label>
+          <select
+            id={providerId}
+            value={form.choice}
+            disabled={busy}
+            onChange={(event) => {
+              const { value } = event.target;
+              if (isProviderChoice(value)) {
+                edit(withChoice(form, settings, value));
+              }
+            }}
+            className="mt-1 min-h-11 w-full rounded-lg border border-line-strong bg-surface px-2 text-base disabled:opacity-40"
+          >
+            {providerChoices.map((choice) => (
+              <option key={choice} value={choice}>
+                {providerLabel(choice)}
+              </option>
+            ))}
+          </select>
+          {form.choice !== "off" && (
+            <>
+              <label htmlFor={keyId} className={`mt-4 ${labelClass}`}>
+                API-Schlüssel
+              </label>
+              {keyHint !== "" && (
+                <p id={keyHintId} className="mt-1 text-sm break-words text-ink-secondary">
+                  {keyHint}
+                </p>
+              )}
+              <input
+                id={keyId}
+                type="password"
+                value={form.apiKey}
+                onChange={(event) => edit({ ...form, apiKey: event.target.value })}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={keyInvalid}
+                aria-describedby={keyDescription || undefined}
+                className={inputClass}
+              />
+              <label htmlFor={modelId} className={`mt-4 ${labelClass}`}>
+                Modell
+              </label>
+              <input
+                id={modelId}
+                value={form.model}
+                placeholder={defaultModel(settings, form.choice)}
+                onChange={(event) => edit({ ...form, model: event.target.value })}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className={inputClass}
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className={`mt-4 w-full ${primaryButtonClass}`}
+              >
+                Speichern
+              </button>
+              <p
+                id={noticeId}
+                role="status"
+                className={`mt-1 text-sm font-medium break-words ${noticeToneClass[notice.tone]}`}
+              >
+                {notice.text}
+              </p>
+            </>
+          )}
+        </form>
+        {settings.provider !== null && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              turnOff.reset();
+              setAsking(true);
+            }}
+            className={`mt-3 w-full text-danger ${borderedButtonClass}`}
+          >
+            Ausschalten
+          </button>
+        )}
+      </Card>
+      <p className="mt-2 px-4 text-sm text-ink-tertiary">{recognitionNote(form.choice)}</p>
+      <Dialog open={asking} onClose={() => setAsking(false)} title={turnOffTitle}>
+        <p className="mt-2 text-ink-secondary">{turnOffQuestion}</p>
+        <p role="status" className="mt-2 text-sm font-medium text-danger">
+          {turnOff.isError ? turnOffErrorText : ""}
+        </p>
+        <ConfirmActions
+          label="Ausschalten"
+          pending={turnOff.isPending}
+          onCancel={() => setAsking(false)}
+          onConfirm={confirmTurnOff}
+        />
+      </Dialog>
+    </>
   );
 }
 
