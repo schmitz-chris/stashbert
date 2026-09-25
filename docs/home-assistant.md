@@ -30,7 +30,7 @@ Diese Anleitung beschreibt, wie StashBert über MQTT an Home Assistant (HA) ange
 In `/etc/stashbert/stashbert.env` (siehe `deploy/stashbert.env.example`):
 
 ```bash
-MQTT_URL=mqtt://192.168.188.124:1883
+MQTT_URL=mqtt://192.168.1.10:1883
 MQTT_USERNAME=stashbert
 MQTT_PASSWORD=geheim
 ```
@@ -122,7 +122,7 @@ Die Benutzer von HA und der Add-ons brauchen weiterhin vollen Zugriff. Ob das Ad
 Alle Nachrichten von StashBert mitlesen (Paket `mosquitto-clients`):
 
 ```bash
-mosquitto_sub -h 192.168.188.124 -u stashbert -P geheim -t 'stashbert/#' -v
+mosquitto_sub -h 192.168.1.10 -u stashbert -P geheim -t 'stashbert/#' -v
 ```
 
 | Beobachtung | Ursache und Abhilfe |

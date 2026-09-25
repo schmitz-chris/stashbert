@@ -21,7 +21,7 @@ Die Kamera gibt iOS nur in einem sicheren Kontext frei, also über HTTPS (resear
 
 Tailscale `serve` (research.md 7.6) scheidet aus, weil der Mac in einem Firmen-Tailnet hängt.
 
-Stand des bisherigen Tests: Weg A mit `https://192.168.188.149:8081` (S) und `https://192.168.188.149:8082` (R). Mit bestätigter Warnung gibt iOS die Kamera frei (belegt mit Variante R auf dem iPhone).
+Stand des bisherigen Tests: Weg A mit `https://<Mac-IP>:8081` (S) und `https://<Mac-IP>:8082` (R). Mit bestätigter Warnung gibt iOS die Kamera frei (belegt mit Variante R auf dem iPhone).
 
 ### 1.1 Voraussetzungen
 
@@ -46,7 +46,7 @@ Vor dem ersten Start und nach jeder Änderung am Code:
 ipconfig getifaddr en0
 ```
 
-Auf diesem Mac ist `en0` die Schnittstelle ins Heimnetz. Liefert der Befehl nichts, zeigt `route -n get default` in der Zeile `interface:` die aktive Schnittstelle; deren Namen statt `en0` einsetzen. Gesucht ist die Adresse im Heimnetz (derzeit `192.168.188.149`). Eine Adresse aus `100.64.0.0/10` gehört zum Tailnet und ist hier falsch.
+Auf diesem Mac ist `en0` die Schnittstelle ins Heimnetz. Liefert der Befehl nichts, zeigt `route -n get default` in der Zeile `interface:` die aktive Schnittstelle; deren Namen statt `en0` einsetzen. Gesucht ist die Adresse im Heimnetz. Eine Adresse aus `100.64.0.0/10` gehört zum Tailnet und ist hier falsch.
 
 Die IP kann sich ändern, weil der Router sie per DHCP vergibt. Dann gilt „Wenn sich die IP ändert" in 1.4 bzw. Schritt 5 in 1.5. Eine feste Adresse für den Mac (DHCP-Reservierung im Router) erspart diese Schritte.
 
@@ -97,7 +97,7 @@ Die Vite-Konfiguration beider Projekte schaltet HTTPS ein, sobald `.cert/key.pem
 
    Erwartet: `<title>Scanner-Test S</title>` bzw. `<title>Scanner-Test R</title>`. `-k` ist nötig, weil curl dem selbst signierten Zertifikat nicht vertraut.
 
-4. **Auf dem iPhone** in Safari `https://<Mac-IP>:8081` und `https://<Mac-IP>:8082` öffnen, derzeit `https://192.168.188.149:8081` und `https://192.168.188.149:8082`. Safari warnt, dass die Verbindung nicht privat ist. Über die Details den Besuch der Website bestätigen, einmal pro Adresse. Danach fragt die Seite beim Tippen auf „Scannen starten" nach der Kamera.
+4. **Auf dem iPhone** in Safari `https://<Mac-IP>:8081` und `https://<Mac-IP>:8082` öffnen. Safari warnt, dass die Verbindung nicht privat ist. Über die Details den Besuch der Website bestätigen, einmal pro Adresse. Danach fragt die Seite beim Tippen auf „Scannen starten" nach der Kamera.
 
    Ob eine Home-Bildschirm-App die bestätigte Ausnahme übernimmt, ist nicht dokumentiert (vgl. research.md 7.6). Was dabei passiert, in Testfall 3 festhalten. Ergebnisse aus Weg A sind in diesem Punkt nur eingeschränkt auf den späteren Betrieb hinter dem Proxy übertragbar.
 

@@ -1,6 +1,6 @@
 # M2-Prüfung: Home Assistant über MQTT
 
-Stand 24.09.2026. Prüfung von Phase 2a (ADR-0018, architecture.md Kapitel 11) gegen den Broker im Heimnetz (Mosquitto-Add-on auf `homeassistant.local`, 192.168.188.124) und das Home Assistant des Haushalts (2026.9.3). Geprüft hat der Lead mit Kopien der lokalen Datenbank und einer eigenen Client-ID (`stashbert-dev`).
+Stand 24.09.2026. Prüfung von Phase 2a (ADR-0018, architecture.md Kapitel 11) gegen den Broker im Heimnetz (Mosquitto-Add-on auf `homeassistant.local`) und das Home Assistant des Haushalts (2026.9.3). Geprüft hat der Lead mit Kopien der lokalen Datenbank und einer eigenen Client-ID (`stashbert-dev`).
 
 ## 1. Vom Lead geprüft
 
@@ -43,7 +43,7 @@ Der Server auf Port 8080 läuft mit MQTT (Client-ID `stashbert-dev`); die Vorsch
 In `/etc/stashbert/stashbert.env`:
 
 ```bash
-MQTT_URL=mqtt://192.168.188.124:1883
+MQTT_URL=mqtt://192.168.1.10:1883
 MQTT_USERNAME=stashbert
 MQTT_PASSWORD=...
 ```
