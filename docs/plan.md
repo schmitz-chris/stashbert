@@ -1620,6 +1620,107 @@ Nutzerentscheidung vom 25.09.2026: SQLite bleibt (ADR-0005); eine Einstellungsse
   2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) und mit großer Schrift von Vorrat (Zahnrad), Einstellungen und Einkauf (ohne Home-Assistant-Abschnitt).
   3. (Nutzer) Auf dem iPhone die Einstellungen öffnen, die Liste in Home Assistant wählen und eine Sicherung herunterladen.
 
+## Phase 1m: Installation per Proxmox-Skript (ADR-0019)
+
+Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Releases entstehen per Tag auf GitHub; ein eigenes Skript im Stil der community-scripts legt auf dem Proxmox-Host den Container an und installiert daraus. Kein Debian-Paket. Gemeinsame Referenzen: ADR-0019, ADR-0014, architecture.md 9.
+
+### L04: Release-Paket mit Update und Restore
+
+- **Status:** offen
+- **Abhängig von:** L02, B40
+- **Referenzen:** ADR-0019, ADR-0014, architecture.md 9.1 und 9.3, docs/betrieb.md 10
+- **Umfang:**
+  - **`deploy/stashbert-update`** (POSIX `sh`, als root im Container, `set -eu`, Meldungen auf Deutsch):
+    - Basis `https://github.com/schmitz-chris/stashbert/releases`, für Tests überschreibbar mit `STASHBERT_RELEASES_URL`.
+    - Prüft root, `uname -m` = `x86_64`, `curl`, `sha256sum` und `tar`.
+    - Neueste Version: die Weiterleitung von `<basis>/latest` (`curl -fsSLI -o /dev/null -w '%{url_effective}'`); der letzte Pfadteil ist der Tag und beginnt mit `v`.
+    - Installierte Version über `/usr/local/bin/stashbert -version`; fehlt das Binary, ist es eine Erstinstallation. Ist die Version gleich: „StashBert ist aktuell (<version>)." und Ende mit 0.
+    - Lädt `stashbert_<version ohne v>_linux_amd64.tar.gz` und `SHA256SUMS` aus `<basis>/download/<tag>/` in ein temporäres Verzeichnis, das in jedem Fall gelöscht wird. Prüft die Prüfsumme des Archivs, entpackt und ruft `sh install.sh` im entpackten Ordner auf.
+    - Jeder Fehler vor `install.sh` lässt die laufende Installation unberührt und endet mit einer Meldung und Exit-Code ungleich 0.
+  - **`deploy/stashbert-restore`** (POSIX `sh`, als root im Container, `set -eu`): Aufruf `stashbert-restore <archiv.tar.gz>` mit einem Archiv aus `GET /backup`.
+    - Entpackt in ein temporäres Verzeichnis und bricht ohne Änderung ab, wenn `stashbert.db` fehlt.
+    - Stoppt den Dienst und verschiebt, was davon vorhanden ist (`stashbert.db`, `-wal`, `-shm`, `images/`), aus `/var/lib/stashbert` nach `/var/lib/stashbert/vor-restore-<YYYYMMDD-HHMMSS>/`.
+    - Legt Datenbank und Bilder aus dem Archiv ab, setzt den Besitzer `stashbert:stashbert`, startet den Dienst und prüft nach einigen Sekunden, dass er läuft.
+    - Nennt am Ende den Ordner mit dem alten Stand.
+  - **`deploy/install.sh`:**
+    - Das Argument wird optional; ohne Argument nimmt das Skript `stashbert` neben sich.
+    - Installiert zusätzlich `stashbert-update` und `stashbert-restore` (müssen neben dem Skript liegen) mit Modus 0755 nach `/usr/local/bin/`.
+    - Die Meldung bei einem falschen Binary nennt das Release-Archiv statt `stashbert-linux-amd64`.
+  - **`Makefile`**, `make release`:
+    - `VERSION ?=` `git describe --tags --always --dirty`; der Workflow übergibt den Tag.
+    - `bin/release/` wird vorher geleert. Darin entstehen `stashbert_<VERSION ohne führendes v>_linux_amd64.tar.gz`, `stashbert-update` einzeln und `SHA256SUMS` über alle Dateien in `bin/release/`.
+    - Das Archiv enthält einen Ordner gleichen Namens mit `stashbert`, `install.sh`, `stashbert.service`, `stashbert.env.example`, `stashbert-update` und `stashbert-restore`; Skripte und Binary mit Modus 0755. Auf macOS ohne `._`-Dateien (`COPYFILE_DISABLE=1`).
+    - Das lose Binary `stashbert-linux-amd64` entfällt.
+  - **`.github/workflows/release.yml`:** bei Tags `v*`, `permissions: contents: write`; Go und Node wie in `ci.yml`; `make check`; `make release VERSION=<tag>`; `gh release create <tag> bin/release/* --verify-tag --generate-notes`, mit `--prerelease`, wenn der Tag einen Bindestrich enthält.
+  - **`make check`:** `sh -n` für die drei Skripte; zusätzlich `shellcheck`, wenn es installiert ist.
+- **Nicht im Umfang:** Proxmox-Skript (L05), Anleitung (L06), arm64, Signaturen, `.deb`, Wahl einer bestimmten Version oder Downgrade im Updater.
+- **Abnahmekriterien:**
+  1. `make check` ist grün; shellcheck ohne Befund.
+  2. `make release` erzeugt Archiv, `stashbert-update` und `SHA256SUMS`; die Prüfsummen stimmen; das Archiv enthält genau die sechs Dateien im Ordner, ohne `._`-Dateien.
+  3. Durchlauf in einem Debian-13-Container mit systemd (Docker, `linux/amd64`) gegen einen lokalen Server, der die Release-URLs nachbildet. Geprüft wird:
+     - Die Erstinstallation mit `stashbert-update` führt zu einem laufenden Dienst.
+     - Ein zweiter Aufruf meldet „aktuell".
+     - Ein neueres Release wird installiert, die Env-Datei bleibt.
+     - Eine falsche Prüfsumme bricht ohne Änderung ab.
+     - `stashbert-restore` mit einem Archiv aus `GET /backup` einer anderen Instanz stellt Daten und Bilder her und legt den alten Stand ab.
+     Das Protokoll steht im Bericht; der Durchlauf ist nicht Teil von `make check`.
+  4. (Nutzer) Nach dem ersten Tag steht das Release mit allen Assets auf GitHub.
+
+### L05: Proxmox-Skript
+
+- **Status:** offen
+- **Abhängig von:** L04
+- **Referenzen:** ADR-0019, ADR-0014, docs/betrieb.md 2, pct(1) der Proxmox-Doku
+- **Umfang:** `deploy/proxmox.sh` (bash, `set -Eeuo pipefail`), läuft als root auf dem Proxmox-Host, Texte auf Deutsch.
+  - **Prüfungen:** root und `pct`, `pveam`, `pvesm`, `pvesh`. Fehlt etwas, sagt das Skript, dass es auf den Proxmox-Host gehört.
+  - **Fragen** (von `/dev/tty`, Enter übernimmt die Vorgabe):
+    1. „Standardeinstellungen verwenden?" Ja heißt: nächste freie ID (`pvesh get /cluster/nextid`), Name `stashbert`, Speicher `local-lvm` bzw. der erste Speicher für Container, Bridge `vmbr0`, DHCP. Nein heißt: diese fünf Werte einzeln, bei fester IP (CIDR) auch das Gateway. Eingaben werden geprüft: ID frei, Speicher vorhanden, IP im CIDR-Format.
+    2. Optional: Kontakt für Open Food Facts; MQTT-Broker-URL mit Benutzer und Passwort (Passwort ohne Echo).
+    3. Optional: eine Sicherung übernehmen, als Pfad zu einer Datei auf dem Host oder als Adresse einer laufenden Instanz (`http://…`; das Skript lädt dann `<adresse>/api/v1/backup`).
+    4. Zusammenfassung und Bestätigung.
+  - Werte mit `"`, `'`, `\`, `$`, Backtick, Leerzeichen oder Zeilenumbruch lehnt das Skript ab, mit dem Hinweis, sie später in der Env-Datei einzutragen.
+  - **Ablauf:**
+    1. Neueste Vorlage `debian-13-standard_*_amd64` über `pveam` auf einem Speicher mit Inhalt `vztmpl`; Download nur, wenn sie fehlt.
+    2. `pct create`: unprivilegiert, `--features nesting=1`, 1 Kern, 512 MB RAM, 512 MB Swap, 8 GB Platte, `--onboot 1`, `--tags stashbert`. Dann starten und höchstens 60 s auf das Netz warten.
+    3. Im Container `apt-get update`, Upgrade, `curl` und `ca-certificates` installieren.
+    4. `stashbert-update` aus `<basis>/latest/download/` laden und ausführen (`STASHBERT_RELEASES_URL` wird durchgereicht).
+    5. Die Angaben in `/etc/stashbert/stashbert.env` eintragen: vorhandene Zeile ersetzen; Werte über die Umgebung von `pct exec`, nie in eine Shell-Zeile eingesetzt.
+    6. Falls gewählt: Sicherung per `pct push` in den Container kopieren und `stashbert-restore` ausführen. Dann den Dienst neu starten.
+    7. `/usr/bin/update` als Aufruf von `stashbert-update` anlegen und die automatische Anmeldung auf der Konsole einrichten (getty-Drop-in wie bei den community-scripts).
+  - **Am Ende** zeigt das Skript:
+    - die Adresse `http://<ip>:<port>`;
+    - die MAC-Adresse für eine DHCP-Reservierung;
+    - den Update-Befehl: `update` in der Konsole oder `pct exec <id> -- update` auf dem Host;
+    - den Hinweis auf den HTTPS-Proxy für die Kamera (docs/betrieb.md 5).
+  - Schlägt ein Schritt nach dem Anlegen fehl, bleibt der Container zur Fehlersuche bestehen; die Meldung nennt `pct destroy <id>`.
+  - `--dry-run` fragt wie sonst, zeigt aber alle ändernden Befehle nur an.
+  - `make release` legt `proxmox.sh` nach `bin/release/` (mit Eintrag in `SHA256SUMS`); `make check` prüft es mit `bash -n` und, wenn installiert, mit shellcheck.
+- **Nicht im Umfang:** Aufnahme in die community-scripts, Whiptail-Dialoge, Abfrage der Ressourcen, SSH-Schlüssel, root-Passwort, arm64, Einrichtung des Proxys.
+- **Abnahmekriterien:**
+  1. `make check` ist grün; shellcheck ohne Befund.
+  2. Durchlauf mit Attrappen für `pct`, `pveam`, `pvesm` und `pvesh`: Container-Befehle laufen in einem Debian-13-Container mit systemd (Docker), die Release-URLs kommen von einem lokalen Server. Geprüft werden Standard und feste IP, mit OFF-Kontakt, MQTT und einer Sicherung von einer laufenden Instanz. Am Ende läuft der Dienst mit diesen Angaben und Daten; `--dry-run` ändert nichts. Das Protokoll steht im Bericht.
+  3. (Nutzer) Auf dem Proxmox-Host legt der Einzeiler einen laufenden StashBert-Container an; `update` in dessen Konsole meldet „aktuell".
+
+### L06: Betriebsanleitung für das Skript
+
+- **Status:** offen
+- **Abhängig von:** L05
+- **Referenzen:** ADR-0019, docs/betrieb.md
+- **Umfang:**
+  - **`docs/betrieb.md`:**
+    - Hauptweg „Einrichten mit dem Proxmox-Skript": Einzeiler, die Fragen, was entsteht, danach Proxy und iPhone.
+    - Update mit `update`, Restore mit `stashbert-restore`.
+    - Der bisherige Weg wird „Ohne Skript" mit dem Release-Archiv (Download von GitHub oder `make release`).
+    - Container-Empfehlung mit `nesting=1` (Debian 13 braucht es).
+    - Deinstallation und Fehlersuche um die neuen Befehle ergänzt.
+  - **`README.md`:** Abschnitt „Installation" mit dem Einzeiler und Verweis auf `docs/betrieb.md`.
+  - **`docs/architecture.md` 9.1:** Artefakt und Übertragung nach ADR-0019.
+  - **`docs/m2-pruefung.md` 4:** verweist auf das Skript.
+- **Nicht im Umfang:** Proxy-Konfiguration im Detail.
+- **Abnahmekriterien:**
+  1. Alle Befehle passen zu den Skripten, zum Makefile und zum Workflow (gegenlesen).
+  2. (Nutzer) Die Anleitung führt zu einer laufenden Instanz.
+
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
 Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.

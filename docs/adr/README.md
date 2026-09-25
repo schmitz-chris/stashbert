@@ -17,7 +17,9 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0011](0011-ereignisse-und-integrationen.md) | Interne Domänen-Ereignisse ab M1, Integrationen ab M2 | angenommen |
 | [0012](0012-agentengetriebene-entwicklung.md) | Agentengetriebene Entwicklung mit kleinteiligem Plan | angenommen |
 | [0013](0013-keine-anmeldung-in-m1.md) | Keine Anmeldung in M1 | angenommen |
-| [0014](0014-betrieb-im-lxc.md) | Betrieb im Proxmox-LXC mit systemd | angenommen |
+| [0014](0014-betrieb-im-lxc.md) | Betrieb im Proxmox-LXC mit systemd | angenommen, ergänzt durch ADR-0019 |
 | [0015](0015-vormerken-fuer-den-einkauf.md) | Vormerken für den Einkauf | angenommen |
 | [0016](0016-oberflaeche-nach-hig.md) | Oberfläche nach Apples Human Interface Guidelines, kein Dark Mode in M1 | angenommen |
 | [0017](0017-kaesten.md) | Kästen (Wasser, Bier) ohne eigenen Barcode | angenommen |
+| [0018](0018-home-assistant-ueber-mqtt.md) | Home Assistant über MQTT (M2) | angenommen |
+| [0019](0019-installation-per-skript.md) | Installation per Proxmox-Skript und GitHub-Releases | angenommen |
