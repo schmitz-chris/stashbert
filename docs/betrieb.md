@@ -257,9 +257,17 @@ Zusätzlich:
 
 ## 10. Restore
 
-### Archiv aus den Einstellungen
+### In den Einstellungen
 
-Das Archiv in den Container bringen, z. B. auf dem Proxmox-Host mit `pct push <ctid> stashbert-<YYYYMMDD-HHMMSS>.tar.gz /root/stashbert-<YYYYMMDD-HHMMSS>.tar.gz` oder per `scp`, dann im Container:
+In der App: Zahnrad in der Vorrat-Ansicht, dann „Backup einspielen" und das Archiv `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` wählen (auf dem iPhone aus der App Dateien). Nach der Rückfrage prüft StashBert das Archiv, startet sich kurz neu und spielt es ein; die App lädt danach alle Daten neu (ADR-0020).
+
+- Ein Archiv, das kein Backup von StashBert ist oder von einer neueren Version stammt, lehnt StashBert ab, ohne etwas zu ändern.
+- Der bisherige Stand wandert nach `/var/lib/stashbert/vor-restore-<YYYYMMDD-HHMMSS>/` und bleibt dort, bis man ihn selbst löscht.
+- Höchstens 1 GB. Ohne Anmeldung (ADR-0013) kann das jeder, der StashBert erreicht.
+
+### Im Container mit `stashbert-restore`
+
+Für den Fall, dass StashBert nicht startet. Das Archiv in den Container bringen, z. B. auf dem Proxmox-Host mit `pct push <ctid> stashbert-<YYYYMMDD-HHMMSS>.tar.gz /root/stashbert-<YYYYMMDD-HHMMSS>.tar.gz` oder per `scp`, dann im Container:
 
 ```sh
 stashbert-restore /root/stashbert-<YYYYMMDD-HHMMSS>.tar.gz
