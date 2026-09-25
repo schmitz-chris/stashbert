@@ -38,3 +38,7 @@ Umsetzung von M1 läuft. Der Stand jedes Tasks steht in [docs/plan.md](docs/plan
 | Barcode | `barcode-detector` (Ponyfill) mit zxing-wasm, selbst gehostet |
 | Betrieb | ein Binary bzw. Container, ein HTTP-Port; TLS über den eigenen Reverse Proxy |
 | Später | MQTT/Home Assistant, Bring!, ESP32 |
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE). Produktdaten von Open Food Facts stehen unter der Open Database License (ODbL).
