@@ -40,7 +40,7 @@ Der Server auf Port 8080 läuft mit MQTT (Client-ID `stashbert-dev`); die Vorsch
 
 ## 4. Für den Betrieb im LXC
 
-In `/etc/stashbert/stashbert.env`:
+Das Proxmox-Skript (docs/betrieb.md, Abschnitt 2) fragt die MQTT-Angaben beim Einrichten ab. Von Hand in `/etc/stashbert/stashbert.env`:
 
 ```bash
 MQTT_URL=mqtt://192.168.1.10:1883

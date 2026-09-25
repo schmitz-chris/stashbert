@@ -39,6 +39,16 @@ Umsetzung von M1 läuft. Der Stand jedes Tasks steht in [docs/plan.md](docs/plan
 | Betrieb | ein Binary bzw. Container, ein HTTP-Port; TLS über den eigenen Reverse Proxy |
 | Später | MQTT/Home Assistant, Bring!, ESP32 |
 
+## Installation
+
+Auf einem Proxmox-Host als root:
+
+```sh
+bash -c "$(curl -fsSL https://github.com/schmitz-chris/stashbert/releases/latest/download/proxmox.sh)"
+```
+
+Das Skript legt einen Debian-13-Container an und installiert StashBert aus dem neuesten Release. Update im Container mit `update`. Alles Weitere, auch der Weg ohne Skript, steht in [docs/betrieb.md](docs/betrieb.md).
+
 ## Lizenz
 
 MIT, siehe [LICENSE](LICENSE). Produktdaten von Open Food Facts stehen unter der Open Database License (ODbL).

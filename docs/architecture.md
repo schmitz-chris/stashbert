@@ -433,7 +433,9 @@ Danach wird mit `target = 0` gebucht.
 ### 9.1 Artefakt
 
 - Ein statisch gelinktes Go-Binary (`CGO_ENABLED=0`). Es enthält API, Web-Oberfläche, Migrationen und `openapi.yaml` (ausgeliefert unter `GET /api/v1/openapi.yaml`, öffentlich).
-- **Hauptweg (ADR-0014):** systemd-Dienst in einem unprivilegierten Debian-LXC auf Proxmox (amd64). Binary `/usr/local/bin/stashbert`, `DATA_DIR=/var/lib/stashbert`, Konfiguration in `/etc/stashbert/stashbert.env`, Systembenutzer `stashbert`. `make release` baut `stashbert-linux-amd64` per Cross-Compile; `deploy/install.sh` installiert und aktualisiert.
+- **Hauptweg (ADR-0014, ADR-0019):** systemd-Dienst in einem unprivilegierten Debian-13-LXC (`nesting=1`) auf Proxmox (amd64). Binary `/usr/local/bin/stashbert`, `DATA_DIR=/var/lib/stashbert`, Konfiguration in `/etc/stashbert/stashbert.env`, Systembenutzer `stashbert`.
+  - **Release:** Ein Tag `v*` baut per GitHub Actions ein Release mit `stashbert_<version>_linux_amd64.tar.gz` (Binary, `install.sh`, Unit, Env-Beispiel, `stashbert-update`, `stashbert-restore`), `stashbert-update`, `proxmox.sh` und `SHA256SUMS`. `make release` baut dasselbe lokal.
+  - **Einrichten:** `deploy/proxmox.sh` legt auf dem Proxmox-Host den Container an und installiert über `stashbert-update`; das ruft `deploy/install.sh` auf. Update im Container mit `update` bzw. `stashbert-update`.
 - **Optional, zurückgestellt:** Container-Image `gcr.io/distroless/static-debian13:nonroot` plus Binary, Multi-Arch amd64 und arm64, `/data` im Image mit Besitzer 65532; Docker Compose mit genau einem Dienst.
 - TLS, DNS und Reverse Proxy stellt der Betreiber.
 - **Anforderungen an den vorgelagerten Proxy:**

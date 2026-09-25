@@ -1706,7 +1706,7 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
 
 ### L06: Betriebsanleitung für das Skript
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** L05
 - **Referenzen:** ADR-0019, docs/betrieb.md
 - **Umfang:**
