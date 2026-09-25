@@ -132,7 +132,7 @@ Routenspezifische Ergänzungen, jeweils **vor** dem Validator:
 
 - `PUT /api/v1/products/{id}/image`: ein `http.MaxBytesReader` begrenzt den Body auf 2 MB, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
 - `GET /api/v1/backup`: die Schreibfrist wird per `http.ResponseController` auf 10 min verlängert, damit das Herunterladen eines Backups nicht an `WriteTimeout` (30 s) scheitert (B40).
-- `POST /api/v1/products/{id}/recognition`: die Schreibfrist wird auf 90 s verlängert, weil die Antwort des Anbieters länger dauern kann als `WriteTimeout` (B42).
+- `POST /api/v1/products/{id}/recognition` und `PUT /api/v1/integrations/recognition`: die Schreibfrist wird auf 90 s verlängert, weil die Antwort des Anbieters (Erkennung bzw. Prüfung des Schlüssels) länger dauern kann als `WriteTimeout` (B42).
 - `POST /api/v1/backup/restore` umgeht den Validator, weil er den Body ganz in den Speicher lesen würde; der Handler prüft das Archiv selbst (ADR-0020). Ein `http.MaxBytesReader` begrenzt den Body auf 1 GB (Überschreitung: 413 `backup_too_large`), Lese- und Schreibfrist werden auf 10 min verlängert (B41).
 - Mit MQTT meldet eine Middleware jede erfolgreiche ändernde Anfrage an die Zusammenfassung (11.5).
 

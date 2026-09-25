@@ -110,9 +110,10 @@ func newHandler(cfg config.Config, d Deps, restoreLimit int64) (http.Handler, er
 // For GET /api/v1/backup the write deadline is extended to
 // backupWriteTimeout before StripPrefix, because a larger backup takes
 // longer than the WriteTimeout of the server (architecture.md, 6.2).
-// For POST /api/v1/products/{id}/recognition the write deadline is extended
-// to recognitionWriteTimeout, because the answer of the provider can take
-// longer than the WriteTimeout (architecture.md, 4.4).
+// For POST /api/v1/products/{id}/recognition and PUT
+// /api/v1/integrations/recognition the write deadline is extended to
+// recognitionWriteTimeout, because the answer of the provider (recognition
+// or key check) can take longer than the WriteTimeout (architecture.md, 4.4).
 // POST /api/v1/backup/restore bypasses the validator, which would read the
 // whole archive into memory; limitRestore checks it instead and limits its
 // body to restoreLimit (architecture.md, 4.4).
@@ -141,6 +142,7 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 	mux.Handle("PUT /api/v1/products/{id}/image", http.MaxBytesHandler(apiChain, lookup.MaxImageBytes))
 	mux.Handle("GET /api/v1/backup", extendWriteDeadline(apiChain, backupWriteTimeout))
 	mux.Handle("POST /api/v1/products/{id}/recognition", extendWriteDeadline(apiChain, recognitionWriteTimeout))
+	mux.Handle("PUT /api/v1/integrations/recognition", extendWriteDeadline(apiChain, recognitionWriteTimeout))
 	mux.Handle("POST /api/v1/backup/restore", limitRestore(http.StripPrefix("/api/v1", apiHandler), restoreLimit))
 	mux.Handle("/", webHandler)
 

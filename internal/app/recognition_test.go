@@ -40,7 +40,8 @@ type fakeAI struct {
 	answer string
 	// images are the image data URLs of the recognition requests.
 	images []string
-	// delay is the time a recognition request waits before its answer.
+	// delay is the time a recognition request or a key check waits before
+	// its answer.
 	delay time.Duration
 }
 
@@ -58,6 +59,7 @@ func newFakeAI(t *testing.T) *fakeAI {
 		case f.status != http.StatusOK:
 			w.WriteHeader(f.status)
 		case r.Method == http.MethodGet:
+			time.Sleep(f.delay)
 			io.WriteString(w, `{"object": "list", "data": [], "models": []}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/responses":
 			var body struct {
@@ -335,5 +337,37 @@ func TestRecognizeProductOutlastsWriteTimeout(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK || !jsonEqual(t, string(body), `{"name": "Kidneybohnen", "brand": "Bonduelle", "package_size": null}`) {
 		t.Errorf("answer = %d %s, want 200 with the result", resp.StatusCode, body)
+	}
+}
+
+func TestSetRecognitionSettingsOutlastsWriteTimeout(t *testing.T) {
+	a := newRecognitionApp(t)
+	// The key check answers after the WriteTimeout of the server; the route
+	// extends the write deadline (architecture.md, 4.4).
+	a.fake.mu.Lock()
+	a.fake.delay = 500 * time.Millisecond
+	a.fake.mu.Unlock()
+	srv := httptest.NewUnstartedServer(a.h)
+	srv.Config.WriteTimeout = 200 * time.Millisecond
+	srv.Start()
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/integrations/recognition",
+		strings.NewReader(`{"provider": "openai", "api_key": "`+validAPIKey+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("PUT recognition settings: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read answer: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || !jsonEqual(t, string(body), recognitionSettings(`"openai"`, "null", `"9876"`)) {
+		t.Errorf("answer = %d %s, want 200 with the settings", resp.StatusCode, body)
 	}
 }
