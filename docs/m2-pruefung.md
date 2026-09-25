@@ -33,7 +33,7 @@ Nichts davon schreibt in eine Bring!-Liste, solange in StashBert keine Bring!-Li
 
 Der Server auf Port 8080 läuft mit MQTT (Client-ID `stashbert-dev`); die Vorschau auf 8083 und 8084 nutzt ihn.
 
-1. In StashBert „Einkauf" öffnen, unten unter „Home Assistant" eine Bring!-Liste wählen, z. B. „Gemeinsam". Die vorgemerkten Produkte erscheinen dort.
+1. In StashBert in der Vorrat-Ansicht auf das Zahnrad tippen und unter „Home Assistant" eine Bring!-Liste wählen, z. B. „Gemeinsam". Die vorgemerkten Produkte erscheinen dort.
 2. Ein Produkt einscannen, das auf der Liste steht: der Eintrag verschwindet aus Bring!.
 3. Etwas entnehmen, bis Soll unterschritten ist: der Eintrag erscheint mit Menge als Spezifikation.
 4. In HA unter Geräte „StashBert" ansehen; die Entitäten lassen sich auf Deutsch umbenennen.

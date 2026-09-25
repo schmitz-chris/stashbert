@@ -72,7 +72,7 @@ Die Blueprints liegen im Repository unter `deploy/homeassistant/`:
 
 ## 6. Liste in StashBert wählen
 
-In StashBert in der Einkaufsansicht unten im Abschnitt „Home Assistant" die Liste wählen. Beim Wechsel räumt StashBert die alte Liste ab und füllt die neue. „Liste neu senden" (oder der Knopf „Resend shopping list" in HA) gleicht die ganze Liste ab, z. B. nachdem die Automation eine Weile aus war.
+In StashBert in der Vorrat-Ansicht oben rechts auf das Zahnrad tippen und in den Einstellungen im Abschnitt „Home Assistant" die Liste wählen. Beim Wechsel räumt StashBert die alte Liste ab und füllt die neue. „Liste neu senden" (oder der Knopf „Resend shopping list" in HA) gleicht die ganze Liste ab, z. B. nachdem die Automation eine Weile aus war.
 
 ## 7. Wie der Abgleich arbeitet
 
