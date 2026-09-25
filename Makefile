@@ -4,6 +4,8 @@
 
 # Shell scripts that run in the LXC (ADR-0014, ADR-0019).
 SCRIPTS = deploy/install.sh deploy/stashbert-update deploy/stashbert-restore
+# Bash script that runs on the Proxmox host and creates the LXC (ADR-0019).
+PROXMOX_SCRIPT = deploy/proxmox.sh
 
 # With web/package.json, the API types of the web UI are generated too.
 # Without web/node_modules (fresh clone), npm ci installs the tools first.
@@ -24,9 +26,10 @@ check:
 	go vet ./...
 	go test ./...
 	for f in $(SCRIPTS); do sh -n "$$f" || exit 1; done
+	bash -n $(PROXMOX_SCRIPT)
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		echo "shellcheck $(SCRIPTS)"; \
-		shellcheck $(SCRIPTS) || exit 1; \
+		echo "shellcheck $(SCRIPTS) $(PROXMOX_SCRIPT)"; \
+		shellcheck $(SCRIPTS) $(PROXMOX_SCRIPT) || exit 1; \
 	else \
 		echo "shellcheck not installed, skipped"; \
 	fi
@@ -70,10 +73,10 @@ TAR_OWNER = $$(if tar --version 2>/dev/null | grep -q 'GNU tar'; then echo --own
 # emptied first: the archive RELEASE_NAME.tar.gz with a folder of the same name
 # (binary cross-compiled with the web UI, install.sh, unit, env example,
 # stashbert-update and stashbert-restore), stashbert-update on its own for
-# the first installation, and SHA256SUMS over all files. internal/webui/dist/
-# is emptied again after the Go build, also when it fails. On macOS,
-# COPYFILE_DISABLE=1 and --no-xattrs keep ._ files and extended attributes
-# out of the archive.
+# the first installation, proxmox.sh for the Proxmox host, and SHA256SUMS over
+# all files. internal/webui/dist/ is emptied again after the Go build, also
+# when it fails. On macOS, COPYFILE_DISABLE=1 and --no-xattrs keep ._ files
+# and extended attributes out of the archive.
 release: webui
 	rm -rf bin/release
 	mkdir -p $(RELEASE_DIR)
@@ -87,7 +90,8 @@ release: webui
 	cd bin/release && COPYFILE_DISABLE=1 tar $(TAR_OWNER) --numeric-owner --no-xattrs -czf $(RELEASE_NAME).tar.gz $(RELEASE_NAME)
 	rm -rf $(RELEASE_DIR)
 	cp deploy/stashbert-update bin/release/stashbert-update
-	chmod 0755 bin/release/stashbert-update
+	cp $(PROXMOX_SCRIPT) bin/release/proxmox.sh
+	chmod 0755 bin/release/stashbert-update bin/release/proxmox.sh
 	cd bin/release && \
 	if command -v sha256sum >/dev/null 2>&1; then \
 		sha256sum * > SHA256SUMS; \

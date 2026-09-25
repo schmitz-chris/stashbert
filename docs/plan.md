@@ -1668,37 +1668,40 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
 
 ### L05: Proxmox-Skript
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer (Skript und Makefile stehen, shellcheck ohne Befund, Durchlauf mit Attrappen für `pct`, `pveam`, `pvesm` und `pvesh` im Debian-13-Container bestanden; den Einzeiler auf dem Proxmox-Host prüft der Nutzer)
 - **Abhängig von:** L04
-- **Referenzen:** ADR-0019, ADR-0014, docs/betrieb.md 2, pct(1) der Proxmox-Doku
+- **Referenzen:** ADR-0019, ADR-0014, docs/betrieb.md 2, pct(1), pveam(1), pvesm(1) und pvesh(1) der Proxmox-Doku
 - **Umfang:** `deploy/proxmox.sh` (bash, `set -Eeuo pipefail`), läuft als root auf dem Proxmox-Host, Texte auf Deutsch.
+  - **Aufruf:** `bash -c "$(curl -fsSL https://github.com/schmitz-chris/stashbert/releases/latest/download/proxmox.sh)"`; Argumente nach einem Platzhalter, z. B. `bash -c "$(curl …)" _ --dry-run`. Es gibt `--dry-run` und `--help`.
   - **Prüfungen:** root und `pct`, `pveam`, `pvesm`, `pvesh`. Fehlt etwas, sagt das Skript, dass es auf den Proxmox-Host gehört.
-  - **Fragen** (von `/dev/tty`, Enter übernimmt die Vorgabe):
-    1. „Standardeinstellungen verwenden?" Ja heißt: nächste freie ID (`pvesh get /cluster/nextid`), Name `stashbert`, Speicher `local-lvm` bzw. der erste Speicher für Container, Bridge `vmbr0`, DHCP. Nein heißt: diese fünf Werte einzeln, bei fester IP (CIDR) auch das Gateway. Eingaben werden geprüft: ID frei, Speicher vorhanden, IP im CIDR-Format.
-    2. Optional: Kontakt für Open Food Facts; MQTT-Broker-URL mit Benutzer und Passwort (Passwort ohne Echo).
-    3. Optional: eine Sicherung übernehmen, als Pfad zu einer Datei auf dem Host oder als Adresse einer laufenden Instanz (`http://…`; das Skript lädt dann `<adresse>/api/v1/backup`).
+  - **Fragen** (von der Standardeingabe, beim Einzeiler also vom Terminal; Enter übernimmt die Vorgabe, eine ungültige Eingabe wird erneut abgefragt):
+    1. „Standardeinstellungen verwenden?" Ja heißt: nächste freie ID (`pvesh get /cluster/nextid`), Name `stashbert`, Speicher `local-lvm` bzw. der erste Speicher für Container, Bridge `vmbr0`, DHCP. Nein heißt: diese fünf Werte einzeln, bei fester IP (CIDR) auch das Gateway. Eingaben werden geprüft: ID frei (`pvesh get /cluster/nextid --vmid <id>`), Speicher aktiv und für Container (`pvesm status --content rootdir`), Bridge vorhanden (`ip link show dev <bridge>`), IP im CIDR-Format, Gateway als IPv4-Adresse.
+    2. Optional: Kontakt für Open Food Facts; MQTT-Broker-URL (`mqtt://host:port` oder `mqtts://host:port`) mit Benutzer und Passwort (Passwort ohne Echo, `read -s`).
+    3. Optional: ein Backup übernehmen, als Pfad zu einer Datei auf dem Host oder als Adresse einer laufenden Instanz (`http://…` oder `https://…`; das Skript lädt dann auf dem Host `<adresse>/api/v1/backup`, eine Adresse mit `/api/v1/backup` am Ende unverändert). Es prüft mit `tar -tzf`, dass das Archiv `stashbert.db` enthält.
     4. Zusammenfassung und Bestätigung.
-  - Werte mit `"`, `'`, `\`, `$`, Backtick, Leerzeichen oder Zeilenumbruch lehnt das Skript ab, mit dem Hinweis, sie später in der Env-Datei einzutragen.
+  - Alle Eingaben sind geprüft, bevor etwas angelegt wird.
+  - Werte mit `"`, `'`, `\`, `$`, Backtick, Leerzeichen oder Zeilenumbruch lehnt das Skript ab, mit dem Hinweis, sie später in `/etc/stashbert/stashbert.env` einzutragen.
   - **Ablauf:**
     1. Neueste Vorlage `debian-13-standard_*_amd64` über `pveam` auf einem Speicher mit Inhalt `vztmpl`; Download nur, wenn sie fehlt.
     2. `pct create`: unprivilegiert, `--features nesting=1`, 1 Kern, 512 MB RAM, 512 MB Swap, 8 GB Platte, `--onboot 1`, `--tags stashbert`. Dann starten und höchstens 60 s auf das Netz warten.
     3. Im Container `apt-get update`, Upgrade, `curl` und `ca-certificates` installieren.
-    4. `stashbert-update` aus `<basis>/latest/download/` laden und ausführen (`STASHBERT_RELEASES_URL` wird durchgereicht).
-    5. Die Angaben in `/etc/stashbert/stashbert.env` eintragen: vorhandene Zeile ersetzen; Werte über die Umgebung von `pct exec`, nie in eine Shell-Zeile eingesetzt.
-    6. Falls gewählt: Sicherung per `pct push` in den Container kopieren und `stashbert-restore` ausführen. Dann den Dienst neu starten.
+    4. `stashbert-update` aus `<basis>/latest/download/` laden und ausführen. `<basis>` ist `https://github.com/schmitz-chris/stashbert/releases` oder, falls auf dem Host gesetzt, `STASHBERT_RELEASES_URL`; es wird an `stashbert-update` durchgereicht.
+    5. Die Angaben in `/etc/stashbert/stashbert.env` eintragen: vorhandene Zeile `KEY=` ersetzen; Schlüssel und Werte über `pct exec <id> -- env …` in der Umgebung (awk liest sie aus `ENVIRON`), nie in eine Shell-Zeile eingesetzt.
+    6. Falls gewählt: Backup per `pct push` in den Container kopieren und `stashbert-restore` ausführen. Dann den Dienst neu starten.
     7. `/usr/bin/update` als Aufruf von `stashbert-update` anlegen und die automatische Anmeldung auf der Konsole einrichten (getty-Drop-in wie bei den community-scripts).
   - **Am Ende** zeigt das Skript:
     - die Adresse `http://<ip>:<port>`;
     - die MAC-Adresse für eine DHCP-Reservierung;
     - den Update-Befehl: `update` in der Konsole oder `pct exec <id> -- update` auf dem Host;
     - den Hinweis auf den HTTPS-Proxy für die Kamera (docs/betrieb.md 5).
-  - Schlägt ein Schritt nach dem Anlegen fehl, bleibt der Container zur Fehlersuche bestehen; die Meldung nennt `pct destroy <id>`.
+  - Die Ausgabe bleibt ruhig: eine Statuszeile pro Schritt. Die ausführliche Ausgabe (pveam, apt, `stashbert-update`) geht in ein Protokoll auf dem Host, das die Schlussmeldung und jede Fehlermeldung nennen.
+  - Schlägt ein Schritt nach dem Anlegen fehl, bleibt der Container zur Fehlersuche bestehen; die Meldung nennt `pct stop <id>; pct destroy <id>`.
   - `--dry-run` fragt wie sonst, zeigt aber alle ändernden Befehle nur an.
   - `make release` legt `proxmox.sh` nach `bin/release/` (mit Eintrag in `SHA256SUMS`); `make check` prüft es mit `bash -n` und, wenn installiert, mit shellcheck.
 - **Nicht im Umfang:** Aufnahme in die community-scripts, Whiptail-Dialoge, Abfrage der Ressourcen, SSH-Schlüssel, root-Passwort, arm64, Einrichtung des Proxys.
 - **Abnahmekriterien:**
   1. `make check` ist grün; shellcheck ohne Befund.
-  2. Durchlauf mit Attrappen für `pct`, `pveam`, `pvesm` und `pvesh`: Container-Befehle laufen in einem Debian-13-Container mit systemd (Docker), die Release-URLs kommen von einem lokalen Server. Geprüft werden Standard und feste IP, mit OFF-Kontakt, MQTT und einer Sicherung von einer laufenden Instanz. Am Ende läuft der Dienst mit diesen Angaben und Daten; `--dry-run` ändert nichts. Das Protokoll steht im Bericht.
+  2. Durchlauf mit Attrappen für `pct`, `pveam`, `pvesm` und `pvesh`: Container-Befehle laufen in einem Debian-13-Container mit systemd (Docker), die Release-URLs kommen von einem lokalen Server. Geprüft werden Standard und feste IP, mit OFF-Kontakt, MQTT und einem Backup von einer laufenden Instanz. Am Ende läuft der Dienst mit diesen Angaben und Daten; `--dry-run` ändert nichts. Das Protokoll steht im Bericht.
   3. (Nutzer) Auf dem Proxmox-Host legt der Einzeiler einen laufenden StashBert-Container an; `update` in dessen Konsole meldet „aktuell".
 
 ### L06: Betriebsanleitung für das Skript
