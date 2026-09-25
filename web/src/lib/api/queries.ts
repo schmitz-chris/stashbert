@@ -561,6 +561,31 @@ export function productImageDeleteMutation(queryClient: QueryClient) {
   });
 }
 
+// How long a recognition may take before it counts as failed: the server
+// gives the provider 60 s and answers within its write deadline of 90 s
+// for this route (architecture.md, 4.4).
+const recognitionTimeout = 90_000;
+
+/**
+ * Reads name, brand and package size from the stored photo of the product
+ * with the given id with POST /products/{id}/recognition (ADR-0021), with a
+ * timeout of 90 s. A failed recognition throws the Problem Details of the
+ * response, or the TimeoutError. The server changes nothing, so the cache
+ * stays as it is; the product page puts the result into its form.
+ */
+export const productRecognitionMutation = mutationOptions({
+  mutationFn: async (id: string) => {
+    const { data, error, response } = await api.POST("/products/{id}/recognition", {
+      params: { path: { id } },
+      signal: AbortSignal.timeout(recognitionTimeout),
+    });
+    if (!response.ok || data === undefined) {
+      throw error ?? new Error(`POST /products/${id}/recognition: status ${response.status}`);
+    }
+    return data;
+  },
+});
+
 // The number of movements the product page shows.
 const historyLimit = 10;
 

@@ -1856,7 +1856,7 @@ Nutzerentscheidung vom 25.09.2026: OpenAI, Google Gemini und Claude (Anthropic) 
 
 ### F35: „Mit KI erkennen" auf der Produktseite
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F34
 - **Referenzen:** ADR-0021, ADR-0016; `components/ProductImageSection.tsx`, `routes/produkt.tsx`
 - **Umfang:**

@@ -1,5 +1,6 @@
 import { problemCode } from "./api/client";
 import type { components } from "./api/schema";
+import { recognizedFields, type RecognitionResult } from "./productForm";
 
 /**
  * The settings of the product recognition (ADR-0021): provider, model,
@@ -221,4 +222,72 @@ export function recognitionNote(choice: ProviderChoice): string {
     return note;
   }
   return `${note} Im kostenlosen Zugang darf Google die Eingaben zur Verbesserung seiner Produkte nutzen.`;
+}
+
+/**
+ * Returns whether the product page offers "Mit KI erkennen" (docs/plan.md,
+ * F35): a provider is set up and its key is stored. Without settings (not
+ * loaded yet or failed) it does not.
+ */
+export function recognitionReady(settings: RecognitionSettings | undefined): boolean {
+  return settings !== undefined && settings.provider !== null && settings.key_set;
+}
+
+/**
+ * The hint below "Mit KI erkennen" while the product has no photo, and the
+ * message for no_image.
+ */
+export const noImageText = "Erst ein Foto aufnehmen";
+
+/**
+ * Returns the message for a recognition that failed, by the code of its
+ * Problem Details (architecture.md, 6.4), or "Erkennung fehlgeschlagen"
+ * for every other failure, a network error or a timeout included.
+ */
+export function recognizeErrorText(error: unknown): string {
+  switch (problemCode(error)) {
+    case "no_image":
+      return noImageText;
+    case "recognition_disabled":
+      return "Produkterkennung ist nicht eingerichtet";
+    case "invalid_api_key":
+      return "Der API-Schlüssel wird nicht angenommen";
+    default:
+      return "Erkennung fehlgeschlagen";
+  }
+}
+
+/** The state of a recognition, like the status of a mutation. */
+export type RecognizeStatus = "idle" | "pending" | "error" | "success";
+
+/** The message below the buttons of the image about the last recognition. */
+export interface RecognizeNotice {
+  text: string;
+  tone: "neutral" | "success" | "failure";
+}
+
+/**
+ * Returns the message about the last recognition (docs/plan.md, F35):
+ * nothing before the first one and while it runs (the button says "Wird
+ * erkannt …" then), "Vorschlag eingetragen. Bitte prüfen und speichern."
+ * when result has a readable field, "Auf dem Foto war nichts lesbar."
+ * when it has none, or the message for error.
+ */
+export function recognizeNotice(
+  status: RecognizeStatus,
+  result: RecognitionResult | undefined,
+  error: unknown,
+): RecognizeNotice {
+  switch (status) {
+    case "idle":
+    case "pending":
+      return { text: "", tone: "neutral" };
+    case "error":
+      return { text: recognizeErrorText(error), tone: "failure" };
+    case "success":
+      if (result !== undefined && Object.keys(recognizedFields(result)).length > 0) {
+        return { text: "Vorschlag eingetragen. Bitte prüfen und speichern.", tone: "success" };
+      }
+      return { text: "Auf dem Foto war nichts lesbar.", tone: "neutral" };
+  }
 }

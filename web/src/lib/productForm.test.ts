@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   crateSizeMissing,
   diffPatch,
+  recognizedFields,
   toForm,
   withCrate,
+  withRecognition,
   type ProductForm,
   type ProductFormFields,
 } from "./productForm";
@@ -208,5 +210,80 @@ describe("diffPatch", () => {
       crate_size: 6,
       note: "Für das Frühstück",
     });
+  });
+});
+
+describe("recognizedFields", () => {
+  it("takes every field that was read", () => {
+    expect(
+      recognizedFields({ name: "Kidneybohnen", brand: "Bonduelle", package_size: "400 g" }),
+    ).toEqual({ name: "Kidneybohnen", brand: "Bonduelle", package_size: "400 g" });
+  });
+
+  it("leaves out the fields that could not be read", () => {
+    expect(recognizedFields({ name: "Kidneybohnen", brand: null, package_size: null })).toEqual({
+      name: "Kidneybohnen",
+    });
+  });
+
+  it("leaves out empty fields and trims the others", () => {
+    expect(recognizedFields({ name: "  ", brand: " Bonduelle ", package_size: "" })).toEqual({
+      brand: "Bonduelle",
+    });
+  });
+
+  it("is empty when nothing could be read", () => {
+    expect(recognizedFields({ name: null, brand: null, package_size: null })).toEqual({});
+  });
+});
+
+describe("withRecognition", () => {
+  // A form with changes the user typed before the recognition.
+  const typed = form({
+    name: "Bohnen",
+    brand: "",
+    package_size: "1 Dose",
+    target: "4",
+    note: "Keller",
+  });
+
+  it("puts every field that was read in place of the typed values", () => {
+    expect(
+      withRecognition(typed, { name: "Kidneybohnen", brand: "Bonduelle", package_size: "400 g" }),
+    ).toEqual({
+      ...typed,
+      name: "Kidneybohnen",
+      brand: "Bonduelle",
+      package_size: "400 g",
+    });
+  });
+
+  it("keeps the values of the fields that could not be read", () => {
+    expect(withRecognition(typed, { name: null, brand: "Bonduelle", package_size: null })).toEqual(
+      { ...typed, brand: "Bonduelle" },
+    );
+  });
+
+  it("keeps target, crate and note", () => {
+    const crate = { ...withCrate(typed, true), crate_size: "6" };
+    const result = withRecognition(crate, {
+      name: "Kidneybohnen",
+      brand: "Bonduelle",
+      package_size: "400 g",
+    });
+    expect(result).toMatchObject({ target: "4", crate: true, crate_size: "6", note: "Keller" });
+  });
+
+  it("keeps the form when nothing could be read", () => {
+    expect(withRecognition(typed, { name: null, brand: null, package_size: null })).toEqual(typed);
+  });
+
+  it("gives a patch with the suggestion, which the form saves as usual", () => {
+    const suggested = withRecognition(toForm(original), {
+      name: "Nutella",
+      brand: null,
+      package_size: "750 g",
+    });
+    expect(diffPatch(original, suggested)).toEqual({ package_size: "750 g" });
   });
 });

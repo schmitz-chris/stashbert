@@ -15,7 +15,9 @@ import {
   barcodeRemoveMutation,
   productDeleteMutation,
   productQuery,
+  productRecognitionMutation,
   productUpdateMutation,
+  recognitionSettingsQuery,
 } from "../lib/api/queries";
 import { normalizeGtin } from "../lib/gtin";
 import { pageTitle } from "../lib/pageTitle";
@@ -24,10 +26,12 @@ import {
   diffPatch,
   toForm,
   withCrate,
+  withRecognition,
   type ProductForm,
 } from "../lib/productForm";
 import { productBack } from "../lib/productOrigin";
 import type { Product } from "../lib/products";
+import { recognitionReady, recognizeNotice } from "../lib/recognition";
 import { sourceNote } from "../lib/sourceNote";
 
 // How long the confirmation "Gespeichert" stays visible.
@@ -127,6 +131,9 @@ function ProductEditor({ product }: { product: Product }) {
   const queryClient = useQueryClient();
   const update = useMutation(productUpdateMutation(queryClient));
   const review = useMutation(productUpdateMutation(queryClient));
+  // "Mit KI erkennen" (docs/plan.md, F35) needs a provider with a key.
+  const recognition = useQuery(recognitionSettingsQuery);
+  const recognize = useMutation(productRecognitionMutation);
   // base is the product the form started from; the patch holds what the
   // user changed since, so fields the user did not touch are never sent.
   const [base, setBase] = useState(product);
@@ -191,6 +198,11 @@ function ProductEditor({ product }: { product: Product }) {
       setUnchanged(true);
       return;
     }
+    // Saving ends the message about the last recognition; a running one
+    // still fills the form when it is done.
+    if (!recognize.isPending) {
+      recognize.reset();
+    }
     update.mutate(
       { id: product.id, patch },
       {
@@ -200,6 +212,18 @@ function ProductEditor({ product }: { product: Product }) {
         },
       },
     );
+  }
+
+  // Puts what the recognition read on the photo into the form, in place of
+  // the values there; it is saved with "Speichern" (docs/plan.md, F35).
+  function startRecognition() {
+    recognize.mutate(product.id, {
+      onSuccess: (result) => {
+        setUnchanged(false);
+        setBlocked(false);
+        setForm((current) => withRecognition(current, result));
+      },
+    });
   }
 
   // Returns the props that connect an input or a textarea to field, a text
@@ -225,7 +249,18 @@ function ProductEditor({ product }: { product: Product }) {
       {product.brand !== null && (
         <p className="break-words hyphens-auto text-ink-tertiary">{product.brand}</p>
       )}
-      <ProductImageSection product={product} />
+      <ProductImageSection
+        product={product}
+        recognize={
+          recognitionReady(recognition.data)
+            ? {
+                pending: recognize.isPending,
+                notice: recognizeNotice(recognize.status, recognize.data, recognize.error),
+                onRecognize: startRecognition,
+              }
+            : null
+        }
+      />
       {product.needs_review && (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-warning bg-warning-soft p-3">
           <p className="w-full text-ink">Bitte die Angaben prüfen.</p>

@@ -6,10 +6,14 @@ import {
   keyMissing,
   keyMissingText,
   keyRefused,
+  noImageText,
   providerChoices,
   providerLabel,
   recognitionNote,
+  recognitionReady,
   recognitionUpdate,
+  recognizeErrorText,
+  recognizeNotice,
   saveErrorText,
   saveNotice,
   toRecognitionForm,
@@ -306,5 +310,84 @@ describe("recognitionNote", () => {
 
   it("adds the use of the free tier by Google for Gemini", () => {
     expect(recognitionNote("gemini")).toBe(`${note} ${geminiNote}`);
+  });
+});
+
+describe("recognitionReady", () => {
+  it("offers the recognition with a provider and a stored key", () => {
+    expect(recognitionReady(openai)).toBe(true);
+    expect(recognitionReady(gemini)).toBe(true);
+  });
+
+  it("does not offer it while the recognition is off", () => {
+    expect(recognitionReady(off)).toBe(false);
+  });
+
+  it("does not offer it for a provider without a key", () => {
+    expect(recognitionReady({ ...openai, key_set: false, key_hint: null })).toBe(false);
+  });
+
+  it("does not offer it before the settings are loaded", () => {
+    expect(recognitionReady(undefined)).toBe(false);
+  });
+});
+
+describe("recognizeErrorText", () => {
+  it.each([
+    ["no_image", "Erst ein Foto aufnehmen"],
+    ["recognition_disabled", "Produkterkennung ist nicht eingerichtet"],
+    ["invalid_api_key", "Der API-Schlüssel wird nicht angenommen"],
+    ["recognition_failed", "Erkennung fehlgeschlagen"],
+    ["not_found", "Erkennung fehlgeschlagen"],
+    ["internal", "Erkennung fehlgeschlagen"],
+  ])("names the code %s as %s", (code, text) => {
+    expect(recognizeErrorText(problem(code))).toBe(text);
+  });
+
+  it("says Erkennung fehlgeschlagen for a network error or a timeout", () => {
+    expect(recognizeErrorText(new TypeError("Load failed"))).toBe("Erkennung fehlgeschlagen");
+    const timeout = new DOMException("signal timed out", "TimeoutError");
+    expect(recognizeErrorText(timeout)).toBe("Erkennung fehlgeschlagen");
+  });
+
+  it("uses the hint of the locked button for no_image", () => {
+    expect(noImageText).toBe("Erst ein Foto aufnehmen");
+  });
+});
+
+describe("recognizeNotice", () => {
+  const read = { name: "Kidneybohnen", brand: "Bonduelle", package_size: "400 g" };
+  const nothing = { name: null, brand: null, package_size: null };
+
+  it("says nothing before the first recognition and while it runs", () => {
+    expect(recognizeNotice("idle", undefined, null)).toEqual({ text: "", tone: "neutral" });
+    expect(recognizeNotice("pending", undefined, null)).toEqual({ text: "", tone: "neutral" });
+  });
+
+  it("asks to check and save a suggestion", () => {
+    expect(recognizeNotice("success", read, null)).toEqual({
+      text: "Vorschlag eingetragen. Bitte prüfen und speichern.",
+      tone: "success",
+    });
+  });
+
+  it("counts a suggestion with a single field", () => {
+    expect(recognizeNotice("success", { ...nothing, package_size: "400 g" }, null)).toEqual({
+      text: "Vorschlag eingetragen. Bitte prüfen und speichern.",
+      tone: "success",
+    });
+  });
+
+  it("says that nothing was readable when every field is null or empty", () => {
+    const expected = { text: "Auf dem Foto war nichts lesbar.", tone: "neutral" };
+    expect(recognizeNotice("success", nothing, null)).toEqual(expected);
+    expect(recognizeNotice("success", { ...nothing, name: " " }, null)).toEqual(expected);
+  });
+
+  it("names the error of a failed recognition", () => {
+    expect(recognizeNotice("error", undefined, problem("invalid_api_key"))).toEqual({
+      text: "Der API-Schlüssel wird nicht angenommen",
+      tone: "failure",
+    });
   });
 });

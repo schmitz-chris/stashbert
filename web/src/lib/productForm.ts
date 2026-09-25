@@ -3,6 +3,12 @@ import type { Product } from "./products";
 
 export type ProductPatch = components["schemas"]["ProductPatch"];
 
+/**
+ * What the product recognition reads on the photo of a product (ADR-0021):
+ * name, brand and package size, each null if it is not readable.
+ */
+export type RecognitionResult = components["schemas"]["RecognitionResult"];
+
 /** The values of the product form as its inputs hold them. */
 export interface ProductForm {
   name: string;
@@ -48,6 +54,34 @@ export function toForm(product: ProductFormFields): ProductForm {
  */
 export function withCrate(form: ProductForm, crate: boolean): ProductForm {
   return { ...form, crate, crate_size: "" };
+}
+
+/** The fields of the form that the product recognition fills. */
+export type RecognizedFields = Partial<Pick<ProductForm, "name" | "brand" | "package_size">>;
+
+/**
+ * Returns the fields of result for the form (docs/plan.md, F35): name,
+ * brand and package size, trimmed, each only if it is neither null nor
+ * empty after trimming. Without a readable field the result is empty.
+ */
+export function recognizedFields(result: RecognitionResult): RecognizedFields {
+  const fields: RecognizedFields = {};
+  for (const field of ["name", "brand", "package_size"] as const) {
+    const value = result[field]?.trim() ?? "";
+    if (value !== "") {
+      fields[field] = value;
+    }
+  }
+  return fields;
+}
+
+/**
+ * Returns form with the recognized fields of result in place of its own
+ * values (docs/plan.md, F35). Fields the recognition could not read and
+ * all other fields of the form stay as they are; nothing is saved.
+ */
+export function withRecognition(form: ProductForm, result: RecognitionResult): ProductForm {
+  return { ...form, ...recognizedFields(result) };
 }
 
 /**
