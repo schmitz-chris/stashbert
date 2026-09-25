@@ -734,3 +734,33 @@ export const systemStatusQuery = queryOptions({
     return data;
   },
 });
+
+/**
+ * Uploads a backup with POST /backup/restore (ADR-0020): the file as it is,
+ * as application/gzip. A refused backup throws the Problem Details of the
+ * response. On 202 StashBert restarts in the same process; the settings
+ * then wait with healthAnswers until it is back and load all data again.
+ */
+export const backupRestoreMutation = mutationOptions({
+  mutationFn: async (file: File) => {
+    const { error, response } = await api.POST("/backup/restore", {
+      body: file,
+      // The archive is sent as it is; the default serializer makes JSON.
+      bodySerializer: (body) => body,
+      headers: { "Content-Type": "application/gzip" },
+    });
+    if (!response.ok) {
+      throw error ?? new Error(`POST /backup/restore: status ${response.status}`);
+    }
+  },
+});
+
+/**
+ * Asks GET /health whether StashBert answers. Returns whether the answer
+ * is a success; throws on network errors, as while StashBert restarts, and
+ * when signal aborts.
+ */
+export async function healthAnswers(signal: AbortSignal): Promise<boolean> {
+  const { response } = await api.GET("/health", { signal });
+  return response.ok;
+}

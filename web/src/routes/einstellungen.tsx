@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import { ConfirmActions, Dialog } from "../components/Dialog";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { problemCode } from "../lib/api/client";
 import {
+  backupRestoreMutation,
+  healthAnswers,
   mqttStatusQuery,
   shoppingSnapshotMutation,
   shoppingTargetMutation,
@@ -17,6 +20,11 @@ import {
   lastBackupText,
   mqttStateText,
   openFoodFactsText,
+  restoreNotice,
+  restoreQuestionText,
+  waitForRestart,
+  type RestartStatus,
+  type RestoreNotice,
 } from "../lib/settings";
 import { noTarget, targetChoice, type MqttStatus } from "../lib/shoppingTarget";
 
@@ -32,6 +40,17 @@ const secondaryButtonClass =
 // call, so it is the one address of the API outside the generated client
 // (docs/plan.md, F32).
 const backupUrl = "/api/v1/backup";
+
+// The files offered for "Backup einspielen": the archives of "Backup
+// herunterladen" (stashbert-<time>.tar.gz), by extension and by type.
+const backupFileTypes = ".gz,.tar.gz,application/gzip,application/x-gzip";
+
+// The color of the notice about restoring a backup.
+const noticeToneClass: Record<RestoreNotice["tone"], string> = {
+  progress: "text-ink-secondary",
+  success: "text-accent",
+  failure: "text-danger",
+};
 
 /**
  * The settings (docs/plan.md, F32), opened by the gear in the stock view:
@@ -265,16 +284,66 @@ function MqttControls({ status }: { status: MqttStatus }) {
 }
 
 /**
- * The section "Sicherung": the newest of the regular backups, how many
- * there are of how many the server keeps, and the download of a fresh
- * backup with the database and the images.
+ * The section "Backup": the newest of the regular backups, how many there
+ * are of how many the server keeps, the download of a fresh backup with
+ * the database and the images, and restoring such a backup
+ * (docs/plan.md, F32 and F33).
  */
 function BackupSection() {
   const system = useQuery(systemStatusQuery);
   const status = system.data;
+  const queryClient = useQueryClient();
+  const restore = useMutation(backupRestoreMutation);
+  // The picked backup; the question before restoring it shows while set.
+  const [file, setFile] = useState<File | null>(null);
+  // After the upload: whether StashBert is back after its restart.
+  const [restart, setRestart] = useState<RestartStatus>("waiting");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // After the answer 202 StashBert restarts. Until it answers again, it is
+  // asked every 500 ms for at most 60 s; then all data is loaded again.
+  const waiting = restore.isSuccess && restart === "waiting";
+  useEffect(() => {
+    if (!waiting) {
+      return;
+    }
+    const controller = new AbortController();
+    void waitForRestart(healthAnswers, controller.signal).then((answered) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (answered) {
+        void queryClient.invalidateQueries();
+      }
+      setRestart(answered ? "answered" : "silent");
+    });
+    return () => controller.abort();
+  }, [waiting, queryClient]);
+
+  // The buttons are locked from the upload until StashBert is back.
+  const running = restore.isPending || waiting;
+  const notice = restoreNotice(restore.status, restore.error, restart);
+
+  function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    const picked = event.target.files?.[0];
+    // Lets the same file be picked again next time.
+    event.target.value = "";
+    if (picked !== undefined) {
+      setFile(picked);
+    }
+  }
+
+  function confirmRestore() {
+    if (file === null) {
+      return;
+    }
+    setRestart("waiting");
+    restore.mutate(file);
+    setFile(null);
+  }
 
   return (
-    <Section title="Sicherung">
+    <Section title="Backup">
       {status === undefined ? (
         <Card>
           <LoadState
@@ -285,7 +354,7 @@ function BackupSection() {
       ) : (
         <Rows
           rows={[
-            ["Letzte Sicherung", lastBackupText(status.last_backup_at)],
+            ["Letztes Backup", lastBackupText(status.last_backup_at)],
             ["Aufbewahrt", backupCountText(status.backup_count, status.backup_keep)],
           ]}
         />
@@ -293,10 +362,49 @@ function BackupSection() {
       <a
         href={backupUrl}
         download
-        className={`mt-3 flex w-full items-center justify-center text-center ${secondaryButtonClass}`}
+        aria-disabled={running}
+        onClick={(event) => {
+          if (running) {
+            event.preventDefault();
+          }
+        }}
+        className={`mt-3 flex w-full items-center justify-center text-center aria-disabled:opacity-40 ${secondaryButtonClass}`}
       >
-        Sicherung herunterladen
+        Backup herunterladen
       </a>
+      <button
+        type="button"
+        disabled={running}
+        onClick={() => {
+          // A notice of the last try stays until the next action (ADR-0016).
+          restore.reset();
+          inputRef.current?.click();
+        }}
+        className={`mt-3 w-full ${secondaryButtonClass}`}
+      >
+        Backup einspielen
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={backupFileTypes}
+        hidden
+        onChange={pickFile}
+      />
+      <p role="status" className={`mt-1 text-sm font-medium ${noticeToneClass[notice.tone]}`}>
+        {notice.text}
+      </p>
+      <Dialog open={file !== null} onClose={() => setFile(null)} title="Backup einspielen?">
+        <p className="mt-2 break-words text-ink-secondary">
+          {restoreQuestionText(file?.name ?? "")}
+        </p>
+        <ConfirmActions
+          label="Einspielen"
+          pending={false}
+          onCancel={() => setFile(null)}
+          onConfirm={confirmRestore}
+        />
+      </Dialog>
     </Section>
   );
 }

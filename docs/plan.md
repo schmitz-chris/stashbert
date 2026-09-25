@@ -1764,7 +1764,7 @@ Nutzerentscheidung vom 25.09.2026: Ein Backup lässt sich in den Einstellungen e
 
 ### F33: Backup einspielen in den Einstellungen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B41, F32
 - **Referenzen:** ADR-0020, ADR-0016, architecture.md 4.2, 6.2; `components/Dialog.tsx`
 - **Umfang:**
