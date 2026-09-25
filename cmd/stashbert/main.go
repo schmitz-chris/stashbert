@@ -110,7 +110,8 @@ func run() error {
 	// Before pending migrations of an existing database, a copy is written
 	// to DATA_DIR/backups (architecture.md, 9.3).
 	backupDir := filepath.Join(cfg.DataDir, "backups")
-	db, err := app.OpenAndMigrate(ctx, filepath.Join(cfg.DataDir, "stashbert.db"), backupDir, store.Migrations, time.Now())
+	dbPath := filepath.Join(cfg.DataDir, "stashbert.db")
+	db, err := app.OpenAndMigrate(ctx, dbPath, backupDir, store.Migrations, time.Now())
 	if err != nil {
 		return err
 	}
@@ -180,6 +181,7 @@ func run() error {
 
 	deps := app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
+		DBPath: dbPath, BackupDir: backupDir,
 	}
 	// Without MQTT, Snapshots and MQTT stay nil interfaces, not ones holding
 	// a nil pointer, and OnChange stays nil.

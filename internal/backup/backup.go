@@ -1,5 +1,6 @@
 // Package backup writes copies of the SQLite database with VACUUM INTO
-// (architecture.md, 9.3): a daily backup and a backup before migrations.
+// (architecture.md, 9.3): a daily backup, a backup before migrations and an
+// archive with the images for a download (architecture.md, 6.2).
 package backup
 
 import (
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -105,13 +107,35 @@ func vacuumInto(ctx context.Context, db *sql.DB, dir, name string) (string, erro
 	return path, nil
 }
 
-// prune deletes all regular files in dir whose names match dailyName except
-// the keep newest. The fixed width of the time in the names makes their
+// Daily returns the times in the names of the regular backups in dir, the
+// files stashbert-<YYYYMMDD-HHMMSS>.db that Run writes, oldest first. The
+// times are in UTC. Other files, such as pre-migration-*.db, do not count,
+// nor does a name with an impossible time. A missing dir means no backups.
+func Daily(dir string) ([]time.Time, error) {
+	names, err := dailyNames(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("backup: list: %w", err)
+	}
+	var times []time.Time
+	for _, name := range names {
+		stamp := strings.TrimSuffix(strings.TrimPrefix(name, "stashbert-"), ".db")
+		if t, err := time.Parse(stampLayout, stamp); err == nil {
+			times = append(times, t)
+		}
+	}
+	return times, nil
+}
+
+// dailyNames returns the names of the regular files in dir that match
+// dailyName, sorted. The fixed width of the time in the names makes their
 // lexical order the chronological one.
-func prune(dir string, keep int) error {
+func dailyNames(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("backup: prune: %w", err)
+		return nil, err
 	}
 	var names []string
 	for _, e := range entries {
@@ -120,6 +144,16 @@ func prune(dir string, keep int) error {
 		}
 	}
 	slices.Sort(names)
+	return names, nil
+}
+
+// prune deletes all regular files in dir whose names match dailyName except
+// the keep newest.
+func prune(dir string, keep int) error {
+	names, err := dailyNames(dir)
+	if err != nil {
+		return fmt.Errorf("backup: prune: %w", err)
+	}
 	var errs []error
 	for _, name := range names[:max(len(names)-keep, 0)] {
 		if err := os.Remove(filepath.Join(dir, name)); err != nil {

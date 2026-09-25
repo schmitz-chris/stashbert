@@ -1591,7 +1591,7 @@ Nutzerentscheidung vom 25.09.2026: SQLite bleibt (ADR-0005); eine Einstellungsse
 
 ### B40: Systemstatus und Sicherung herunterladen
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B39
 - **Referenzen:** architecture.md 6.2 (`GET /system`, `GET /backup`), 9.3, 4.2; ADR-0005, ADR-0013
 - **Umfang:**

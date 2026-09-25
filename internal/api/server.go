@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 
 	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
@@ -24,6 +25,17 @@ type ServerDeps struct {
 	// MQTT reports the connection and chooses the target list; nil without
 	// MQTT.
 	MQTT MQTTIntegration
+	// DBPath is the path of the database file, DATA_DIR/stashbert.db.
+	DBPath string
+	// BackupDir is the directory of the regular backups, DATA_DIR/backups.
+	BackupDir string
+	// BackupKeep is the number of kept daily backups (BACKUP_KEEP).
+	BackupKeep int
+	// OpenFoodFacts reports whether OFF_CONTACT is set.
+	OpenFoodFacts bool
+	// Logger logs what cannot be reported to the client, such as a failed
+	// cleanup after a download.
+	Logger *slog.Logger
 }
 
 // SnapshotRequester takes requests for shopping.snapshot over MQTT
@@ -50,11 +62,14 @@ type MQTTIntegration interface {
 type Server struct {
 	deps    ServerDeps
 	queries *db.Queries
+	// downloads holds a token while a backup download runs, so that
+	// downloads run one after another.
+	downloads chan struct{}
 }
 
 var _ StrictServerInterface = (*Server)(nil)
 
 // NewServer returns a Server using d.
 func NewServer(d ServerDeps) *Server {
-	return &Server{deps: d, queries: db.New(d.DB)}
+	return &Server{deps: d, queries: db.New(d.DB), downloads: make(chan struct{}, 1)}
 }

@@ -231,6 +231,35 @@ systemctl start stashbert
 - Stammt das Backup von einer älteren Version, migriert StashBert es beim Start und schreibt vorher ein `pre-migration-…`-Backup.
 - Danach wie in Abschnitt 4 prüfen.
 
+### Sicherung herunterladen und wiederherstellen
+
+`GET /api/v1/backup` liefert eine frische Sicherung als Archiv `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` (Zeit in UTC). Es enthält `stashbert.db`, eine Kopie per `VACUUM INTO`, und den Ordner `images/` mit allen Produktbildern. Ohne Anmeldung (ADR-0013) kann das jeder, der StashBert erreicht.
+
+Herunterladen, z. B. auf dem Mac (oder die Adresse im Browser öffnen), und in den Container kopieren:
+
+```sh
+curl -fOJ http://<container-ip>:8080/api/v1/backup
+scp stashbert-<YYYYMMDD-HHMMSS>.tar.gz root@<container-ip>:/root/
+```
+
+Im Container entpacken, den Dienst stoppen, Datenbank und Bilder ablegen, die alten `-wal`- und `-shm`-Dateien entfernen, den Besitzer setzen und den Dienst starten:
+
+```sh
+mkdir /root/wiederherstellen
+tar -xzf /root/stashbert-<YYYYMMDD-HHMMSS>.tar.gz -C /root/wiederherstellen
+systemctl stop stashbert
+cd /var/lib/stashbert
+rm -f stashbert.db stashbert.db-wal stashbert.db-shm
+rm -rf images
+cp /root/wiederherstellen/stashbert.db stashbert.db
+cp -R /root/wiederherstellen/images images
+chown -R stashbert:stashbert stashbert.db images
+systemctl start stashbert
+```
+
+- Wer den aktuellen Stand behalten will, verschiebt Datenbank, `-wal`, `-shm` und `images/` an einen anderen Ort, statt sie zu löschen.
+- Danach wie in Abschnitt 4 prüfen und `/root/wiederherstellen` löschen.
+
 ## 11. Deinstallation
 
 ```sh

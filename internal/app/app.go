@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
@@ -34,6 +35,12 @@ type Deps struct {
 	// ImageDir is the directory of the product image files, DATA_DIR/images
 	// (architecture.md, 7.3).
 	ImageDir string
+	// DBPath is the path of the database file, DATA_DIR/stashbert.db, for
+	// GET /system (architecture.md, 6.2).
+	DBPath string
+	// BackupDir is the directory of the regular backups, DATA_DIR/backups,
+	// for GET /system (architecture.md, 9.3).
+	BackupDir string
 	// WebUI holds the built web UI served under / (architecture.md, 4.2).
 	// nil means the web UI embedded in the binary (webui.Dist).
 	WebUI fs.FS
@@ -57,6 +64,8 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 	server := api.NewServer(api.ServerDeps{
 		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
 		Snapshots: d.Snapshots, MQTT: d.MQTT,
+		DBPath: d.DBPath, BackupDir: d.BackupDir, BackupKeep: cfg.BackupKeep, OpenFoodFacts: cfg.OFFContact != "",
+		Logger: d.Logger,
 	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
@@ -81,6 +90,9 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 // For PUT /api/v1/products/{id}/image the body is limited to
 // lookup.MaxImageBytes before StripPrefix, because the validator reads the
 // whole body (architecture.md, 4.4).
+// For GET /api/v1/backup the write deadline is extended to
+// backupWriteTimeout before StripPrefix, because a larger backup takes
+// longer than the WriteTimeout of the server (architecture.md, 6.2).
 // GET /api/v1/openapi.yaml passes Recover and Logging but bypasses the
 // validator, because the route is not part of the spec (architecture.md, 6.2).
 // All other paths go to the web UI handler, also inside Recover and Logging.
@@ -104,6 +116,7 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 	// Also more specific than /api/v1/: an uploaded image is limited before
 	// the validator reads it.
 	mux.Handle("PUT /api/v1/products/{id}/image", http.MaxBytesHandler(apiChain, lookup.MaxImageBytes))
+	mux.Handle("GET /api/v1/backup", extendWriteDeadline(apiChain, backupWriteTimeout))
 	mux.Handle("/", webHandler)
 
 	var h http.Handler = mux
@@ -111,6 +124,21 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 		h = notifyChanges(mux, onChange)
 	}
 	return httpx.Recover(logger, httpx.Logging(logger, h)), nil
+}
+
+// backupWriteTimeout is the time a backup download has for its response,
+// including the wait for a running download and writing the archive.
+const backupWriteTimeout = 10 * time.Minute
+
+// extendWriteDeadline sets the write deadline of the response to d from now
+// and then calls next. A ResponseWriter without deadlines, such as
+// httptest.ResponseRecorder, keeps none; a connection that is already
+// closed fails at the first write anyway.
+func extendWriteDeadline(next http.Handler, d time.Duration) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d))
+		next.ServeHTTP(w, r)
+	})
 }
 
 // notifyChanges calls onChange after every request under /api/v1/ with a

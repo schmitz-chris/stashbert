@@ -534,6 +534,56 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /system:
+    get:
+      operationId: getSystemStatus
+      summary: Zustand für die Einstellungen
+      description: >-
+        Version, Größe der Datenbank, die regelmäßigen Sicherungen in
+        DATA_DIR/backups und ob Open Food Facts eingerichtet ist.
+        Verbindungsdaten und Geheimnisse gibt der Endpunkt nicht aus.
+      responses:
+        "200":
+          description: Der Zustand.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /backup:
+    get:
+      operationId: downloadBackup
+      summary: Sicherung herunterladen
+      description: >-
+        Frische Sicherung als tar-Archiv mit gzip: stashbert.db (eine Kopie
+        per VACUUM INTO) und der Ordner images/ mit allen Bilddateien.
+        Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung
+        (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API
+        gibt es nicht.
+      responses:
+        "200":
+          description: Das Archiv.
+          headers:
+            Content-Disposition:
+              description: >-
+                attachment; filename="stashbert-<YYYYMMDD-HHMMSS>.tar.gz" mit
+                der Zeit der Sicherung in UTC.
+              required: true
+              schema:
+                type: string
+          content:
+            application/gzip: {}
+        default:
+          description: Fehler nach RFC 9457.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /integrations/mqtt:
     get:
       operationId: getMqttStatus
@@ -1071,6 +1121,44 @@ components:
         shopping_truncated:
           type: boolean
           description: true, wenn die Einkaufsliste mehr als 100 Einträge hat.
+    SystemStatus:
+      type: object
+      required:
+        - version
+        - database_size
+        - backup_count
+        - last_backup_at
+        - backup_keep
+        - open_food_facts
+      properties:
+        version:
+          type: string
+        database_size:
+          type: integer
+          format: int64
+          description: >-
+            Bytes der Datenbankdatei stashbert.db samt WAL-Datei
+            (stashbert.db-wal), falls es sie gibt.
+        backup_count:
+          type: integer
+          description: >-
+            Anzahl der regelmäßigen Sicherungen
+            stashbert-<YYYYMMDD-HHMMSS>.db in DATA_DIR/backups, ohne die
+            Sicherungen vor Migrationen (pre-migration-*).
+        last_backup_at:
+          type: [string, "null"]
+          format: date-time
+          description: >-
+            Zeit der neuesten regelmäßigen Sicherung, gelesen aus ihrem
+            Dateinamen (UTC, auf die Sekunde), oder null ohne Sicherung.
+        backup_keep:
+          type: integer
+          description: Anzahl der aufbewahrten täglichen Sicherungen (BACKUP_KEEP).
+        open_food_facts:
+          type: boolean
+          description: >-
+            true, wenn OFF_CONTACT gesetzt ist und unbekannte Barcodes bei Open
+            Food Facts nachgeschlagen werden.
     ShoppingTarget:
       type: object
       description: Eine Liste in Home Assistant, in die die Einkaufsliste gehen kann.
