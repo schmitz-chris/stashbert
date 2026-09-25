@@ -14,7 +14,8 @@ set -Eeuo pipefail
 
 BASE=${STASHBERT_RELEASES_URL:-https://github.com/schmitz-chris/stashbert/releases}
 ENV_FILE=/etc/stashbert/stashbert.env
-GETTY_DIR=/etc/systemd/system/container-getty@1.service.d
+# Gilt für alle Konsolen des Containers (tty1, tty2), nicht nur für die erste.
+GETTY_DIR=/etc/systemd/system/container-getty@.service.d
 OCTET='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
 IPV4_RE="^$OCTET(\\.$OCTET){3}\$"
 CIDR_RE="^$OCTET(\\.$OCTET){3}/([1-9]|[12][0-9]|3[0-2])\$"
@@ -67,7 +68,10 @@ on_exit() {
 	((DIED)) || echo "Fehler: Schritt \"$STEP\" ist fehlgeschlagen." >&2
 	((CREATED == 0)) ||
 		echo "Der Container $CTID bleibt zur Fehlersuche bestehen. Entfernen mit: pct stop $CTID; pct destroy $CTID" >&2
-	[ "$LOG" = /dev/null ] || echo "Protokoll: $LOG" >&2
+	if [ "$LOG" != /dev/null ]; then
+		echo "Letzte Zeilen des Protokolls $LOG:" >&2
+		tail -n 8 "$LOG" | sed 's/^/  /' >&2
+	fi
 }
 trap on_exit EXIT
 trap 'exit 130' INT TERM HUP
@@ -291,10 +295,20 @@ if ((DRY == 0)); then
 	done
 	[ -n "$IP" ] || die "Der Container hat nach 60 s keine IPv4-Adresse. Bridge, DHCP bzw. Adresse und Gateway prüfen."
 	echo "  Adresse: $IP"
+	# Ohne eigene Angabe übernimmt Proxmox die DNS-Server des Hosts. Einer, den
+	# nur der Host erreicht (127.0.0.1, Tailscale 100.100.100.100), lässt apt
+	# und den Download von StashBert scheitern.
+	until ct getent hosts deb.debian.org >/dev/null 2>&1; do
+		if ((SECONDS >= end)); then
+			dns=$(ct sed -n 's/^nameserver[[:space:]]*//p' /etc/resolv.conf | paste -sd ' ' -) || dns=''
+			die "Der Container kann keine Namen auflösen (DNS-Server im Container: ${dns:-keiner}). Proxmox übernimmt die DNS-Server des Hosts; einer, den nur der Host erreicht (z. B. 127.0.0.1 oder 100.100.100.100 von Tailscale), geht im Container nicht. Abhilfe: pct set $CTID --nameserver <IP des Routers>, dann pct reboot $CTID und prüfen mit pct exec $CTID -- getent hosts deb.debian.org."
+		fi
+		sleep 2
+	done
 fi
 
 step "Pakete aktualisieren, curl installieren"
-ct_run "${APT[@]}" update
+ct_run "${APT[@]}" update --error-on=any
 ct_run "${APT[@]}" upgrade
 ct_run "${APT[@]}" install curl ca-certificates
 
@@ -324,7 +338,8 @@ if ((DRY == 0)); then
 	ct systemctl is-active --quiet stashbert || die "Der Dienst stashbert läuft nicht. Details im Container: journalctl -u stashbert"
 fi
 
-# /usr/bin/update und die automatische Anmeldung wie bei den community-scripts.
+# /usr/bin/update und die automatische Anmeldung wie bei den community-scripts,
+# hier aber für alle Konsolen: Die Konsole in Proxmox nimmt die erste freie.
 step "Befehl update und automatische Anmeldung auf der Konsole einrichten"
 cat >"$TMP/update" <<'EOF'
 #!/bin/sh
@@ -338,9 +353,14 @@ ExecStart=-/sbin/agetty --autologin root --noclear --keep-baud tty%I 115200,3840
 EOF
 run pct push "$CTID" "$TMP/update" /usr/bin/update --perms 0755
 ct_run mkdir -p "$GETTY_DIR"
-run pct push "$CTID" "$TMP/override.conf" "$GETTY_DIR/override.conf" --perms 0644
+run pct push "$CTID" "$TMP/override.conf" "$GETTY_DIR/autologin.conf" --perms 0644
 ct_run systemctl daemon-reload
-ct_run systemctl restart container-getty@1.service
+ct_run systemctl restart 'container-getty@*.service'
+if ((DRY == 0)); then
+	ct test -x /usr/bin/update || die "/usr/bin/update fehlt im Container."
+	ct systemctl cat container-getty@1.service | grep -q -- '--autologin root' ||
+		die "Die automatische Anmeldung greift nicht (systemctl cat container-getty@1.service)."
+fi
 
 if ((DRY)); then
 	echo
