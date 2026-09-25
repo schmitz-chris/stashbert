@@ -41,7 +41,7 @@ func main() {
 	if done {
 		return
 	}
-	if err := run(); err != nil {
+	if err := serve(); err != nil {
 		slog.New(slog.NewJSONHandler(os.Stdout, nil)).Error("stashbert stopped", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
@@ -93,7 +93,10 @@ func exitCode(err error) int {
 	return 2
 }
 
-func run() error {
+// serve runs StashBert until SIGINT or SIGTERM. After POST /backup/restore
+// has laid a backup ready, run shuts down as on SIGTERM and serve starts it
+// again in the same process, which applies the backup (ADR-0020).
+func serve() error {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -103,9 +106,29 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// After the first signal, a second one ends the process at once.
+	context.AfterFunc(ctx, stop)
 
+	for {
+		restart, err := run(ctx, cfg, logger)
+		if err != nil || !restart || ctx.Err() != nil {
+			return err
+		}
+		logger.Info("restarting")
+	}
+}
+
+// run starts StashBert and serves until ctx ends or a restart is requested,
+// then shuts down and reports whether a restart was requested. Everything it
+// started has ended when it returns.
+func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (restart bool, err error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		return fmt.Errorf("create data dir: %w", err)
+		return false, fmt.Errorf("create data dir: %w", err)
+	}
+	// A backup laid ready by POST /backup/restore replaces the data before
+	// the database is opened (ADR-0020).
+	if err := backup.ApplyPending(cfg.DataDir, time.Now(), logger); err != nil {
+		return false, err
 	}
 	// Before pending migrations of an existing database, a copy is written
 	// to DATA_DIR/backups (architecture.md, 9.3).
@@ -113,7 +136,7 @@ func run() error {
 	dbPath := filepath.Join(cfg.DataDir, "stashbert.db")
 	db, err := app.OpenAndMigrate(ctx, dbPath, backupDir, store.Migrations, time.Now())
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer db.Close()
 
@@ -160,12 +183,12 @@ func run() error {
 	)
 	if cfg.MQTT.URL != "" {
 		if mqttClient, err = mqtt.New(cfg.MQTT, logger); err != nil {
-			return fmt.Errorf("create mqtt client: %w", err)
+			return false, fmt.Errorf("create mqtt client: %w", err)
 		}
 		deliverer = outbox.NewDeliverer(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
 		summary = outbox.NewSummaryPublisher(db, mqttClient, cfg.MQTT.TopicPrefix, logger)
 		if discovery, err = outbox.NewDiscovery(mqttClient, cfg.MQTT, version, summary.Publish, logger); err != nil {
-			return fmt.Errorf("create discovery: %w", err)
+			return false, fmt.Errorf("create discovery: %w", err)
 		}
 		mqttClient.OnConnect(func(context.Context) { deliverer.Wake() })
 		mqttClient.OnConnect(discovery.Publish)
@@ -179,9 +202,18 @@ func run() error {
 		mqttClient.OnMessage(targets.Receive)
 	}
 
+	// POST /backup/restore requests the restart after it has laid a backup
+	// ready (ADR-0020).
+	restartRequests := make(chan struct{}, 1)
 	deps := app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
 		DBPath: dbPath, BackupDir: backupDir,
+		Restart: func() {
+			select {
+			case restartRequests <- struct{}{}:
+			default:
+			}
+		},
 	}
 	// Without MQTT, Snapshots and MQTT stay nil interfaces, not ones holding
 	// a nil pointer, and OnChange stays nil.
@@ -192,7 +224,7 @@ func run() error {
 	}
 	handler, err := app.NewHandler(cfg, deps)
 	if err != nil {
-		return fmt.Errorf("build handler: %w", err)
+		return false, fmt.Errorf("build handler: %w", err)
 	}
 
 	srv := &http.Server{
@@ -207,31 +239,34 @@ func run() error {
 
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return false, fmt.Errorf("listen: %w", err)
 	}
 	// The background jobs start only after the port is open. A service
 	// that fails to listen (port in use) and is restarted by systemd would
 	// otherwise write a new backup on every attempt and push the older
 	// daily backups out (BACKUP_KEEP).
-	// The background jobs end with ctx. Every return waits for them before
-	// the database is closed.
+	// The background jobs end with jobsCtx, which ends with ctx or on a
+	// restart. Every return waits for them before the database is closed.
+	jobsCtx, stopJobs := context.WithCancel(ctx)
 	var jobs sync.WaitGroup
 	defer func() {
-		stop()
+		stopJobs()
 		jobs.Wait()
 	}()
 	// Looks up pending products every 60 s with the same client and limiter
 	// (architecture.md, 7.3).
-	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(ctx, 60*time.Second) })
-	jobs.Go(func() { images.Start(ctx, 60*time.Second) })
+	jobs.Go(func() { lookup.NewEnricher(db, off, logger).Start(jobsCtx, 60*time.Second) })
+	jobs.Go(func() { images.Start(jobsCtx, 60*time.Second) })
 	// Writes a backup at the start and then every 24 h into DATA_DIR/backups
 	// and keeps the newest BACKUP_KEEP (architecture.md, 9.3).
-	jobs.Go(func() { backup.Start(ctx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
+	jobs.Go(func() { backup.Start(jobsCtx, db, backupDir, cfg.BackupKeep, 24*time.Hour, logger) })
 
 	// With MQTT_URL, the client keeps the connection to the broker
 	// (architecture.md, 11.1). It has its own context, which ends only on
 	// return, after the HTTP server has shut down; the deferred call waits
-	// until the client has published offline and disconnected.
+	// until the client has published offline and disconnected, so that
+	// after a restart the new client with the same client ID does not meet
+	// the old one at the broker.
 	if mqttClient != nil {
 		mqttCtx, stopMQTT := context.WithCancel(context.Background())
 		mqttDone := make(chan struct{})
@@ -269,20 +304,24 @@ func run() error {
 
 	select {
 	case err := <-serveErr:
-		return fmt.Errorf("serve: %w", err)
+		return false, fmt.Errorf("serve: %w", err)
 	case <-ctx.Done():
+	case <-restartRequests:
+		restart = true
 	}
-	stop()
-	logger.Info("shutting down")
+	stopJobs()
+	logger.Info("shutting down", slog.Bool("restart", restart))
 
+	// Shutdown lets running requests finish, so the answer 202 of
+	// POST /backup/restore still reaches the client.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+		return false, fmt.Errorf("shutdown: %w", err)
 	}
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve: %w", err)
+		return false, fmt.Errorf("serve: %w", err)
 	}
 	logger.Info("server stopped")
-	return nil
+	return restart, nil
 }

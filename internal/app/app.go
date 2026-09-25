@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	apispec "github.com/schmitz-chris/stashbert/api"
 	"github.com/schmitz-chris/stashbert/internal/api"
+	"github.com/schmitz-chris/stashbert/internal/backup"
 	"github.com/schmitz-chris/stashbert/internal/config"
 	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
@@ -57,15 +59,25 @@ type Deps struct {
 	// that the summary is published again (architecture.md, 11.5). It must
 	// not block. It is nil without MQTT.
 	OnChange func()
+	// Restart is called after POST /backup/restore has laid a backup ready
+	// in DATA_DIR/restore; main then restarts in the same process, which
+	// applies it (ADR-0020). It must not block. nil means no restart.
+	Restart func()
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
 func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
+	return newHandler(cfg, d, backup.MaxUploadBytes)
+}
+
+// newHandler is NewHandler with restoreLimit as the largest body of
+// POST /api/v1/backup/restore.
+func newHandler(cfg config.Config, d Deps, restoreLimit int64) (http.Handler, error) {
 	server := api.NewServer(api.ServerDeps{
 		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
 		Snapshots: d.Snapshots, MQTT: d.MQTT,
 		DBPath: d.DBPath, BackupDir: d.BackupDir, BackupKeep: cfg.BackupKeep, OpenFoodFacts: cfg.OFFContact != "",
-		Logger: d.Logger,
+		Logger: d.Logger, DataDir: cfg.DataDir, Restart: d.Restart,
 	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
@@ -81,7 +93,7 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 			return nil, err
 		}
 	}
-	return newChain(d.Logger, apiHandler, webui.Handler(web), d.OnChange)
+	return newChain(d.Logger, apiHandler, webui.Handler(web), d.OnChange, restoreLimit)
 }
 
 // newChain wraps the generated API handler, from outside to inside:
@@ -93,10 +105,13 @@ func NewHandler(cfg config.Config, d Deps) (http.Handler, error) {
 // For GET /api/v1/backup the write deadline is extended to
 // backupWriteTimeout before StripPrefix, because a larger backup takes
 // longer than the WriteTimeout of the server (architecture.md, 6.2).
+// POST /api/v1/backup/restore bypasses the validator, which would read the
+// whole archive into memory; limitRestore checks it instead and limits its
+// body to restoreLimit (architecture.md, 4.4).
 // GET /api/v1/openapi.yaml passes Recover and Logging but bypasses the
 // validator, because the route is not part of the spec (architecture.md, 6.2).
 // All other paths go to the web UI handler, also inside Recover and Logging.
-func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange func()) (http.Handler, error) {
+func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange func(), restoreLimit int64) (http.Handler, error) {
 	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
@@ -117,6 +132,7 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 	// the validator reads it.
 	mux.Handle("PUT /api/v1/products/{id}/image", http.MaxBytesHandler(apiChain, lookup.MaxImageBytes))
 	mux.Handle("GET /api/v1/backup", extendWriteDeadline(apiChain, backupWriteTimeout))
+	mux.Handle("POST /api/v1/backup/restore", limitRestore(http.StripPrefix("/api/v1", apiHandler), restoreLimit))
 	mux.Handle("/", webHandler)
 
 	var h http.Handler = mux
@@ -137,6 +153,39 @@ const backupWriteTimeout = 10 * time.Minute
 func extendWriteDeadline(next http.Handler, d time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d))
+		next.ServeHTTP(w, r)
+	})
+}
+
+// restoreTimeout is the time an uploaded backup has for its request and
+// its response, including checking the archive (ADR-0020).
+const restoreTimeout = 10 * time.Minute
+
+// limitRestore stands in for the validator on POST /api/v1/backup/restore
+// (architecture.md, 4.4): a Content-Type other than application/gzip or
+// application/x-gzip results in 400 invalid_request, a Content-Length over
+// limit in 413 backup_too_large. The body is limited to limit bytes with an
+// http.MaxBytesReader, and the read and write deadlines are extended to
+// restoreTimeout from now, because the ReadTimeout and WriteTimeout of the
+// server are too short for a large backup.
+func limitRestore(next http.Handler, limit int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || (mediaType != "application/gzip" && mediaType != "application/x-gzip") {
+			writeError(w, httpx.BadRequest("Content-Type muss application/gzip sein"))
+			return
+		}
+		if r.ContentLength > limit {
+			writeError(w, backup.TooLarge())
+			return
+		}
+		rc := http.NewResponseController(w)
+		deadline := time.Now().Add(restoreTimeout)
+		// A ResponseWriter without deadlines, such as
+		// httptest.ResponseRecorder, keeps none.
+		_ = rc.SetReadDeadline(deadline)
+		_ = rc.SetWriteDeadline(deadline)
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }

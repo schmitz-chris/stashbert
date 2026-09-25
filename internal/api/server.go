@@ -36,6 +36,13 @@ type ServerDeps struct {
 	// Logger logs what cannot be reported to the client, such as a failed
 	// cleanup after a download.
 	Logger *slog.Logger
+	// DataDir is DATA_DIR, where POST /backup/restore lays an uploaded
+	// backup ready in restore/ (ADR-0020).
+	DataDir string
+	// Restart asks for a restart in the same process after a backup was laid
+	// ready, which applies it (ADR-0020). It must not block. nil means no
+	// restart.
+	Restart func()
 }
 
 // SnapshotRequester takes requests for shopping.snapshot over MQTT
@@ -65,11 +72,14 @@ type Server struct {
 	// downloads holds a token while a backup download runs, so that
 	// downloads run one after another.
 	downloads chan struct{}
+	// restores holds a token while an uploaded backup is checked, so that
+	// only one runs at a time.
+	restores chan struct{}
 }
 
 var _ StrictServerInterface = (*Server)(nil)
 
 // NewServer returns a Server using d.
 func NewServer(d ServerDeps) *Server {
-	return &Server{deps: d, queries: db.New(d.DB), downloads: make(chan struct{}, 1)}
+	return &Server{deps: d, queries: db.New(d.DB), downloads: make(chan struct{}, 1), restores: make(chan struct{}, 1)}
 }

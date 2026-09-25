@@ -350,11 +350,31 @@ export interface paths {
         };
         /**
          * Backup herunterladen
-         * @description Frisches Backup als tar-Archiv mit gzip: stashbert.db (eine Kopie per VACUUM INTO) und der Ordner images/ mit allen Bilddateien. Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API gibt es nicht.
+         * @description Frisches Backup als tar-Archiv mit gzip: stashbert.db (eine Kopie per VACUUM INTO) und der Ordner images/ mit allen Bilddateien. Gleichzeitige Downloads laufen nacheinander. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; eingespielt wird das Archiv mit POST /backup/restore.
          */
         get: operations["downloadBackup"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backup/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backup einspielen
+         * @description Der Body ist ein Archiv aus GET /backup, höchstens 1 GB, mit dem Content-Type application/gzip (application/x-gzip geht auch). Es darf nur stashbert.db und Bilder unter images/ enthalten und entpackt höchstens 4 GB groß sein. StashBert prüft das Archiv und legt es in DATA_DIR/restore/pending bereit, ohne den laufenden Betrieb zu ändern. Nach der Antwort startet StashBert im selben Prozess neu und spielt es vor dem Öffnen der Datenbank ein; der bisherige Stand bleibt in DATA_DIR/vor-restore-<YYYYMMDD-HHMMSS>. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz (ADR-0020). Fehler-code: invalid_request (400, anderer Content-Type), invalid_backup (422, kein Backup von StashBert oder beschädigt), backup_too_new (422, von einer neueren Version), backup_too_large (413, größer als 1 GB oder entpackt größer als 4 GB), restore_in_progress (409, es wird schon ein Backup eingespielt).
+         */
+        post: operations["restoreBackup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1354,6 +1374,37 @@ export interface operations {
                 content: {
                     "application/gzip": unknown;
                 };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    restoreBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/gzip": unknown;
+            };
+        };
+        responses: {
+            /** @description Das Backup ist bereitgelegt; StashBert startet neu. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Fehler nach RFC 9457. */
             default: {

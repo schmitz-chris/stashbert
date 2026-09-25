@@ -14,6 +14,7 @@ import (
 	"github.com/getkin/kin-openapi/routers"
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
+	"github.com/schmitz-chris/stashbert/internal/backup"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 )
 
@@ -101,7 +102,7 @@ func TestRequestErrorHandler(t *testing.T) {
 func TestPanicReturnsInternal(t *testing.T) {
 	var logs bytes.Buffer
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking, http.NotFoundHandler(), nil)
+	h, err := newChain(slog.New(slog.NewJSONHandler(&logs, nil)), panicking, http.NotFoundHandler(), nil, backup.MaxUploadBytes)
 	if err != nil {
 		t.Fatalf("newChain: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestPanicReturnsInternal(t *testing.T) {
 
 func TestWebPanicReturnsInternal(t *testing.T) {
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h, err := newChain(slog.New(slog.DiscardHandler), http.NotFoundHandler(), panicking, nil)
+	h, err := newChain(slog.New(slog.DiscardHandler), http.NotFoundHandler(), panicking, nil, backup.MaxUploadBytes)
 	if err != nil {
 		t.Fatalf("newChain: %v", err)
 	}

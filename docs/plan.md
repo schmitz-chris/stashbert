@@ -1730,7 +1730,7 @@ Nutzerentscheidung vom 25.09.2026: Ein Backup lässt sich in den Einstellungen e
 
 ### B41: Backup einspielen per API
 
-- **Status:** offen
+- **Status:** erledigt
 - **Abhängig von:** B40
 - **Referenzen:** ADR-0020, architecture.md 4.4, 6.2 (`POST /backup/restore`), 6.4, 9.3; `internal/backup/archive.go` (Aufbau des Archivs)
 - **Umfang:**

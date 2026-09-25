@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/oapi-codegen/nullable"
 
 	"github.com/schmitz-chris/stashbert/internal/backup"
+	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
 // GetSystemStatus reports the state for the settings page (architecture.md,
@@ -101,4 +103,33 @@ func (b *downloadBody) Close() error {
 		return err
 	}
 	return nil
+}
+
+// RestoreBackup checks the uploaded backup and lays it ready with
+// backup.Stage, then asks for the restart that applies it (ADR-0020). While
+// another upload is checked, a request gets 409 restore_in_progress at once.
+// A body over the limit of an http.MaxBytesReader results in 413
+// backup_too_large. The route in internal/app checks the Content-Type and
+// limits the body, because the request validator does not see this route
+// (architecture.md, 4.4).
+func (s *Server) RestoreBackup(ctx context.Context, request RestoreBackupRequestObject) (RestoreBackupResponseObject, error) {
+	select {
+	case s.restores <- struct{}{}:
+		defer func() { <-s.restores }()
+	default:
+		return nil, backup.InProgress()
+	}
+	err := backup.Stage(ctx, s.deps.DataDir, request.Body, store.Migrations, backup.MaxUnpackedBytes)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return nil, backup.TooLarge()
+	}
+	if err != nil {
+		return nil, err
+	}
+	s.deps.Logger.LogAttrs(ctx, slog.LevelInfo, "backup ready to apply, restart requested")
+	if s.deps.Restart != nil {
+		s.deps.Restart()
+	}
+	return RestoreBackup202Response{}, nil
 }
