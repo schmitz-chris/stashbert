@@ -1,0 +1,79 @@
+#!/bin/sh
+# Spielt eine Sicherung aus GET /api/v1/backup ein (ADR-0019,
+# architecture.md 9.3). Aufruf als root im Container:
+#
+#   stashbert-restore <archiv.tar.gz>
+#
+# Der bisherige Stand (stashbert.db, -wal, -shm und images/) wird nicht
+# gelöscht, sondern nach /var/lib/stashbert/vor-restore-<YYYYMMDD-HHMMSS>/
+# verschoben (Zeit in UTC). Die Backups in backups/ bleiben, wo sie sind.
+set -eu
+
+data_dir=/var/lib/stashbert
+
+die() {
+	echo "Fehler: $*" >&2
+	exit 1
+}
+
+[ "$#" -eq 1 ] || die "Aufruf: stashbert-restore <archiv.tar.gz>"
+src=$1
+
+[ "$(id -u)" -eq 0 ] || die "stashbert-restore muss als root laufen."
+command -v systemctl >/dev/null 2>&1 ||
+	die "systemctl nicht gefunden. stashbert-restore braucht einen Container mit systemd."
+[ -f "$src" ] || die "Archiv nicht gefunden: $src"
+id -u stashbert >/dev/null 2>&1 ||
+	die "Systembenutzer stashbert fehlt. Zuerst StashBert installieren (stashbert-update)."
+[ -d "$data_dir" ] ||
+	die "$data_dir fehlt. Zuerst StashBert installieren (stashbert-update)."
+
+# Entpackt wird neben die Daten: Die Dateien müssen danach nur verschoben
+# werden, und /tmp (in Debian 13 im Arbeitsspeicher) läuft nicht voll.
+tmp=$(mktemp -d "$data_dir/.restore-XXXXXX") ||
+	die "Temporäres Verzeichnis in $data_dir ließ sich nicht anlegen."
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+
+tar -xzf "$src" -C "$tmp" || die "Das Archiv $src ließ sich nicht entpacken. Nichts geändert."
+[ -f "$tmp/stashbert.db" ] ||
+	die "Das Archiv enthält keine stashbert.db. Ist es eine Sicherung aus StashBert? Nichts geändert."
+
+old=$data_dir/vor-restore-$(date -u +%Y%m%d-%H%M%S)
+[ ! -e "$old" ] || die "$old gibt es schon. Bitte in einer Sekunde noch einmal versuchen."
+
+systemctl stop stashbert || die "Der Dienst stashbert ließ sich nicht stoppen. Nichts geändert."
+echo "Dienst stashbert gestoppt."
+
+# Ab hier ist der Dienst gestoppt. Bei einem Fehler nennt die Meldung, wo der
+# alte Stand liegt.
+fail() {
+	die "$* Der Dienst ist gestoppt, der alte Stand liegt in $old. Starten mit: systemctl start stashbert"
+}
+
+mkdir -m 0750 "$old" || fail "$old ließ sich nicht anlegen."
+for f in stashbert.db stashbert.db-wal stashbert.db-shm images; do
+	if [ -e "$data_dir/$f" ]; then
+		mv "$data_dir/$f" "$old/" || fail "$data_dir/$f ließ sich nicht verschieben."
+	fi
+done
+chown stashbert:stashbert "$old" || fail "Besitzer von $old ließ sich nicht setzen."
+echo "Alter Stand verschoben nach $old"
+
+mv "$tmp/stashbert.db" "$data_dir/stashbert.db" || fail "stashbert.db ließ sich nicht ablegen."
+chown stashbert:stashbert "$data_dir/stashbert.db" || fail "Besitzer von stashbert.db ließ sich nicht setzen."
+echo "Datenbank abgelegt: $data_dir/stashbert.db"
+if [ -d "$tmp/images" ]; then
+	mv "$tmp/images" "$data_dir/images" || fail "images/ ließ sich nicht ablegen."
+	chown -R stashbert:stashbert "$data_dir/images" || fail "Besitzer von images/ ließ sich nicht setzen."
+	echo "Bilder abgelegt: $data_dir/images"
+fi
+
+systemctl start stashbert || fail "Der Dienst stashbert ließ sich nicht starten."
+# Einige Sekunden warten, damit ein Dienst, der gleich nach dem Start
+# abstürzt, nicht noch als laufend gilt.
+sleep 5
+systemctl is-active --quiet stashbert ||
+	die "Der Dienst läuft nicht. Details: journalctl -u stashbert. Der alte Stand liegt in $old."
+echo "Dienst stashbert läuft."
+echo "Sicherung eingespielt. Der alte Stand liegt in $old"

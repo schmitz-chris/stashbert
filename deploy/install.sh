@@ -1,12 +1,14 @@
 #!/bin/sh
 # Installiert oder aktualisiert StashBert als systemd-Dienst im Debian-LXC
-# (ADR-0014, architecture.md 9). Aufruf als root im Container:
+# (ADR-0014, ADR-0019, architecture.md 9). Aufruf als root im Container:
 #
-#   sh install.sh <pfad-zum-binary>
+#   sh install.sh [pfad-zum-binary]
 #
-# stashbert.service und stashbert.env.example liegen neben diesem Skript.
-# Ein erneuter Aufruf ersetzt Binary und Unit und startet den Dienst neu; die
-# Env-Datei bleibt unverändert.
+# Ohne Argument nimmt das Skript das Binary stashbert neben sich, wie im
+# Release-Archiv. stashbert.service, stashbert.env.example, stashbert-update
+# und stashbert-restore liegen ebenfalls neben diesem Skript.
+# Ein erneuter Aufruf ersetzt Binary, Skripte und Unit und startet den Dienst
+# neu; die Env-Datei bleibt unverändert.
 set -eu
 
 bin_dir=/usr/local/bin
@@ -20,28 +22,29 @@ die() {
 	exit 1
 }
 
-[ "$#" -eq 1 ] || die "Aufruf: sh install.sh <pfad-zum-binary>"
-src=$1
+[ "$#" -le 1 ] || die "Aufruf: sh install.sh [pfad-zum-binary]"
 
 [ "$(id -u)" -eq 0 ] || die "install.sh muss als root laufen."
 command -v systemctl >/dev/null 2>&1 ||
 	die "systemctl nicht gefunden. install.sh braucht einen Container mit systemd."
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for f in stashbert.service stashbert.env.example; do
+src=${1:-$script_dir/stashbert}
+for f in stashbert.service stashbert.env.example stashbert-update stashbert-restore; do
 	[ -f "$script_dir/$f" ] || die "$f fehlt neben install.sh (in $script_dir)."
 done
 [ -f "$src" ] || die "Binary nicht gefunden: $src"
 
-# Das neue Binary kommt zuerst in eine temporäre Datei neben dem Ziel und
-# ersetzt das alte erst nach der Prüfung per mv. So sieht ein laufender Dienst
-# nie ein halb geschriebenes Binary.
+# Binary und Skripte kommen zuerst als temporäre Datei neben das Ziel und
+# ersetzen die alte Datei erst danach per mv. So sieht ein laufender Dienst nie
+# ein halb geschriebenes Binary, und ein laufendes stashbert-update, das dieses
+# Skript aufgerufen hat, liest sein altes Skript unverändert zu Ende.
 tmp=$bin_dir/.stashbert.new
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp" "$bin_dir/.stashbert-update.new" "$bin_dir/.stashbert-restore.new"' EXIT
 trap 'exit 1' HUP INT TERM
 install -m 0755 "$src" "$tmp"
 version=$("$tmp" -version) ||
-	die "Das Binary $src läuft nicht (-version schlug fehl). Erwartet wird stashbert-linux-amd64 aus make release."
+	die "Das Binary $src läuft nicht (-version schlug fehl). Erwartet wird stashbert aus dem Release-Archiv stashbert_<version>_linux_amd64.tar.gz."
 
 if id -u stashbert >/dev/null 2>&1; then
 	echo "Systembenutzer stashbert ist vorhanden."
@@ -52,6 +55,12 @@ fi
 
 mv -f "$tmp" "$bin"
 echo "Binary installiert: $bin ($version)"
+
+for f in stashbert-update stashbert-restore; do
+	install -m 0755 "$script_dir/$f" "$bin_dir/.$f.new"
+	mv -f "$bin_dir/.$f.new" "$bin_dir/$f"
+	echo "Skript installiert: $bin_dir/$f"
+done
 
 install -m 0644 "$script_dir/stashbert.service" "$unit"
 echo "Unit installiert: $unit"

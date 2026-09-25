@@ -1,0 +1,42 @@
+name: Release
+
+# Builds the release package for tags v* and publishes it as a GitHub release
+# with generated notes (ADR-0019). Tags with a hyphen (e.g. v0.2.0-rc1)
+# become prereleases, which never count as the latest release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make check
+      # The binary reports the tag as its version; stashbert-update compares
+      # it with the tag of the latest release.
+      - run: make release VERSION="$TAG"
+        env:
+          TAG: ${{ github.ref_name }}
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          args=(--verify-tag --generate-notes)
+          if [[ "$TAG" == *-* ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$TAG" bin/release/* "${args[@]}"

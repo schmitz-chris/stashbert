@@ -1,0 +1,77 @@
+#!/bin/sh
+# Installiert oder aktualisiert StashBert aus dem neuesten GitHub-Release
+# (ADR-0019). Aufruf als root im Container:
+#
+#   stashbert-update
+#
+# Lädt das Release-Archiv und SHA256SUMS, prüft die Prüfsumme, entpackt das
+# Archiv und ruft das mitgelieferte install.sh auf. Ist die neueste Version
+# schon installiert, ändert das Skript nichts. Jeder Fehler vor install.sh
+# lässt die laufende Installation unberührt.
+#
+# STASHBERT_RELEASES_URL ersetzt die Adresse der Releases, etwa für Tests
+# gegen einen lokalen Server.
+set -eu
+
+base=${STASHBERT_RELEASES_URL:-https://github.com/schmitz-chris/stashbert/releases}
+bin=/usr/local/bin/stashbert
+
+die() {
+	echo "Fehler: $*" >&2
+	exit 1
+}
+
+[ "$(id -u)" -eq 0 ] || die "stashbert-update muss als root laufen."
+arch=$(uname -m)
+[ "$arch" = x86_64 ] || die "Releases gibt es nur für x86_64, dieses System ist $arch."
+command -v curl >/dev/null 2>&1 ||
+	die "curl nicht gefunden. Installieren mit: apt-get install -y curl ca-certificates"
+for cmd in sha256sum tar; do
+	command -v "$cmd" >/dev/null 2>&1 || die "$cmd nicht gefunden."
+done
+
+# Die Adresse .../latest leitet auf .../tag/<tag> des neuesten Releases weiter.
+latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$base/latest") ||
+	die "Das neueste Release ließ sich nicht ermitteln ($base/latest)."
+tag=${latest##*/}
+case $tag in
+v*[!A-Za-z0-9._-]* | v) die "Unerwartete Adresse des neuesten Releases: $latest" ;;
+v*) ;;
+*) die "Unerwartete Adresse des neuesten Releases: $latest" ;;
+esac
+
+if [ -e "$bin" ]; then
+	installed=$("$bin" -version 2>/dev/null) || installed=unbekannt
+	if [ "$installed" = "$tag" ]; then
+		echo "StashBert ist aktuell ($tag)."
+		exit 0
+	fi
+	echo "Installiert: $installed, neueste Version: $tag"
+else
+	echo "Erstinstallation von StashBert $tag"
+fi
+
+name=stashbert_${tag#v}_linux_amd64
+archive=$name.tar.gz
+tmp=$(mktemp -d) || die "Temporäres Verzeichnis ließ sich nicht anlegen."
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+
+echo "Lade $archive"
+curl -fsSL -o "$tmp/$archive" "$base/download/$tag/$archive" ||
+	die "Download fehlgeschlagen: $base/download/$tag/$archive"
+curl -fsSL -o "$tmp/SHA256SUMS" "$base/download/$tag/SHA256SUMS" ||
+	die "Download fehlgeschlagen: $base/download/$tag/SHA256SUMS"
+
+expected=$(awk -v f="$archive" '$2 == f || $2 == "*" f { print $1 }' "$tmp/SHA256SUMS")
+[ -n "$expected" ] || die "SHA256SUMS enthält keinen Eintrag für $archive."
+actual=$(sha256sum "$tmp/$archive") || die "Prüfsumme von $archive ließ sich nicht berechnen."
+actual=${actual%% *}
+[ "$actual" = "$expected" ] ||
+	die "Die Prüfsumme von $archive stimmt nicht. Die Installation bleibt unverändert."
+echo "Prüfsumme stimmt."
+
+tar -xzf "$tmp/$archive" -C "$tmp" || die "$archive ließ sich nicht entpacken."
+[ -f "$tmp/$name/install.sh" ] || die "$archive enthält kein $name/install.sh."
+
+sh "$tmp/$name/install.sh" || die "install.sh ist fehlgeschlagen (Meldung oben)."

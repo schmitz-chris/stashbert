@@ -1626,7 +1626,7 @@ Nutzerentscheidung vom 25.09.2026: Das Repository ist öffentlich (MIT). Release
 
 ### L04: Release-Paket mit Update und Restore
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer (Skripte, `make release` und Workflow stehen, shellcheck und `actionlint` ohne Befund, Durchlauf im Debian-13-Container bestanden; das erste Release auf GitHub prüft der Nutzer)
 - **Abhängig von:** L02, B40
 - **Referenzen:** ADR-0019, ADR-0014, architecture.md 9.1 und 9.3, docs/betrieb.md 10
 - **Umfang:**

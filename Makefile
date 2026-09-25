@@ -2,6 +2,9 @@
 
 .PHONY: generate check test run build release webui docker
 
+# Shell scripts that run in the LXC (ADR-0014, ADR-0019).
+SCRIPTS = deploy/install.sh deploy/stashbert-update deploy/stashbert-restore
+
 # With web/package.json, the API types of the web UI are generated too.
 # Without web/node_modules (fresh clone), npm ci installs the tools first.
 generate:
@@ -20,7 +23,13 @@ check:
 	fi
 	go vet ./...
 	go test ./...
-	sh -n deploy/install.sh
+	for f in $(SCRIPTS); do sh -n "$$f" || exit 1; done
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		echo "shellcheck $(SCRIPTS)"; \
+		shellcheck $(SCRIPTS) || exit 1; \
+	else \
+		echo "shellcheck not installed, skipped"; \
+	fi
 	@if [ -f web/package.json ]; then \
 		(cd web && npm ci && npm run check && npm run lint && npm test) || exit 1; \
 	fi
@@ -46,20 +55,44 @@ webui:
 build: webui
 	go build -o bin/stashbert -ldflags "-X main.version=$$(git describe --tags --always --dirty)" ./cmd/stashbert
 
-# Cross-compiles the binary for the LXC (ADR-0014) with the web UI and writes
-# SHA256SUMS next to it. internal/webui/dist/ is emptied again afterwards,
-# also when the Go build fails.
+# Version for make release, by default from git describe; the release
+# workflow passes the tag (ADR-0019).
+VERSION ?= $(shell git describe --tags --always --dirty)
+# Name of the release archive and of the folder in it, with VERSION without
+# its leading v: stashbert_<version>_linux_amd64.
+RELEASE_NAME = stashbert_$(patsubst v%,%,$(VERSION))_linux_amd64
+RELEASE_DIR = bin/release/$(RELEASE_NAME)
+# Archive entries belong to root:root. GNU tar (CI) and bsdtar (macOS) name
+# the options differently.
+TAR_OWNER = $$(if tar --version 2>/dev/null | grep -q 'GNU tar'; then echo --owner=0 --group=0; else echo --uid 0 --gid 0; fi)
+
+# Builds the release package for the LXC (ADR-0019) in bin/release/, which is
+# emptied first: the archive RELEASE_NAME.tar.gz with a folder of the same name
+# (binary cross-compiled with the web UI, install.sh, unit, env example,
+# stashbert-update and stashbert-restore), stashbert-update on its own for
+# the first installation, and SHA256SUMS over all files. internal/webui/dist/
+# is emptied again after the Go build, also when it fails. On macOS,
+# COPYFILE_DISABLE=1 and --no-xattrs keep ._ files and extended attributes
+# out of the archive.
 release: webui
-	@mkdir -p bin/release
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$$(git describe --tags --always --dirty)" -o bin/release/stashbert-linux-amd64 ./cmd/stashbert; \
+	rm -rf bin/release
+	mkdir -p $(RELEASE_DIR)
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(RELEASE_DIR)/stashbert ./cmd/stashbert; \
 	status=$$?; \
 	$(CLEAN_WEBUI_DIST); \
 	exit $$status
+	cp $(SCRIPTS) deploy/stashbert.service deploy/stashbert.env.example $(RELEASE_DIR)/
+	chmod 0755 $(RELEASE_DIR) $(RELEASE_DIR)/stashbert $(RELEASE_DIR)/install.sh $(RELEASE_DIR)/stashbert-update $(RELEASE_DIR)/stashbert-restore
+	chmod 0644 $(RELEASE_DIR)/stashbert.service $(RELEASE_DIR)/stashbert.env.example
+	cd bin/release && COPYFILE_DISABLE=1 tar $(TAR_OWNER) --numeric-owner --no-xattrs -czf $(RELEASE_NAME).tar.gz $(RELEASE_NAME)
+	rm -rf $(RELEASE_DIR)
+	cp deploy/stashbert-update bin/release/stashbert-update
+	chmod 0755 bin/release/stashbert-update
 	cd bin/release && \
 	if command -v sha256sum >/dev/null 2>&1; then \
-		sha256sum stashbert-linux-amd64 > SHA256SUMS; \
+		sha256sum * > SHA256SUMS; \
 	else \
-		shasum -a 256 stashbert-linux-amd64 > SHA256SUMS; \
+		shasum -a 256 * > SHA256SUMS; \
 	fi
 
 # Builds the container image stashbert:dev, the optional way of running
