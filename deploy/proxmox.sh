@@ -358,7 +358,10 @@ ct_run systemctl daemon-reload
 ct_run systemctl restart 'container-getty@*.service'
 if ((DRY == 0)); then
 	ct test -x /usr/bin/update || die "/usr/bin/update fehlt im Container."
-	ct systemctl cat container-getty@1.service | grep -q -- '--autologin root' ||
+	# Erst lesen, dann suchen: grep -q in einer Pipe ließe systemctl mit
+	# SIGPIPE enden, und pipefail wertete das als Fehler.
+	getty=$(ct systemctl cat container-getty@1.service) || getty=''
+	[[ $getty == *'--autologin root'* ]] ||
 		die "Die automatische Anmeldung greift nicht (systemctl cat container-getty@1.service)."
 fi
 
