@@ -1585,6 +1585,41 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
   2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) und mit großer Schrift.
   3. (Nutzer) Unbekannten Barcode scannen, Namen auf der Karte eintragen, Produkt erscheint mit diesem Namen im Vorrat.
 
+## Phase 1l: Einstellungen
+
+Nutzerentscheidung vom 25.09.2026: SQLite bleibt (ADR-0005); eine Einstellungsseite hinter einem Zahnrad oben rechts in der Vorrat-Ansicht bündelt Home Assistant, Sicherung und Informationen. Verbindungsdaten bleiben in der Konfigurationsdatei (architecture.md 4.2).
+
+### B40: Systemstatus und Sicherung herunterladen
+
+- **Status:** offen
+- **Abhängig von:** B39
+- **Referenzen:** architecture.md 6.2 (`GET /system`, `GET /backup`), 9.3, 4.2; ADR-0005, ADR-0013
+- **Umfang:**
+  - `GET /system` (`getSystemStatus`, Schema `SystemStatus` wie in 6.2), contract-first. Die Zahlen kommen aus der Datenbankdatei und dem Ordner `DATA_DIR/backups/` (nur die regelmäßigen Sicherungen `stashbert-*.db`, nicht `pre-migration-*`).
+  - `GET /backup` (`downloadBackup`, Antwort `application/gzip`), contract-first: erzeugt mit der vorhandenen Logik aus `internal/backup` eine frische Kopie per `VACUUM INTO` in ein temporäres Verzeichnis, streamt ein tar.gz mit `stashbert.db` und allen Dateien aus `DATA_DIR/images/` (Ordner `images/`) und löscht die temporäre Kopie danach. Nur Standardbibliothek (`archive/tar`, `compress/gzip`). Gleichzeitige Downloads laufen nacheinander. Die Schreibfrist des HTTP-Servers wird für diese Antwort verlängert (`http.ResponseController`), damit größere Sicherungen nicht abbrechen.
+  - `docs/betrieb.md`: kurzer Abschnitt „Sicherung herunterladen und wiederherstellen" (Archiv entpacken, Dienst stoppen, Dateien ablegen, Besitzer setzen, Dienst starten).
+- **Nicht im Umfang:** Wiederherstellen per API, Oberfläche (F32).
+- **Abnahmekriterien:**
+  1. Tests: Status mit und ohne Sicherungen, mit und ohne `OFF_CONTACT`; das Archiv lässt sich entpacken, die Datenbank darin ist gültig und enthält die Daten, die Bilder sind vollständig, die temporäre Kopie ist danach weg; Dateiname und Content-Type.
+  2. `make check` ist grün.
+
+### F32: Einstellungsseite mit Zahnrad
+
+- **Status:** offen
+- **Abhängig von:** B40, F30
+- **Referenzen:** architecture.md 4.2, 6.2, 11.7; ADR-0016; F30 (Abschnitt Home Assistant)
+- **Umfang:**
+  - Neue Ansicht `/einstellungen` („Einstellungen") mit Zurück zu „Vorrat" wie die Produktseite; in der Vorrat-Ansicht oben rechts ein Zahnrad-Knopf (44 × 44 px, `aria-label` „Einstellungen").
+  - Abschnitt **Home Assistant**: der Abschnitt aus F30 zieht aus der Einkaufsansicht hierher um (dort entfällt er). Ohne MQTT steht dort „Nicht eingerichtet" mit dem Hinweis auf `docs/home-assistant.md`.
+  - Abschnitt **Sicherung**: letzte Sicherung (Datum und Uhrzeit auf Deutsch, oder „Noch keine"), Anzahl und aufbewahrte Anzahl, Knopf „Sicherung herunterladen" als Link auf `/api/v1/backup` (ein Download ist Navigation, kein API-Aufruf; Ausnahme von „nur über den generierten Client").
+  - Abschnitt **Über StashBert**: Version, Größe der Datenbank (lesbar, z. B. „128 KB"), Open Food Facts „aktiv" bzw. „nicht eingerichtet", Hinweis auf die Datenquelle Open Food Facts (ODbL).
+  - Formatierungen (Größe, Datum, Texte der Abschnitte) als reine Funktionen mit Vitest-Tests.
+- **Nicht im Umfang:** Ändern von Verbindungsdaten, Kamera-Einstellungen (bleiben im Scan-Bereich), weitere Tabs.
+- **Abnahmekriterien:**
+  1. Vitest-Tests für die Formatierungen.
+  2. `make check` ist grün; Bildschirmfotos in 17 px (393 und 320 px Breite) und mit großer Schrift von Vorrat (Zahnrad), Einstellungen und Einkauf (ohne Home-Assistant-Abschnitt).
+  3. (Nutzer) Auf dem iPhone die Einstellungen öffnen, die Liste in Home Assistant wählen und eine Sicherung herunterladen.
+
 ## Phase 2a: Home Assistant über MQTT (M2, ADR-0018)
 
 Gemeinsame Referenzen aller Tasks dieser Phase: ADR-0018, architecture.md Kapitel 11 und 9.2. Topics und Nachrichten sind immer Englisch (AGENTS.md). Der Broker im Heimnetz ist das Mosquitto-Add-on von HA; Tests laufen nur gegen den eingebetteten Test-Broker (`mochi-mqtt`), nie gegen den echten.

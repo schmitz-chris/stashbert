@@ -100,7 +100,9 @@ Diese Regeln gelten ab dem ersten Task, weil sie später teuer zu ändern wären
   - Scanner
   - Einkauf
   - Produktdetail
-- Navigation: untere Leiste mit Vorrat, Scan (mittig, hervorgehoben) und Einkauf.
+  - Einstellungen (ab F32): Home Assistant, Sicherung, Über StashBert
+- Navigation: untere Leiste mit Vorrat, Scan (mittig, hervorgehoben) und Einkauf. Die Einstellungen öffnet ein Zahnrad oben rechts in der Vorrat-Ansicht (Nutzerentscheidung vom 25.09.2026), kein viertes Symbol in der Leiste.
+- Verbindungsdaten und Geheimnisse (MQTT, `OFF_CONTACT` usw.) bleiben in der Konfigurationsdatei; die Einstellungen zeigen nur an, ob sie gesetzt sind. Ohne Anmeldung (ADR-0013) könnte sonst jeder im Heimnetz sie ändern.
 
 ### 4.3 Scanner im Browser
 
@@ -238,6 +240,8 @@ Vollständiger Vertrag: `api/openapi.yaml` (OpenAPI 3.1). Diese Übersicht ist d
 | `DELETE /shopping-list/items/{product_id}` | `unmarkShoppingItem` | Vormerkung entfernen (Fehlbestand nach Soll bleibt) | 204 | `not_found` |
 | `POST /shopping-list/snapshot` | `sendShoppingSnapshot` | Einkaufsliste per MQTT neu senden (`shopping.snapshot`, Kapitel 11.3) | 202 | `mqtt_disabled` (409) |
 | `GET /summary` | `getSummary` | Zusammenfassung (Kapitel 11.5) | 200 `Summary` | |
+| `GET /system` | `getSystemStatus` | Zustand für die Einstellungen: `version`, `database_size` (Bytes der Datenbankdatei samt WAL), `backup_count`, `last_backup_at` (Zeitstempel oder `null`), `backup_keep`, `open_food_facts` (ob `OFF_CONTACT` gesetzt ist) | 200 `SystemStatus` | |
+| `GET /backup` | `downloadBackup` | frische Sicherung als `application/gzip`: ein tar-Archiv mit `stashbert.db` (per `VACUUM INTO`) und dem Ordner `images/`; Dateiname `stashbert-<YYYYMMDD-HHMMSS>.tar.gz` per `Content-Disposition`. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz; ein Wiederherstellen per API gibt es bewusst nicht | 200 Datei | |
 | `GET /integrations/mqtt` | `getMqttStatus` | Verbindung, angebotene und gewählte Zielliste (Kapitel 11.7) | 200 `MqttStatus` | |
 | `PUT /integrations/mqtt/target` | `setShoppingTarget` | Zielliste wählen `{id}` oder mit `{id: null}` aufheben | 200 `MqttStatus` | `mqtt_disabled` (409), `unknown_target` (422), `invalid_request` |
 
