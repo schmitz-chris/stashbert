@@ -717,3 +717,20 @@ export const shoppingSnapshotMutation = mutationOptions({
     }
   },
 });
+
+/**
+ * The state of the server for the settings (architecture.md, 6.2): version,
+ * size of the database, backups and whether Open Food Facts is used. With
+ * the default staleTime of 0 it is fetched again whenever the settings
+ * open.
+ */
+export const systemStatusQuery = queryOptions({
+  queryKey: ["system"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET("/system");
+    if (!response.ok || data === undefined) {
+      throw error ?? new Error(`GET /system: status ${response.status}`);
+    }
+    return data;
+  },
+});

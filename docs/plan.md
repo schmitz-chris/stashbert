@@ -1605,7 +1605,7 @@ Nutzerentscheidung vom 25.09.2026: SQLite bleibt (ADR-0005); eine Einstellungsse
 
 ### F32: Einstellungsseite mit Zahnrad
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B40, F30
 - **Referenzen:** architecture.md 4.2, 6.2, 11.7; ADR-0016; F30 (Abschnitt Home Assistant)
 - **Umfang:**

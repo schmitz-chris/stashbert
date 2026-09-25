@@ -48,7 +48,19 @@ export function StockPage() {
 
   return (
     <>
-      <PageHeading className="text-2xl font-semibold">Vorrat</PageHeading>
+      {/* The title and, top right, the gear that opens the settings
+          (docs/plan.md, F32). The gear is 44 px, and its symbol sits on
+          the edge of the content. */}
+      <div className="flex items-center justify-between gap-2">
+        <PageHeading className="min-w-0 text-2xl font-semibold">Vorrat</PageHeading>
+        <Link
+          to="/einstellungen"
+          aria-label="Einstellungen"
+          className="pressable -mr-[10px] flex size-[44px] shrink-0 items-center justify-center rounded-full text-accent"
+        >
+          <GearIcon />
+        </Link>
+      </div>
       {/* Search and filters stay at the top while the list scrolls, below the
           safe area. They lie above the buttons of the rows (z-10) and below
           the update banner and the navigation bar (z-20). Their minimum
@@ -357,6 +369,25 @@ function StepSymbol({ plus }: { plus: boolean }) {
       className="size-[min(1.25rem,24px)] shrink-0"
     >
       <path d={plus ? "M5 12h14M12 5v14" : "M5 12h14"} />
+    </svg>
+  );
+}
+
+// A gear with eight teeth, the symbol of the settings, in the color of the
+// text.
+function GearIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinejoin="round"
+      className="size-[24px]"
+    >
+      <path d="M10.36 4.89L10.62 2.2A9.9 9.9 0 0 1 13.38 2.2L13.64 4.89A7.3 7.3 0 0 1 15.87 5.81L17.96 4.09A9.9 9.9 0 0 1 19.91 6.04L18.19 8.13A7.3 7.3 0 0 1 19.11 10.36L21.8 10.62A9.9 9.9 0 0 1 21.8 13.38L19.11 13.64A7.3 7.3 0 0 1 18.19 15.87L19.91 17.96A9.9 9.9 0 0 1 17.96 19.91L15.87 18.19A7.3 7.3 0 0 1 13.64 19.11L13.38 21.8A9.9 9.9 0 0 1 10.62 21.8L10.36 19.11A7.3 7.3 0 0 1 8.13 18.19L6.04 19.91A9.9 9.9 0 0 1 4.09 17.96L5.81 15.87A7.3 7.3 0 0 1 4.89 13.64L2.2 13.38A9.9 9.9 0 0 1 2.2 10.62L4.89 10.36A7.3 7.3 0 0 1 5.81 8.13L4.09 6.04A9.9 9.9 0 0 1 6.04 4.09L8.13 5.81A7.3 7.3 0 0 1 10.36 4.89z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }

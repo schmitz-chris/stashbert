@@ -20,21 +20,29 @@ function scanLinkClass(marked: boolean) {
 }
 
 /**
- * The bottom navigation bar of the views Vorrat, Scan and Einkauf and of
- * the product page. On the product page the tab of the view it was opened
- * from is marked, the view its back link names (docs/plan.md, F22). The
- * marked tab shows its symbol filled, the others as outlines (HIG, Tab
- * bars). The bar is slightly translucent and blurs the content below it,
- * close to the material of iOS (docs/plan.md, F24). Its sizes are in px,
- * so it keeps them when the text size of the system grows, like the tab
- * bars of iOS (HIG, Typography: tab titles do not grow), and never wraps
- * or reaches past the edge of the screen (ADR-0016).
+ * The bottom navigation bar of the views Vorrat, Scan and Einkauf, of the
+ * product page and of the settings. On the product page the tab of the
+ * view it was opened from is marked, the view its back link names
+ * (docs/plan.md, F22); on the settings, which open from Vorrat and go back
+ * there, Vorrat is marked (F32). The marked tab shows its symbol filled,
+ * the others as outlines (HIG, Tab bars). The bar is slightly translucent
+ * and blurs the content below it, close to the material of iOS
+ * (docs/plan.md, F24). Its sizes are in px, so it keeps them when the text
+ * size of the system grows, like the tab bars of iOS (HIG, Typography: tab
+ * titles do not grow), and never wraps or reaches past the edge of the
+ * screen (ADR-0016).
  */
 export function BottomNav() {
   const { state } = useLocation();
   const onProduct = useMatch("/produkt/:id") !== null;
+  const onSettings = useMatch("/einstellungen") !== null;
   // The path of the tab that is marked although its route is not active.
-  const origin = onProduct ? productBack(state).path : null;
+  let origin: string | null = null;
+  if (onProduct) {
+    origin = productBack(state).path;
+  } else if (onSettings) {
+    origin = "/vorrat";
+  }
 
   return (
     <nav

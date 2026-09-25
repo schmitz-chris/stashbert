@@ -2,7 +2,7 @@
  * The views with a title of their own, by the ids of their routes in
  * router.tsx.
  */
-export type TitledRoute = "stock" | "scan" | "shopping" | "product" | "not-found";
+export type TitledRoute = "stock" | "scan" | "shopping" | "product" | "settings" | "not-found";
 
 const appName = "StashBert";
 
@@ -10,6 +10,7 @@ const names: Record<Exclude<TitledRoute, "product">, string> = {
   stock: "Vorrat",
   scan: "Scannen",
   shopping: "Einkauf",
+  settings: "Einstellungen",
   "not-found": "Nicht gefunden",
 };
 

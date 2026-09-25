@@ -6,6 +6,7 @@ describe("pageTitle", () => {
     ["stock", "Vorrat · StashBert"],
     ["scan", "Scannen · StashBert"],
     ["shopping", "Einkauf · StashBert"],
+    ["settings", "Einstellungen · StashBert"],
     ["not-found", "Nicht gefunden · StashBert"],
   ] as const)("names the view of the route %s", (route, title) => {
     expect(pageTitle(route)).toBe(title);
