@@ -127,7 +127,11 @@ Kette für `/api/v1/` von außen nach innen:
 4. Request-Validator (`nethttp-middleware`, umschließt den gesamten generierten Mux)
 5. generierter std-http-Handler mit Strict-Handler
 
-Einzige routenspezifische Ergänzung: Für `PUT /api/v1/products/{id}/image` begrenzt ein `http.MaxBytesReader` den Body auf 2 MB **vor** dem Validator, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
+Routenspezifische Ergänzungen, jeweils **vor** dem Validator:
+
+- `PUT /api/v1/products/{id}/image`: ein `http.MaxBytesReader` begrenzt den Body auf 2 MB, weil der Validator den Body vollständig einliest. Eine Überschreitung wird 422 `invalid_image`.
+- `GET /api/v1/backup`: die Schreibfrist wird per `http.ResponseController` auf 10 min verlängert, damit das Herunterladen einer Sicherung nicht an `WriteTimeout` (30 s) scheitert (B40).
+- Mit MQTT meldet eine Middleware jede erfolgreiche ändernde Anfrage an die Zusammenfassung (11.5).
 
 Eine Anmeldung gibt es in M1 nicht (ADR-0013). Hinweis für eine spätere Strict-Middleware: oapi-codegen übergibt ihr die Go-Namen (`GetHealth`), nicht die `operationId` aus der Spec (`getHealth`).
 
