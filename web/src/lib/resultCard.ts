@@ -171,15 +171,16 @@ export function cardView({ result, merged }: CardBooking): CardView {
 
 /**
  * Returns whether the result card of booking asks for the name of its
- * product (docs/plan.md, F31): as long as the product is a placeholder
- * (origin placeholder) that still needs a review, on the booking that
- * created it and on every later one. Saving a name sets needs_review to
- * false (architecture.md 6.5), so the field is gone afterwards; a product
- * named by Open Food Facts never gets it.
+ * product (docs/plan.md, F31): only when storing (kind add, user feedback
+ * of 2026-09-25) and as long as the product is a placeholder (origin
+ * placeholder) that still needs a review, on the booking that created it
+ * and on every later one. Saving a name sets needs_review to false
+ * (architecture.md 6.5), so the field is gone afterwards; a product named
+ * by Open Food Facts never gets it.
  */
-export function asksForName({ result }: CardBooking): boolean {
+export function asksForName({ result, kind }: CardBooking): boolean {
   const { product } = result;
-  return product.origin === "placeholder" && product.needs_review;
+  return kind === "add" && product.origin === "placeholder" && product.needs_review;
 }
 
 /** The most characters a product name may have (architecture.md 5). */

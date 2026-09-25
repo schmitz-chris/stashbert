@@ -1573,7 +1573,7 @@ Grundlage: `docs/hig-pruefung.md` (Befunde H1 bis N11). Kein Dark Mode. Jeder Ta
 - **Abhängig von:** F10, B36a
 - **Referenzen:** Nutzer-Rückmeldung vom 25.09.2026 (keine kostenpflichtigen Quellen; unbekannte Produkte sollen sich beim Scannen benennen lassen); architecture.md 6.5 (`needs_review` nach PATCH des Namens), 7.2, 7.3 (Nachladen überschreibt nur bei `needs_review`); ADR-0016
 - **Umfang:**
-  - Zeigt die Ergebniskarte ein Platzhalter-Produkt (`origin = placeholder`, beim ersten Scan und bei jedem späteren Scan, solange es Platzhalter ist), steht statt „Name ändern" ein Textfeld „Name" (leer, Platzhaltertext „Wie heißt das Produkt?") mit dem Knopf „Speichern". Absenden auch mit der Eingabetaste.
+  - Zeigt die Ergebniskarte im Modus Einlagern ein Platzhalter-Produkt (`origin = placeholder` mit `needs_review`, beim ersten Scan und bei jedem späteren Einlagern, solange es Platzhalter ist; beim Entnehmen und Einkaufen nicht, Nutzer-Rückmeldung vom 25.09.2026), steht statt „Name ändern" ein Textfeld „Name" (leer, Platzhaltertext „Wie heißt das Produkt?") mit dem Knopf „Speichern". Absenden auch mit der Eingabetaste.
   - Speichern sendet `PATCH /products/{id}` nur mit `name` (getrimmt, 1 bis 120 Zeichen; leer lässt sich nicht speichern). Danach zeigt die Karte den neuen Namen; der Cache wird aus der Antwort aktualisiert. Fehler: „Speichern fehlgeschlagen" unter dem Feld bis zur nächsten Aktion.
   - Solange das Feld den Fokus hat, ignoriert die Scan-Ansicht erkannte Codes (wie bei den Dialogen), damit die Karte beim Tippen nicht durch einen neuen Scan ersetzt wird.
   - Soll-Schnellauswahl und „Stattdessen zu vorhandenem Produkt" bleiben unverändert. Bei Produkten mit Namen aus Open Food Facts bleibt „Name ändern".

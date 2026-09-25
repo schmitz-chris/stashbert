@@ -402,7 +402,7 @@ describe("asksForName", () => {
     expect(asksForName(booking(created))).toBe(true);
   });
 
-  it("asks for the name of a placeholder scanned again, in both modes", () => {
+  it("asks for the name of a placeholder stored again, but not when consuming", () => {
     const again: MovementResult = {
       ...created,
       movement: movement({ id: "01a0ce63-0000-7000-8000-000000000004", stock_after: 2 }),
@@ -411,7 +411,7 @@ describe("asksForName", () => {
       warnings: [],
     };
     expect(asksForName(booking(again))).toBe(true);
-    expect(asksForName({ result: again, kind: "consume", merged: false })).toBe(true);
+    expect(asksForName({ result: again, kind: "consume", merged: false })).toBe(false);
   });
 
   it("does not ask for the name of a product from Open Food Facts", () => {
