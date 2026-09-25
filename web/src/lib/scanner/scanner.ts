@@ -1,4 +1,5 @@
-// Scanner session: camera stream, read loop, repeat filter and wake lock.
+// Scanner session: camera stream, read loop, confirmation and repeat filter
+// and wake lock.
 // Framework independent; a view drives it with start() and stop().
 import { openCamera, stopStream } from "./camera";
 import { RoiDecoder } from "./decoder";
