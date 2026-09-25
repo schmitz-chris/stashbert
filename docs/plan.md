@@ -1790,7 +1790,7 @@ Nutzerentscheidung vom 25.09.2026: Ein Backup lässt sich in den Einstellungen e
 
 ## Phase 1o: Produkterkennung per Foto (ADR-0021)
 
-Nutzerentscheidung vom 25.09.2026: OpenAI und Google Gemini lesen Name, Marke und Menge vom Produktfoto, nur auf der Produktseite; der API-Schlüssel wird in den Einstellungen eingegeben. Gemeinsame Referenzen: ADR-0021, architecture.md 4.2, 4.4, 6.2, 6.4, 6.5.
+Nutzerentscheidung vom 25.09.2026: OpenAI, Google Gemini und Claude (Anthropic) lesen Name, Marke und Menge vom Produktfoto, nur auf der Produktseite; der API-Schlüssel wird in den Einstellungen eingegeben. Gemeinsame Referenzen: ADR-0021, architecture.md 4.2, 4.4, 6.2, 6.4, 6.5.
 
 ### B42: Produkterkennung im Server
 
@@ -1800,10 +1800,11 @@ Nutzerentscheidung vom 25.09.2026: OpenAI und Google Gemini lesen Name, Marke un
 - **Umfang:**
   - **Spec** (contract-first): die drei Operationen und die Schemas `RecognitionSettings`, `RecognitionSettingsUpdate` und `RecognitionResult` nach architecture.md 6.
   - **`internal/recognize`:**
-    - Schnittstelle mit zwei Anbietern, `openai` und `gemini`, direkt per `net/http` (keine neue Abhängigkeit).
+    - Schnittstelle mit drei Anbietern, `openai`, `gemini` und `anthropic`, direkt per `net/http` (keine neue Abhängigkeit).
     - OpenAI: Responses API, Bild als Data-URL in `input_image`, Structured Outputs über `text.format` mit `json_schema` (strict).
     - Gemini: `generateContent`, Bild als `inline_data`, `generationConfig` mit `responseMimeType: application/json` und `responseSchema`, Schlüssel im Header `x-goog-api-key`.
-    - Die aktuellen Formate und Standardmodelle vorher in der offiziellen Doku nachschlagen (OpenAI: developers.openai.com, Google: ai.google.dev). Standardmodell ist jeweils ein günstiges Modell mit Bildverständnis.
+    - Claude: Messages API, Bild als `image`-Block (base64), feste Struktur über die strukturierte Ausgabe der API oder einen erzwungenen Tool-Aufruf, Schlüssel im Header `x-api-key`; Standardmodell `claude-sonnet-5`.
+    - Die aktuellen Formate und Standardmodelle vorher in der offiziellen Doku nachschlagen (OpenAI: developers.openai.com, Google: ai.google.dev, Anthropic: platform.claude.com). Standardmodell ist jeweils ein günstiges Modell mit Bildverständnis.
     - Anweisung an das Modell (Englisch):
       - Name, Marke und Menge so lesen, wie sie auf der Packung stehen;
       - Menge mit Einheit, z. B. „500 g";
@@ -1825,13 +1826,13 @@ Nutzerentscheidung vom 25.09.2026: OpenAI und Google Gemini lesen Name, Marke un
 - **Nicht im Umfang:** Oberfläche (F34, F35), Erkennung beim Scannen, Websuche, weitere Anbieter, automatisches Speichern.
 - **Abnahmekriterien:**
   1. Tests mit nachgebildeten Anbietern (`httptest`):
-     - je Anbieter eine erfolgreiche Erkennung, auch mit `null`-Feldern;
+     - je Anbieter (alle drei) eine erfolgreiche Erkennung, auch mit `null`-Feldern;
      - der Request hat die richtige Form (Modell, Bild, Schema, Schlüssel im richtigen Header);
      - 401 wird `invalid_api_key`, 500 und Zeitüberschreitung werden `recognition_failed`.
   2. API-Tests: Einstellungen setzen, ändern und löschen; der Schlüssel kommt in keiner Antwort vor; `recognition_disabled` ohne Anbieter; `no_image` ohne Foto; `not_found`.
   3. Test: Das Archiv von `GET /backup` enthält den Schlüssel nicht, die laufende Datenbank behält ihn.
   4. `make check` ist grün.
-  5. (Nutzer) Mit echtem Schlüssel von OpenAI oder Google erkennt StashBert ein Produkt vom Foto.
+  5. (Nutzer) Mit echtem Schlüssel von OpenAI, Google oder Anthropic erkennt StashBert ein Produkt vom Foto.
 
 ### F34: Produkterkennung in den Einstellungen
 
@@ -1840,11 +1841,11 @@ Nutzerentscheidung vom 25.09.2026: OpenAI und Google Gemini lesen Name, Marke un
 - **Referenzen:** ADR-0021, ADR-0016; architecture.md 4.2
 - **Umfang:**
   - Neuer Abschnitt „Produkterkennung" in `/einstellungen`, zwischen „Backup" und „Über StashBert".
-  - **Anbieter:** Auswahl „Aus", „OpenAI" und „Google Gemini".
+  - **Anbieter:** Auswahl „Aus", „OpenAI", „Google Gemini" und „Claude".
   - **API-Schlüssel:** Passwortfeld; ist einer gesetzt, steht darüber „Gespeichert, endet auf …abcd", und das Feld darf leer bleiben.
   - **Modell:** Textfeld mit dem Standardmodell als Platzhalter.
   - **Knöpfe:** „Speichern"; „Ausschalten" mit Rückfrage, löscht den Schlüssel.
-  - **Hinweistext:** „Fotos werden an OpenAI bzw. Google geschickt. Kosten entstehen nur, wenn du auf der Produktseite „Mit KI erkennen" antippst." Bei Gemini zusätzlich: „Im kostenlosen Zugang darf Google die Eingaben zur Verbesserung seiner Produkte nutzen."
+  - **Hinweistext:** „Fotos werden an OpenAI, Google bzw. Anthropic geschickt. Kosten entstehen nur, wenn du auf der Produktseite „Mit KI erkennen" antippst." Bei Gemini zusätzlich: „Im kostenlosen Zugang darf Google die Eingaben zur Verbesserung seiner Produkte nutzen."
   - **Meldungen:** „Gespeichert"; `invalid_api_key`: „Der Schlüssel wird nicht angenommen."; `recognition_failed`: „Der Anbieter ist gerade nicht erreichbar."
   - Texte und Zuordnungen als reine Funktionen in `lib/` mit Vitest-Tests.
 - **Nicht im Umfang:** Auswahl aus einer Modell-Liste, mehrere Schlüssel.

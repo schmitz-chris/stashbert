@@ -350,7 +350,7 @@ Produkt und Buchung werden in **einer** Transaktion gespeichert. Nach dem Commit
   - Nullbare Felder werden in der Spec als `type: [<typ>, "null"]` geschrieben (OpenAPI 3.1), nicht mit `nullable: true`.
 - **ShoppingItem:** `product_id`, `name`, `brand|null`, `missing`, `stock`, `target`, `marked`, `crate_size|null`
 - **Summary** (Kapitel 11.5): `product_count`, `shopping_count`, `empty_count`, `review_count`, `shopping: [{name, missing, quantity, unit}]` (höchstens 100), `shopping_truncated`
-- **RecognitionSettings** (ADR-0021): `provider` (`openai`, `gemini` oder `null`), `model|null`, `key_set`, `key_hint|null` (letzte vier Zeichen), `default_models: {openai, gemini}`
+- **RecognitionSettings** (ADR-0021): `provider` (`openai`, `gemini`, `anthropic` oder `null`), `model|null`, `key_set`, `key_hint|null` (letzte vier Zeichen), `default_models: {openai, gemini, anthropic}`
 - **RecognitionResult:** `name|null`, `brand|null`, `package_size|null`; `null`, wenn auf dem Foto nicht lesbar
 - **MqttStatus** (Kapitel 11.7): `status` (`disabled`, `connecting`, `connected`), `targets: [{id, name}]`, `target: {id, name}|null`
 - **MarkResult:** `product` (Product), `product_created`, `already_listed` (stand schon auf der Liste, wegen `missing > 0` oder `marked`), `message`: „Vorgemerkt: <name>", „Neu vorgemerkt: <name>" bzw. „Schon auf der Liste: <name>".

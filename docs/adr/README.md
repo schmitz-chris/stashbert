@@ -24,4 +24,4 @@ Format: Status, Kontext, Entscheidung, Konsequenzen, Alternativen (siehe ADR-000
 | [0018](0018-home-assistant-ueber-mqtt.md) | Home Assistant über MQTT (M2) | angenommen |
 | [0019](0019-installation-per-skript.md) | Installation per Proxmox-Skript und GitHub-Releases | angenommen |
 | [0020](0020-backup-einspielen.md) | Backup über die Oberfläche einspielen | angenommen |
-| [0021](0021-produkterkennung-per-foto.md) | Produkterkennung per Foto mit OpenAI oder Gemini | angenommen |
+| [0021](0021-produkterkennung-per-foto.md) | Produkterkennung per Foto mit OpenAI, Gemini oder Claude | angenommen |
