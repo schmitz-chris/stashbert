@@ -8,6 +8,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/domain"
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/mqtt"
+	"github.com/schmitz-chris/stashbert/internal/recognize"
 	"github.com/schmitz-chris/stashbert/internal/store/db"
 )
 
@@ -43,6 +44,8 @@ type ServerDeps struct {
 	// ready, which applies it (ADR-0020). It must not block. nil means no
 	// restart.
 	Restart func()
+	// Recognizer asks the provider of the product recognition (ADR-0021).
+	Recognizer *recognize.Client
 }
 
 // SnapshotRequester takes requests for shopping.snapshot over MQTT

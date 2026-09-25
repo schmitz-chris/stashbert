@@ -14,8 +14,9 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
-// newBackupServer returns an api.Server on an empty database in t.TempDir()
-// with imageDir as the image directory. os.TempDir points to t.TempDir().
+// newBackupServer returns an api.Server on an empty migrated database in
+// t.TempDir() with imageDir as the image directory. os.TempDir points to
+// t.TempDir().
 func newBackupServer(t *testing.T, ctx context.Context, imageDir string) *api.Server {
 	t.Helper()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "stashbert.db"))
@@ -23,6 +24,10 @@ func newBackupServer(t *testing.T, ctx context.Context, imageDir string) *api.Se
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	// The archive removes a setting from its copy (ADR-0021).
+	if err := store.Migrate(ctx, db, store.Migrations); err != nil {
+		t.Fatalf("store.Migrate: %v", err)
+	}
 	t.Setenv("TMPDIR", t.TempDir())
 	return api.NewServer(api.ServerDeps{DB: db, ImageDir: imageDir, Logger: slog.New(slog.DiscardHandler)})
 }

@@ -1794,7 +1794,7 @@ Nutzerentscheidung vom 25.09.2026: OpenAI, Google Gemini und Claude (Anthropic) 
 
 ### B42: Produkterkennung im Server
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** B41, B32
 - **Referenzen:** ADR-0021; architecture.md 4.4, 6.2 (`GET`/`PUT /integrations/recognition`, `POST /products/{id}/recognition`), 6.4, 6.5, 9.3; `internal/lookup` (Muster für ausgehende HTTP-Anfragen)
 - **Umfang:**

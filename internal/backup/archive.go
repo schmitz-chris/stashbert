@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/schmitz-chris/stashbert/internal/recognize"
+	"github.com/schmitz-chris/stashbert/internal/store/db"
 )
 
 // Archive is a fresh backup for a download (architecture.md, 6.2): a tar.gz
@@ -33,7 +36,8 @@ func ArchiveName(now time.Time) string {
 }
 
 // NewArchive writes a copy of db with VACUUM INTO into a new directory in
-// os.TempDir and packs it as stashbert.db, together with the regular files
+// os.TempDir, removes the API key of the product recognition from the copy
+// (ADR-0021) and packs it as stashbert.db, together with the regular files
 // of imageDir under images/, into a tar.gz in the same directory. A missing
 // imageDir gives an empty images/. An image file that disappears while the
 // archive is written is left out. On error the directory is removed again;
@@ -55,6 +59,9 @@ func NewArchive(ctx context.Context, db *sql.DB, imageDir string) (_ *Archive, e
 	if err != nil {
 		return nil, err
 	}
+	if err := removeAPIKey(ctx, dbPath); err != nil {
+		return nil, err
+	}
 	f, err := os.Create(filepath.Join(dir, "stashbert.tar.gz"))
 	if err != nil {
 		return nil, fmt.Errorf("backup archive: %w", err)
@@ -72,6 +79,31 @@ func NewArchive(ctx context.Context, db *sql.DB, imageDir string) (_ *Archive, e
 		return nil, fmt.Errorf("backup archive: %w", err)
 	}
 	return &Archive{File: f, Size: size, dir: dir}, nil
+}
+
+// removeAPIKey deletes the API key of the product recognition from the
+// database copy at path, so that a download never contains it (ADR-0021).
+// With secure_delete, SQLite overwrites the deleted value in the file
+// instead of leaving it in a free block. The copy has its own connection,
+// which is closed before the file is packed.
+func removeAPIKey(ctx context.Context, path string) error {
+	// The driver splits the DSN at the first '?'.
+	if strings.Contains(path, "?") {
+		return fmt.Errorf("backup archive: path %q must not contain '?'", path)
+	}
+	copyDB, err := sql.Open("sqlite", path+"?_pragma=secure_delete(1)")
+	if err != nil {
+		return fmt.Errorf("backup archive: open copy: %w", err)
+	}
+	copyDB.SetMaxOpenConns(1)
+	err = db.New(copyDB).DeleteSetting(ctx, recognize.SettingAPIKey)
+	if closeErr := copyDB.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("backup archive: remove API key: %w", err)
+	}
+	return nil
 }
 
 // Close closes the archive and removes its temporary directory.

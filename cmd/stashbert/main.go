@@ -27,6 +27,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/lookup"
 	"github.com/schmitz-chris/stashbert/internal/mqtt"
 	"github.com/schmitz-chris/stashbert/internal/outbox"
+	"github.com/schmitz-chris/stashbert/internal/recognize"
 	"github.com/schmitz-chris/stashbert/internal/store"
 )
 
@@ -208,6 +209,9 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (restart b
 	deps := app.Deps{
 		Logger: logger, Version: version, DB: db, Publisher: publisher, Lookuper: off, ImageDir: imageDir,
 		DBPath: dbPath, BackupDir: backupDir,
+		// The product recognition asks OpenAI, Google Gemini or Anthropic
+		// with a time limit of 60 s per request (ADR-0021).
+		Recognizer: recognize.NewClient(&http.Client{}, recognize.DefaultEndpoints, recognize.Timeout, "StashBert/"+version),
 		Restart: func() {
 			select {
 			case restartRequests <- struct{}{}:

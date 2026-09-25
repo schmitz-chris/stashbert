@@ -25,8 +25,14 @@ func testContext(t *testing.T) context.Context {
 	return ctx
 }
 
+// sourceAPIKey is the API key of the product recognition in the database
+// of openSource.
+const sourceAPIKey = "sk-test-secret-key-4711"
+
 // openSource returns a database in t.TempDir() with the tables a (3 rows)
-// and b (5 rows) and the path of its file.
+// and b (5 rows), the table settings as in the migrations with the API key
+// of the product recognition (sourceAPIKey) and one other setting, and the
+// path of its file.
 func openSource(t *testing.T, ctx context.Context) (*sql.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stashbert.db")
@@ -43,6 +49,8 @@ func openSource(t *testing.T, ctx context.Context) (*sql.DB, string) {
 	for i := range 5 {
 		exec(t, ctx, db, "INSERT INTO b (v) VALUES (?)", strings.Repeat("b", i+1))
 	}
+	exec(t, ctx, db, "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT")
+	exec(t, ctx, db, "INSERT INTO settings (key, value) VALUES ('recognition_api_key', ?), ('shopping_target_id', 'todo.einkauf')", sourceAPIKey)
 	return db, path
 }
 

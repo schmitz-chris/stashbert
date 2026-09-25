@@ -21,6 +21,7 @@ import (
 	"github.com/schmitz-chris/stashbert/internal/events"
 	"github.com/schmitz-chris/stashbert/internal/httpx"
 	"github.com/schmitz-chris/stashbert/internal/lookup"
+	"github.com/schmitz-chris/stashbert/internal/recognize"
 	"github.com/schmitz-chris/stashbert/internal/webui"
 )
 
@@ -63,6 +64,10 @@ type Deps struct {
 	// in DATA_DIR/restore; main then restarts in the same process, which
 	// applies it (ADR-0020). It must not block. nil means no restart.
 	Restart func()
+	// Recognizer asks the provider of the product recognition for
+	// PUT /integrations/recognition and POST /products/{id}/recognition
+	// (ADR-0021).
+	Recognizer *recognize.Client
 }
 
 // NewHandler builds the handler chain (architecture.md, 4.4).
@@ -77,7 +82,7 @@ func newHandler(cfg config.Config, d Deps, restoreLimit int64) (http.Handler, er
 		Version: d.Version, DB: d.DB, Publisher: d.Publisher, Lookuper: d.Lookuper, ImageDir: d.ImageDir,
 		Snapshots: d.Snapshots, MQTT: d.MQTT,
 		DBPath: d.DBPath, BackupDir: d.BackupDir, BackupKeep: cfg.BackupKeep, OpenFoodFacts: cfg.OFFContact != "",
-		Logger: d.Logger, DataDir: cfg.DataDir, Restart: d.Restart,
+		Logger: d.Logger, DataDir: cfg.DataDir, Restart: d.Restart, Recognizer: d.Recognizer,
 	})
 	strictHandler := api.NewStrictHandlerWithOptions(server, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestErrorHandler,
@@ -105,6 +110,9 @@ func newHandler(cfg config.Config, d Deps, restoreLimit int64) (http.Handler, er
 // For GET /api/v1/backup the write deadline is extended to
 // backupWriteTimeout before StripPrefix, because a larger backup takes
 // longer than the WriteTimeout of the server (architecture.md, 6.2).
+// For POST /api/v1/products/{id}/recognition the write deadline is extended
+// to recognitionWriteTimeout, because the answer of the provider can take
+// longer than the WriteTimeout (architecture.md, 4.4).
 // POST /api/v1/backup/restore bypasses the validator, which would read the
 // whole archive into memory; limitRestore checks it instead and limits its
 // body to restoreLimit (architecture.md, 4.4).
@@ -132,6 +140,7 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 	// the validator reads it.
 	mux.Handle("PUT /api/v1/products/{id}/image", http.MaxBytesHandler(apiChain, lookup.MaxImageBytes))
 	mux.Handle("GET /api/v1/backup", extendWriteDeadline(apiChain, backupWriteTimeout))
+	mux.Handle("POST /api/v1/products/{id}/recognition", extendWriteDeadline(apiChain, recognitionWriteTimeout))
 	mux.Handle("POST /api/v1/backup/restore", limitRestore(http.StripPrefix("/api/v1", apiHandler), restoreLimit))
 	mux.Handle("/", webHandler)
 
@@ -145,6 +154,11 @@ func newChain(logger *slog.Logger, apiHandler, webHandler http.Handler, onChange
 // backupWriteTimeout is the time a backup download has for its response,
 // including the wait for a running download and writing the archive.
 const backupWriteTimeout = 10 * time.Minute
+
+// recognitionWriteTimeout is the time a product recognition has for its
+// response, including the request to the provider (at most
+// recognize.Timeout).
+const recognitionWriteTimeout = 90 * time.Second
 
 // extendWriteDeadline sets the write deadline of the response to d from now
 // and then calls next. A ResponseWriter without deadlines, such as

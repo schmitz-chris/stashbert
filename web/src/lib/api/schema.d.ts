@@ -171,6 +171,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/products/{id}/recognition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Name, Marke und Menge vom Produktfoto lesen
+         * @description Schickt das gespeicherte Produktfoto an den eingerichteten Anbieter (ADR-0021) und gibt zurück, was er auf der Packung liest. Am Produkt ändert sich nichts. Die Werte sind getrimmt und auf die Längen des Produkts gekürzt (name und brand 120, package_size 40 Zeichen); was auf dem Foto nicht lesbar ist, ist null. Fehler-code: not_found (404), recognition_disabled (409, kein Anbieter eingerichtet), no_image (409, das Produkt hat kein Foto), invalid_api_key (422, der Anbieter nimmt den Schlüssel nicht an), recognition_failed (502, der Anbieter ist nicht erreichbar oder liefert keine brauchbare Antwort).
+         */
+        post: operations["recognizeProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/movements": {
         parameters: {
             query?: never;
@@ -414,6 +436,30 @@ export interface paths {
          * @description Wählt die Liste in Home Assistant, in die die Einkaufsliste geht, oder hebt die Wahl mit id null auf. Beim Wechsel geht zuerst ein shopping.snapshot hinaus, der die alte Liste abräumt (falls eine gewählt war), danach einer für die neue Liste (falls es eine gibt). Dieselbe Liste erneut zu wählen ändert nichts. Fehler-code: invalid_request (400), mqtt_disabled (409, ohne MQTT), unknown_target (422, die id ist nicht im aktuellen Angebot).
          */
         put: operations["setShoppingTarget"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/recognition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Einstellungen der Produkterkennung
+         * @description Anbieter, Modell, ob ein API-Schlüssel gesetzt ist und seine letzten vier Zeichen, dazu die Standardmodelle (ADR-0021). Den Schlüssel selbst gibt kein Endpunkt aus.
+         */
+        get: operations["getRecognitionSettings"];
+        /**
+         * Produkterkennung einrichten oder abschalten
+         * @description Setzt Anbieter, Modell und API-Schlüssel (ADR-0021). provider null schaltet ab und löscht Modell und Schlüssel. Ohne api_key bleibt ein gesetzter Schlüssel, wenn der Anbieter gleich bleibt; ein anderer Anbieter braucht einen neuen Schlüssel. Ein neuer Schlüssel wird mit der Modell-Liste des Anbieters geprüft und erst danach gespeichert. Ohne Anmeldung (ADR-0013) kann das jeder im Heimnetz. Fehler-code: invalid_request (400, auch ein neuer Anbieter ohne api_key), invalid_api_key (422, der Anbieter nimmt den Schlüssel nicht an), recognition_failed (502, der Anbieter ist nicht erreichbar).
+         */
+        put: operations["setRecognitionSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -674,6 +720,45 @@ export interface components {
             targets: components["schemas"]["ShoppingTarget"][];
             /** @description Die gewählte Zielliste, auch wenn sie gerade nicht angeboten wird, oder null. */
             target: components["schemas"]["ShoppingTarget"] | null;
+        };
+        /**
+         * @description Anbieter der Produkterkennung (ADR-0021).
+         * @enum {string}
+         */
+        RecognitionProvider: "openai" | "gemini" | "anthropic";
+        /** @description Einstellungen der Produkterkennung per Foto (ADR-0021). */
+        RecognitionSettings: {
+            /** @description Der eingerichtete Anbieter oder null, wenn die Erkennung aus ist. */
+            provider: components["schemas"]["RecognitionProvider"] | null;
+            /** @description Das eingestellte Modell oder null für das Standardmodell des Anbieters. */
+            model: string | null;
+            /** @description true, wenn ein API-Schlüssel gespeichert ist. */
+            key_set: boolean;
+            /** @description Die letzten vier Zeichen des API-Schlüssels oder null ohne Schlüssel. */
+            key_hint: string | null;
+            /** @description Das Standardmodell je Anbieter. */
+            default_models: {
+                openai: string;
+                gemini: string;
+                anthropic: string;
+            };
+        };
+        RecognitionSettingsUpdate: {
+            /** @description Der Anbieter oder null, um die Erkennung abzuschalten. */
+            provider: components["schemas"]["RecognitionProvider"] | null;
+            /** @description Wird getrimmt. Fehlt es oder ist es leer, gilt das Standardmodell des Anbieters. */
+            model?: string;
+            /** @description Wird getrimmt. Fehlt er oder ist er leer, bleibt der gespeicherte Schlüssel, sofern der Anbieter gleich bleibt. */
+            api_key?: string;
+        };
+        /** @description Was der Anbieter auf dem Produktfoto liest; null, wenn es nicht lesbar ist. */
+        RecognitionResult: {
+            /** @description Höchstens 120 Zeichen. */
+            name: string | null;
+            /** @description Höchstens 120 Zeichen. */
+            brand: string | null;
+            /** @description Menge mit Einheit, z. B. 500 g; höchstens 40 Zeichen. */
+            package_size: string | null;
         };
     };
     responses: never;
@@ -1059,6 +1144,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    recognizeProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Was der Anbieter auf dem Foto liest. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognitionResult"];
+                };
             };
             /** @description Fehler nach RFC 9457. */
             default: {
@@ -1466,6 +1582,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MqttStatus"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRecognitionSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Die Einstellungen. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognitionSettings"];
+                };
+            };
+            /** @description Fehler nach RFC 9457. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setRecognitionSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecognitionSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Die Einstellungen danach. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognitionSettings"];
                 };
             };
             /** @description Fehler nach RFC 9457. */

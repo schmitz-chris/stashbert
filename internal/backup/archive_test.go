@@ -181,6 +181,34 @@ func TestNewArchive(t *testing.T) {
 	if na, nb := count(t, ctx, copyDB, "a"), count(t, ctx, copyDB, "b"); na != 3 || nb != 5 {
 		t.Errorf("copy has %d rows in a and %d in b, want 3 and 5", na, nb)
 	}
+	// The API key of the product recognition is removed from the copy, also
+	// from the bytes of the file, and stays in the source (ADR-0021).
+	if bytes.Contains(e.data, []byte(sourceAPIKey)) {
+		t.Error("stashbert.db in the archive contains the API key")
+	}
+	var keys []string
+	rows, err := copyDB.QueryContext(ctx, "SELECT key FROM settings ORDER BY key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, k)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(keys, []string{"shopping_target_id"}) {
+		t.Errorf("settings in the copy = %v, want only shopping_target_id", keys)
+	}
+	var key string
+	if err := db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = 'recognition_api_key'").Scan(&key); err != nil || key != sourceAPIKey {
+		t.Errorf("API key in the source = %q, %v, want %q", key, err, sourceAPIKey)
+	}
 }
 
 func TestNewArchiveWithoutImageDirectory(t *testing.T) {
