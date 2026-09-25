@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { CartButton, roundButtonClass } from "../components/CartButton";
 import { PageHeading } from "../components/PageHeading";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -20,6 +20,8 @@ import {
   brandAndSize,
   filterProducts,
   matches,
+  parseProductFilter,
+  stockSearchParams,
   type Product,
   type ProductFilter,
 } from "../lib/products";
@@ -33,8 +35,29 @@ const filters: { value: ProductFilter; label: string }[] = [
 ];
 
 export function StockPage() {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<ProductFilter>("all");
+  // Filter and search live in the URL (replaced, not pushed), so going back
+  // from a product page restores them. The search also has local state,
+  // so typing never waits for the URL; when the URL changes from outside
+  // (the tab bar opens /vorrat), the field follows it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = parseProductFilter(searchParams.get("filter"));
+  const urlQuery = searchParams.get("q") ?? "";
+  const [query, setQueryState] = useState(urlQuery);
+  const [shownUrlQuery, setShownUrlQuery] = useState(urlQuery);
+  if (urlQuery !== shownUrlQuery) {
+    setShownUrlQuery(urlQuery);
+    setQueryState(urlQuery);
+  }
+
+  function setQuery(next: string) {
+    setQueryState(next);
+    setShownUrlQuery(next);
+    setSearchParams(stockSearchParams(filter, next), { replace: true });
+  }
+
+  function setFilter(next: ProductFilter) {
+    setSearchParams(stockSearchParams(next, query), { replace: true });
+  }
   const searchRef = useRef<HTMLInputElement>(null);
   const products = useQuery(productListQuery);
   useDocumentTitle(pageTitle("stock"));

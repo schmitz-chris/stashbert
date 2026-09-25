@@ -5,8 +5,10 @@ import {
   findByBarcode,
   matches,
   mergeCandidates,
+  parseProductFilter,
   replaceProduct,
   sortByName,
+  stockSearchParams,
   withBarcode,
   withoutBarcode,
   type Product,
@@ -304,5 +306,41 @@ describe("findByBarcode", () => {
   it("finds nothing without a loaded list", () => {
     expect(findByBarcode(undefined, "4001686301265")).toBeUndefined();
     expect(findByBarcode([], "4001686301265")).toBeUndefined();
+  });
+});
+
+describe("parseProductFilter", () => {
+  it("returns the named filter", () => {
+    expect(parseProductFilter("restock")).toBe("restock");
+    expect(parseProductFilter("empty")).toBe("empty");
+    expect(parseProductFilter("review")).toBe("review");
+    expect(parseProductFilter("all")).toBe("all");
+  });
+
+  it("falls back to all for a missing or unknown value", () => {
+    expect(parseProductFilter(null)).toBe("all");
+    expect(parseProductFilter("")).toBe("all");
+    expect(parseProductFilter("Review")).toBe("all");
+    expect(parseProductFilter("toString")).toBe("all");
+  });
+});
+
+describe("stockSearchParams", () => {
+  it("leaves out the defaults", () => {
+    expect(stockSearchParams("all", "").toString()).toBe("");
+  });
+
+  it("keeps the filter and the query", () => {
+    expect(stockSearchParams("review", "").toString()).toBe("filter=review");
+    expect(stockSearchParams("all", "Käse").get("q")).toBe("Käse");
+    const params = stockSearchParams("empty", "milch ");
+    expect(params.get("filter")).toBe("empty");
+    expect(params.get("q")).toBe("milch ");
+  });
+
+  it("round-trips through parseProductFilter", () => {
+    for (const filter of ["all", "restock", "empty", "review"] as const) {
+      expect(parseProductFilter(stockSearchParams(filter, "").get("filter"))).toBe(filter);
+    }
   });
 });

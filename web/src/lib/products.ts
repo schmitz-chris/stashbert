@@ -77,6 +77,31 @@ const filterPredicates: Record<ProductFilter, (product: Product) => boolean> =
     review: (product) => product.needs_review,
   };
 
+/**
+ * Returns the filter named by value, the search parameter "filter" of the
+ * stock view; a missing or unknown value is "all".
+ */
+export function parseProductFilter(value: string | null): ProductFilter {
+  return value === "restock" || value === "empty" || value === "review" ? value : "all";
+}
+
+/**
+ * Returns the search parameters of the stock view for filter and query:
+ * "filter" and "q", each left out at its default ("all", empty). The
+ * stock view keeps both in its URL, so going back from a product page
+ * restores them.
+ */
+export function stockSearchParams(filter: ProductFilter, query: string): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filter !== "all") {
+    params.set("filter", filter);
+  }
+  if (query !== "") {
+    params.set("q", query);
+  }
+  return params;
+}
+
 /** Returns the products that pass filter, in their order. */
 export function filterProducts(
   products: readonly Product[],
