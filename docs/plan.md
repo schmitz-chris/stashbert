@@ -1881,7 +1881,7 @@ Nutzerwunsch vom 25.09.2026: Gleiche Produkte verschiedener Marken (z. B. Milch 
 
 ### F36: Andere Produkte hierher übernehmen
 
-- **Status:** offen
+- **Status:** wartet auf Nutzer
 - **Abhängig von:** F06c
 - **Referenzen:** architecture.md 6.5 (Merge), ADR-0016; `components/MergeDialog.tsx`, `components/MergeSection.tsx`, `routes/produkt.tsx`
 - **Umfang:**

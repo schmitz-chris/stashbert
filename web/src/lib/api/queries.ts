@@ -685,6 +685,18 @@ export function productMergeMutation(queryClient: QueryClient) {
 }
 
 /**
+ * Fetches the cached products (the list and each product), movement lists
+ * and the shopping list again. After a series of merges stopped at an
+ * error it is unclear what the server holds, e.g. when the failed source
+ * was gone already.
+ */
+export function refetchAfterMerges(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: productListQuery.queryKey });
+  void queryClient.invalidateQueries({ queryKey: ["movements"] });
+  invalidateShoppingList(queryClient);
+}
+
+/**
  * The connection to the MQTT broker, the lists offered by Home Assistant
  * and the chosen list (architecture.md, 11.7). Without MQTT the status is
  * disabled.

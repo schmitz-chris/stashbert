@@ -8,6 +8,7 @@ import { PageHeading } from "../components/PageHeading";
 import { ProductImageSection } from "../components/ProductImageSection";
 import { ShoppingListSection } from "../components/ShoppingListSection";
 import { StockSection } from "../components/StockSection";
+import { TakeOverSection } from "../components/TakeOverSection";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { problemCode } from "../lib/api/client";
 import {
@@ -392,9 +393,13 @@ function ProductEditor({ product }: { product: Product }) {
           )}
         </p>
       )}
-      {/* Progressive disclosure (HIG, Layout): what is rarely needed. */}
+      {/* Progressive disclosure (HIG, Layout): what is rarely needed.
+          "Andere Produkte hierher übernehmen" stays visible below the
+          barcodes, whose number it raises (docs/plan.md, F36); the
+          destructive "Produkt löschen" stays last. */}
       <div className="mt-8 border-y border-line">
         <BarcodeSection product={product} />
+        <TakeOverSection product={product} />
         <DeleteSection product={product} />
       </div>
     </>
